@@ -1,0 +1,21 @@
+[package]
+name = "koon-node"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Node.js bindings for koon browser impersonation client"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+koon-core = { path = "../core" }
+napi = { version = "2", default-features = false, features = ["napi9", "async", "serde-json"] }
+napi-derive = "2"
+tokio = { version = "1", features = ["rt-multi-thread"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[build-dependencies]
+napi-build = "2"

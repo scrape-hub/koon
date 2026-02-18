@@ -1,0 +1,23 @@
+/target
+*.exe
+*.dll
+*.so
+*.dylib
+*.node
+
+# Build artifacts
+*.pdb
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+*.tgz

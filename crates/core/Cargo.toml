@@ -1,0 +1,52 @@
+[package]
+name = "koon-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Browser impersonation HTTP client with TLS and HTTP/2 fingerprint spoofing"
+
+[features]
+default = ["socks"]
+socks = ["dep:tokio-socks"]
+
+[dependencies]
+# TLS via BoringSSL
+boring2 = "5.0.0-alpha.13"
+tokio-boring2 = { version = "5.0.0-alpha.13", features = ["read_uninit"] }
+
+# HTTP/2 with frame-level control
+http2 = { version = "0.5", features = ["unstable"] }
+
+# HTTP types
+http = "1"
+http-body = "1"
+http-body-util = "0.1"
+bytes = "1"
+
+# Async runtime
+tokio = { version = "1", features = ["net", "time", "rt", "rt-multi-thread", "macros"] }
+
+# Proxy support
+tokio-socks = { version = "0.5", optional = true }
+
+# Compression/decompression (cert compression + response body)
+brotli = "8"
+flate2 = "1"
+zstd = "0.13"
+
+# Root CA certificates (Mozilla bundle, same as wreq)
+webpki-root-certs = "1"
+
+# Serialization (JSON profile system)
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Utilities
+url = "2"
+thiserror = "2"
+smallvec = "1"
+pin-project-lite = "0.2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
