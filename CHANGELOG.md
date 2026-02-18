@@ -47,6 +47,14 @@ All notable changes to koon will be documented in this file.
 - `KoonWsMessage`: is_text flag + data Buffer
 - `exportProfile()` for JSON profile export
 
+#### Python Bindings (`koon-python`)
+- `Koon` class with `get`, `post`, `put`, `delete`, `patch`, `head`, `request`
+- `KoonWebSocket` class with `send`, `receive`, `close`, `async with` support
+- Constructor: browser selection, custom profile JSON, proxy, timeout, headers, redirects, cookies
+- `KoonResponse`: status, headers (list of tuples), body (bytes), text, version, url, `json()`
+- `export_profile()` for JSON profile export
+- Built with PyO3 + maturin, async via `pyo3-async-runtimes` (tokio)
+
 #### Build
 - Workspace with `default-members = ["crates/core"]` to avoid napi warnings in `cargo test`
 - Release profile: strip, opt-level "z", LTO, single codegen unit

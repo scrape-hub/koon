@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/core",
     "crates/node",
+    "crates/python",
 ]
 
 # Exclude koon-node from `cargo test` — it's a cdylib that requires Node.js

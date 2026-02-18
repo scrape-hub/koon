@@ -21,3 +21,10 @@ Thumbs.db
 # Node
 node_modules/
 *.tgz
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+.venv/
