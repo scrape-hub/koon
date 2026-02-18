@@ -1,6 +1,12 @@
 mod chrome;
+mod edge;
+mod firefox;
+mod safari;
 
 pub use chrome::Chrome;
+pub use edge::Edge;
+pub use firefox::Firefox;
+pub use safari::Safari;
 
 use std::path::Path;
 

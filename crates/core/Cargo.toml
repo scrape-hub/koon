@@ -42,6 +42,16 @@ webpki-root-certs = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# HTTP/1.1 response parsing
+httparse = "1"
+
+# WebSocket frame codec (no TLS features — we use our own BoringSSL)
+tungstenite = "0.24"
+tokio-tungstenite = { version = "0.24", default-features = false }
+
+# Async stream utilities (SinkExt, StreamExt for WebSocket)
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+
 # Utilities
 url = "2"
 thiserror = "2"

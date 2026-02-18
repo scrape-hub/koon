@@ -2,7 +2,7 @@ use boring2::ssl::{
     Ssl, SslConnector, SslMethod, SslOptions, SslVerifyMode, SslVersion,
 };
 
-use super::cert_compression::BrotliCertCompressor;
+use super::cert_compression::{BrotliCertCompressor, ZlibCertCompressor, ZstdCertCompressor};
 use super::config::{AlpnProtocol, CertCompression, TlsConfig, TlsVersion};
 use crate::Error;
 
@@ -77,8 +77,18 @@ impl TlsConnector {
                 CertCompression::Brotli => {
                     builder.add_certificate_compression_algorithm(BrotliCertCompressor)?;
                 }
-                _ => {} // Zlib/Zstd can be added later
+                CertCompression::Zlib => {
+                    builder.add_certificate_compression_algorithm(ZlibCertCompressor)?;
+                }
+                CertCompression::Zstd => {
+                    builder.add_certificate_compression_algorithm(ZstdCertCompressor)?;
+                }
             }
+        }
+
+        // === Delegated credentials ===
+        if let Some(ref dc_sigalgs) = config.delegated_credentials {
+            builder.set_delegated_credentials(dc_sigalgs)?;
         }
 
         // === Certificate verification ===
@@ -100,20 +110,28 @@ impl TlsConnector {
         connector: &SslConnector,
         config: &TlsConfig,
         host: &str,
+        force_h1_only: bool,
     ) -> Result<Ssl, Error> {
         let mut cfg = connector.configure()?;
 
-        // ALPN must also be set per-connection to ensure it's applied.
-        let alpn_wire = build_alpn_wire(&config.alpn);
-        cfg.set_alpn_protos(&alpn_wire)?;
+        // ALPN: for WebSocket, only advertise http/1.1 (no h2)
+        if force_h1_only {
+            let alpn_wire = build_alpn_wire(&[AlpnProtocol::Http11]);
+            cfg.set_alpn_protos(&alpn_wire)?;
+        } else {
+            let alpn_wire = build_alpn_wire(&config.alpn);
+            cfg.set_alpn_protos(&alpn_wire)?;
+        }
 
         // ECH GREASE (per-connection, Chrome sends this)
         cfg.set_enable_ech_grease(config.ech_grease);
 
-        // ALPS (must set codepoint BEFORE add_application_settings)
-        if config.alps.is_some() {
-            cfg.set_alps_use_new_codepoint(config.alps_use_new_codepoint);
-            cfg.add_application_settings(b"h2")?;
+        // ALPS (h2-specific, skip when forcing h1)
+        if !force_h1_only {
+            if config.alps.is_some() {
+                cfg.set_alps_use_new_codepoint(config.alps_use_new_codepoint);
+                cfg.add_application_settings(b"h2")?;
+            }
         }
 
         // Disable hostname verification for testing

@@ -11,7 +11,9 @@ pub enum Error {
     InvalidHeader(String),
     ConnectionFailed(String),
     Json(serde_json::Error),
+    WebSocket(tungstenite::error::Error),
     Timeout,
+    TooManyRedirects,
 }
 
 impl fmt::Display for Error {
@@ -26,7 +28,9 @@ impl fmt::Display for Error {
             Error::InvalidHeader(e) => write!(f, "Invalid header: {e}"),
             Error::ConnectionFailed(e) => write!(f, "Connection failed: {e}"),
             Error::Json(e) => write!(f, "JSON error: {e}"),
+            Error::WebSocket(e) => write!(f, "WebSocket error: {e}"),
             Error::Timeout => write!(f, "Request timed out"),
+            Error::TooManyRedirects => write!(f, "Too many redirects"),
         }
     }
 }
@@ -66,5 +70,11 @@ impl From<url::ParseError> for Error {
 impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
         Error::Json(e)
+    }
+}
+
+impl From<tungstenite::error::Error> for Error {
+    fn from(e: tungstenite::error::Error) -> Self {
+        Error::WebSocket(e)
     }
 }

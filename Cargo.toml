@@ -5,6 +5,11 @@ members = [
     "crates/node",
 ]
 
+# Exclude koon-node from `cargo test` — it's a cdylib that requires Node.js
+# runtime for napi symbol resolution. Running it without Node produces hundreds
+# of "Load Node-API [...] failed" warnings. It has no Rust unit tests anyway.
+default-members = ["crates/core"]
+
 [workspace.package]
 version = "0.1.0"
 edition = "2024"

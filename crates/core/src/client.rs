@@ -1,4 +1,5 @@
 use std::pin::Pin;
+use std::sync::Mutex;
 use std::time::Duration;
 
 use boring2::ssl::SslConnector;
@@ -6,11 +7,15 @@ use http::{HeaderName, HeaderValue, Method, Request, Uri, Version};
 use tokio::net::TcpStream;
 use tokio_boring2::SslStream;
 
+use crate::cookie::CookieJar;
 use crate::error::Error;
+use crate::http1;
 use crate::http2::config::{PseudoHeader, SettingId};
+use crate::pool::ConnectionPool;
 use crate::profile::BrowserProfile;
 use crate::proxy::{ProxyConfig, ProxyKind};
 use crate::tls::TlsConnector;
+use crate::websocket::{self, WebSocket};
 
 /// HTTP response with body.
 #[derive(Debug)]
@@ -22,48 +27,119 @@ pub struct HttpResponse {
     pub url: String,
 }
 
+/// Builder for constructing a [`Client`] with custom settings.
+pub struct ClientBuilder {
+    profile: BrowserProfile,
+    proxy: Option<ProxyConfig>,
+    timeout: Duration,
+    custom_headers: Vec<(String, String)>,
+    follow_redirects: bool,
+    max_redirects: u32,
+    cookie_jar: bool,
+}
+
+impl ClientBuilder {
+    fn new(profile: BrowserProfile) -> Self {
+        ClientBuilder {
+            profile,
+            proxy: None,
+            timeout: Duration::from_secs(30),
+            custom_headers: Vec::new(),
+            follow_redirects: true,
+            max_redirects: 10,
+            cookie_jar: true,
+        }
+    }
+
+    /// Set a proxy for all requests.
+    pub fn proxy(mut self, proxy_url: &str) -> Result<Self, Error> {
+        self.proxy = Some(ProxyConfig::parse(proxy_url)?);
+        Ok(self)
+    }
+
+    /// Set the request timeout.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
+    /// Add custom headers that override profile defaults.
+    pub fn headers(mut self, headers: Vec<(String, String)>) -> Self {
+        self.custom_headers = headers;
+        self
+    }
+
+    /// Enable or disable automatic redirect following. Default: true.
+    pub fn follow_redirects(mut self, follow: bool) -> Self {
+        self.follow_redirects = follow;
+        self
+    }
+
+    /// Set the maximum number of redirects to follow. Default: 10.
+    pub fn max_redirects(mut self, max: u32) -> Self {
+        self.max_redirects = max;
+        self
+    }
+
+    /// Enable or disable the built-in cookie jar. Default: true.
+    pub fn cookie_jar(mut self, enabled: bool) -> Self {
+        self.cookie_jar = enabled;
+        self
+    }
+
+    /// Build the [`Client`]. This creates the TLS connector (Phase 1).
+    pub fn build(self) -> Result<Client, Error> {
+        let tls_connector = TlsConnector::build_connector(&self.profile.tls)?;
+        let jar = if self.cookie_jar {
+            Some(Mutex::new(CookieJar::new()))
+        } else {
+            None
+        };
+
+        Ok(Client {
+            profile: self.profile,
+            tls_connector,
+            proxy: self.proxy,
+            timeout: self.timeout,
+            custom_headers: self.custom_headers,
+            follow_redirects: self.follow_redirects,
+            max_redirects: self.max_redirects,
+            cookie_jar: jar,
+            pool: ConnectionPool::new(),
+        })
+    }
+}
+
 /// The main HTTP client with browser fingerprint impersonation.
 ///
 /// The TLS connector is built once and cached for reuse across connections.
+/// Supports automatic redirect following and cookie management.
 pub struct Client {
     profile: BrowserProfile,
     tls_connector: SslConnector,
     proxy: Option<ProxyConfig>,
     timeout: Duration,
     custom_headers: Vec<(String, String)>,
+    follow_redirects: bool,
+    max_redirects: u32,
+    cookie_jar: Option<Mutex<CookieJar>>,
+    pool: ConnectionPool,
 }
 
 impl Client {
-    /// Create a new client with the given browser profile.
-    ///
-    /// Builds the TLS connector once (Phase 1) for reuse across connections.
+    /// Create a builder for configuring the client.
+    pub fn builder(profile: BrowserProfile) -> ClientBuilder {
+        ClientBuilder::new(profile)
+    }
+
+    /// Get a reference to the browser profile.
+    pub fn profile(&self) -> &BrowserProfile {
+        &self.profile
+    }
+
+    /// Create a new client with default settings (redirects on, cookies on).
     pub fn new(profile: BrowserProfile) -> Result<Self, Error> {
-        let tls_connector = TlsConnector::build_connector(&profile.tls)?;
-        Ok(Client {
-            profile,
-            tls_connector,
-            proxy: None,
-            timeout: Duration::from_secs(30),
-            custom_headers: Vec::new(),
-        })
-    }
-
-    /// Set a proxy for all requests.
-    pub fn with_proxy(mut self, proxy_url: &str) -> Result<Self, Error> {
-        self.proxy = Some(ProxyConfig::parse(proxy_url)?);
-        Ok(self)
-    }
-
-    /// Set the request timeout.
-    pub fn with_timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = timeout;
-        self
-    }
-
-    /// Add custom headers that override profile defaults.
-    pub fn with_headers(mut self, headers: Vec<(String, String)>) -> Self {
-        self.custom_headers = headers;
-        self
+        Self::builder(profile).build()
     }
 
     /// Perform an HTTP GET request.
@@ -76,20 +152,213 @@ impl Client {
         self.request(Method::POST, url, body).await
     }
 
+    /// Perform an HTTP PUT request.
+    pub async fn put(&self, url: &str, body: Option<Vec<u8>>) -> Result<HttpResponse, Error> {
+        self.request(Method::PUT, url, body).await
+    }
+
+    /// Perform an HTTP DELETE request.
+    pub async fn delete(&self, url: &str) -> Result<HttpResponse, Error> {
+        self.request(Method::DELETE, url, None).await
+    }
+
+    /// Perform an HTTP PATCH request.
+    pub async fn patch(&self, url: &str, body: Option<Vec<u8>>) -> Result<HttpResponse, Error> {
+        self.request(Method::PATCH, url, body).await
+    }
+
+    /// Perform an HTTP HEAD request.
+    pub async fn head(&self, url: &str) -> Result<HttpResponse, Error> {
+        self.request(Method::HEAD, url, None).await
+    }
+
+    /// Open a WebSocket connection to a `wss://` URL.
+    ///
+    /// Uses the same TLS fingerprint as HTTP requests but forces HTTP/1.1
+    /// ALPN (no h2) for the Upgrade handshake. The connection does NOT use
+    /// the connection pool — the stream is owned by the returned `WebSocket`.
+    pub async fn websocket(&self, url: &str) -> Result<WebSocket, Error> {
+        self.websocket_with_headers(url, Vec::new()).await
+    }
+
+    /// Open a WebSocket connection with extra headers.
+    pub async fn websocket_with_headers(
+        &self,
+        url: &str,
+        extra_headers: Vec<(String, String)>,
+    ) -> Result<WebSocket, Error> {
+        let uri: Uri = url
+            .parse()
+            .map_err(|_| Error::Url(url::ParseError::EmptyHost))?;
+
+        // Only wss:// is supported
+        match uri.scheme_str() {
+            Some("wss") => {}
+            _ => {
+                return Err(Error::ConnectionFailed(
+                    "Only wss:// is supported (ws:// would leak fingerprint)".into(),
+                ));
+            }
+        }
+
+        let host = uri
+            .host()
+            .ok_or(Error::ConnectionFailed("No host in URL".into()))?;
+        let port = uri.port_u16().unwrap_or(443);
+        let authority = uri.authority().map(|a| a.as_str()).unwrap_or("");
+
+        // 1. TCP connect
+        let tcp = self.connect_tcp(host, port).await?;
+
+        // 2. TLS handshake (HTTP/1.1 only ALPN)
+        let tls_stream = self.tls_connect_ws(tcp, host).await?;
+
+        // 3. Build headers: Host + profile headers + extra headers
+        let mut headers = http::HeaderMap::new();
+
+        // Host header
+        if let Ok(hv) = HeaderValue::from_str(authority) {
+            headers.insert(http::header::HOST, hv);
+        }
+
+        // Profile headers (User-Agent, Accept, etc.)
+        for (name, value) in &self.profile.headers {
+            let lower = name.to_lowercase();
+            if lower == "host"
+                || lower == "cookie"
+                || lower == "accept-encoding"
+                || lower == "content-type"
+                || lower == "content-length"
+            {
+                continue;
+            }
+            if let (Ok(hn), Ok(hv)) = (
+                HeaderName::from_bytes(name.as_bytes()),
+                HeaderValue::from_str(value),
+            ) {
+                headers.insert(hn, hv);
+            }
+        }
+
+        // Custom client headers
+        for (name, value) in &self.custom_headers {
+            if let (Ok(hn), Ok(hv)) = (
+                HeaderName::from_bytes(name.as_bytes()),
+                HeaderValue::from_str(value),
+            ) {
+                headers.insert(hn, hv);
+            }
+        }
+
+        // Extra headers for this WebSocket connection
+        for (name, value) in &extra_headers {
+            if let (Ok(hn), Ok(hv)) = (
+                HeaderName::from_bytes(name.as_bytes()),
+                HeaderValue::from_str(value),
+            ) {
+                headers.insert(hn, hv);
+            }
+        }
+
+        // Sort headers to match profile order
+        sort_headers_by_profile(&mut headers, &self.profile.headers);
+
+        // 4. WebSocket handshake
+        websocket::connect(tls_stream, &uri, &headers, self.timeout).await
+    }
+
     /// Perform an HTTP request with the given method.
+    /// Automatically follows redirects and manages cookies if enabled.
     pub async fn request(
         &self,
         method: Method,
         url: &str,
         body: Option<Vec<u8>>,
     ) -> Result<HttpResponse, Error> {
-        let uri: Uri = url.parse().map_err(|_| Error::Url(url::ParseError::EmptyHost))?;
-        let host = uri.host().ok_or(Error::ConnectionFailed("No host in URL".into()))?;
-        let port = uri.port_u16().unwrap_or(if uri.scheme_str() == Some("https") { 443 } else { 80 });
-        let is_https = uri.scheme_str() == Some("https");
+        let mut current_url: Uri = url.parse().map_err(|_| Error::Url(url::ParseError::EmptyHost))?;
+        let mut current_method = method;
+        let mut current_body = body;
+        let mut redirect_count: u32 = 0;
 
-        // Connect TCP (directly or via proxy)
-        let tcp = self.connect_tcp(host, port).await?;
+        loop {
+            // Inject cookies into request headers
+            let cookie_header = self
+                .cookie_jar
+                .as_ref()
+                .and_then(|jar| jar.lock().unwrap().cookie_header(&current_url));
+
+            let response = self
+                .execute_single_request(
+                    current_method.clone(),
+                    &current_url,
+                    current_body.clone(),
+                    cookie_header.as_deref(),
+                )
+                .await?;
+
+            // Store cookies from response
+            if let Some(jar) = &self.cookie_jar {
+                jar.lock()
+                    .unwrap()
+                    .store_from_response(&current_url, &response.headers);
+            }
+
+            // Check for redirect
+            if !self.follow_redirects || !is_redirect(response.status) {
+                return Ok(HttpResponse {
+                    url: current_url.to_string(),
+                    ..response
+                });
+            }
+
+            redirect_count += 1;
+            if redirect_count > self.max_redirects {
+                return Err(Error::TooManyRedirects);
+            }
+
+            // Extract Location header
+            let location = response
+                .headers
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case("location"))
+                .map(|(_, v)| v.clone())
+                .ok_or_else(|| {
+                    Error::ConnectionFailed("Redirect without Location header".into())
+                })?;
+
+            // Resolve relative URL against current URL
+            current_url = resolve_redirect(&current_url, &location)?;
+
+            // 307/308: preserve method and body. Otherwise: POST -> GET, drop body.
+            match response.status {
+                307 | 308 => {}
+                _ => {
+                    if current_method != Method::GET && current_method != Method::HEAD {
+                        current_method = Method::GET;
+                        current_body = None;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Execute a single HTTP request without redirect following.
+    /// Uses the connection pool to reuse existing connections.
+    /// Supports both HTTP/2 and HTTP/1.1 via ALPN negotiation.
+    async fn execute_single_request(
+        &self,
+        method: Method,
+        uri: &Uri,
+        body: Option<Vec<u8>>,
+        cookie_header: Option<&str>,
+    ) -> Result<HttpResponse, Error> {
+        let host = uri
+            .host()
+            .ok_or(Error::ConnectionFailed("No host in URL".into()))?;
+        let port = uri
+            .port_u16()
+            .unwrap_or(if uri.scheme_str() == Some("https") { 443 } else { 80 });
+        let is_https = uri.scheme_str() == Some("https");
 
         if !is_https {
             return Err(Error::ConnectionFailed(
@@ -97,11 +366,65 @@ impl Client {
             ));
         }
 
-        // Perform TLS handshake with fingerprinted config (Phase 2)
+        // 1. Try cached H2 connection from pool
+        if let Some(mut sender) = self.pool.try_get_h2(host, port) {
+            match self
+                .send_on_h2(&mut sender, method.clone(), uri, body.clone(), cookie_header)
+                .await
+            {
+                Ok(response) => return Ok(response),
+                Err(_) => {
+                    // Connection dead — remove from pool, fall through to new connection
+                    self.pool.remove(host, port);
+                }
+            }
+        }
+
+        // 2. Try cached H1.1 connection from pool
+        if let Some(mut stream) = self.pool.try_take_h1(host, port) {
+            match self
+                .send_on_h1(&mut stream, method.clone(), uri, body.clone(), cookie_header)
+                .await
+            {
+                Ok((response, keep_alive)) => {
+                    if keep_alive {
+                        self.pool.insert_h1(host, port, stream);
+                    }
+                    return Ok(response);
+                }
+                Err(_) => {
+                    // Connection dead — fall through to new connection
+                }
+            }
+        }
+
+        // 3. New connection: TCP → TLS
+        let tcp = self.connect_tcp(host, port).await?;
         let tls_stream = self.tls_connect(tcp, host).await?;
 
-        // Send HTTP/2 request
-        self.send_h2_request(tls_stream, method, &uri, body).await
+        // 4. Check ALPN result to decide protocol
+        let alpn = tls_stream.ssl().selected_alpn_protocol();
+        let is_h2 = matches!(alpn, Some(b"h2"));
+
+        if is_h2 {
+            // HTTP/2 path
+            let mut sender = self.h2_handshake(tls_stream).await?;
+            let response = self
+                .send_on_h2(&mut sender, method, uri, body, cookie_header)
+                .await?;
+            self.pool.insert_h2(host, port, sender);
+            Ok(response)
+        } else {
+            // HTTP/1.1 path
+            let mut stream = tls_stream;
+            let (response, keep_alive) = self
+                .send_on_h1(&mut stream, method, uri, body, cookie_header)
+                .await?;
+            if keep_alive {
+                self.pool.insert_h1(host, port, stream);
+            }
+            Ok(response)
+        }
     }
 
     /// Establish TCP connection, optionally through a proxy.
@@ -109,21 +432,16 @@ impl Client {
         match &self.proxy {
             None => {
                 let addr = format!("{host}:{port}");
-                let stream = tokio::time::timeout(
-                    self.timeout,
-                    TcpStream::connect(&addr),
-                )
-                .await
-                .map_err(|_| Error::Timeout)?
-                .map_err(Error::Io)?;
+                let stream = tokio::time::timeout(self.timeout, TcpStream::connect(&addr))
+                    .await
+                    .map_err(|_| Error::Timeout)?
+                    .map_err(Error::Io)?;
 
                 // Set TCP_NODELAY for lower latency
                 stream.set_nodelay(true).ok();
                 Ok(stream)
             }
-            Some(proxy) => {
-                self.connect_via_proxy(proxy, host, port).await
-            }
+            Some(proxy) => self.connect_via_proxy(proxy, host, port).await,
         }
     }
 
@@ -176,7 +494,10 @@ impl Client {
 
                 use tokio::io::{AsyncReadExt, AsyncWriteExt};
                 let mut stream = stream;
-                stream.write_all(connect_req.as_bytes()).await.map_err(Error::Io)?;
+                stream
+                    .write_all(connect_req.as_bytes())
+                    .await
+                    .map_err(Error::Io)?;
 
                 // Read response (simple parsing, just check for 200)
                 let mut buf = vec![0u8; 4096];
@@ -192,9 +513,7 @@ impl Client {
                 Ok(stream)
             }
             #[cfg(not(feature = "socks"))]
-            ProxyKind::Socks5 => {
-                Err(Error::Proxy("SOCKS5 support not compiled in".into()))
-            }
+            ProxyKind::Socks5 => Err(Error::Proxy("SOCKS5 support not compiled in".into())),
         }
     }
 
@@ -204,10 +523,29 @@ impl Client {
         tcp: TcpStream,
         host: &str,
     ) -> Result<SslStream<TcpStream>, Error> {
+        self.tls_connect_inner(tcp, host, false).await
+    }
+
+    /// Perform TLS handshake for WebSocket (HTTP/1.1 only ALPN).
+    async fn tls_connect_ws(
+        &self,
+        tcp: TcpStream,
+        host: &str,
+    ) -> Result<SslStream<TcpStream>, Error> {
+        self.tls_connect_inner(tcp, host, true).await
+    }
+
+    async fn tls_connect_inner(
+        &self,
+        tcp: TcpStream,
+        host: &str,
+        force_h1_only: bool,
+    ) -> Result<SslStream<TcpStream>, Error> {
         let ssl = TlsConnector::configure_connection(
             &self.tls_connector,
             &self.profile.tls,
             host,
+            force_h1_only,
         )?;
 
         let mut stream = tokio_boring2::SslStream::new(ssl, tcp)?;
@@ -219,14 +557,13 @@ impl Client {
         Ok(stream)
     }
 
-    /// Send an HTTP/2 request over a TLS connection.
-    async fn send_h2_request(
+    /// Perform the HTTP/2 handshake over a TLS connection.
+    /// Configures H2 settings from the browser profile and spawns the connection driver task.
+    /// Returns a SendRequest handle that can be cloned and reused for multiple requests.
+    async fn h2_handshake(
         &self,
         tls_stream: SslStream<TcpStream>,
-        method: Method,
-        uri: &Uri,
-        body: Option<Vec<u8>>,
-    ) -> Result<HttpResponse, Error> {
+    ) -> Result<http2::client::SendRequest<bytes::Bytes>, Error> {
         let h2_config = &self.profile.http2;
 
         // Build h2 client with fingerprinted settings
@@ -257,12 +594,18 @@ impl Client {
                 let id = match setting_id {
                     SettingId::HeaderTableSize => http2::frame::SettingId::HeaderTableSize,
                     SettingId::EnablePush => http2::frame::SettingId::EnablePush,
-                    SettingId::MaxConcurrentStreams => http2::frame::SettingId::MaxConcurrentStreams,
+                    SettingId::MaxConcurrentStreams => {
+                        http2::frame::SettingId::MaxConcurrentStreams
+                    }
                     SettingId::InitialWindowSize => http2::frame::SettingId::InitialWindowSize,
                     SettingId::MaxFrameSize => http2::frame::SettingId::MaxFrameSize,
                     SettingId::MaxHeaderListSize => http2::frame::SettingId::MaxHeaderListSize,
-                    SettingId::EnableConnectProtocol => http2::frame::SettingId::EnableConnectProtocol,
-                    SettingId::NoRfc7540Priorities => http2::frame::SettingId::NoRfc7540Priorities,
+                    SettingId::EnableConnectProtocol => {
+                        http2::frame::SettingId::EnableConnectProtocol
+                    }
+                    SettingId::NoRfc7540Priorities => {
+                        http2::frame::SettingId::NoRfc7540Priorities
+                    }
                 };
                 order = order.push(id);
             }
@@ -296,7 +639,7 @@ impl Client {
         }
 
         // Perform the HTTP/2 handshake
-        let (mut client, h2_conn) = h2_builder
+        let (client, h2_conn) = h2_builder
             .handshake::<_, bytes::Bytes>(tls_stream)
             .await
             .map_err(Error::Http2)?;
@@ -308,23 +651,42 @@ impl Client {
             }
         });
 
-        // Build the request with headers in the correct order.
-        // h2 crate needs the full URI to extract :scheme and :authority pseudo-headers.
+        Ok(client)
+    }
+
+    /// Send an HTTP/2 request on an existing SendRequest handle.
+    /// Waits for stream availability via `ready()`, builds headers, sends request+body, reads response.
+    async fn send_on_h2(
+        &self,
+        sender: &mut http2::client::SendRequest<bytes::Bytes>,
+        method: Method,
+        uri: &Uri,
+        body: Option<Vec<u8>>,
+        cookie_header: Option<&str>,
+    ) -> Result<HttpResponse, Error> {
+        // Wait until the connection can accept a new stream.
+        // Clone is cheap — clones share the same underlying H2 connection via Arc.
+        sender.clone().ready().await.map_err(Error::Http2)?;
+
+        // Build the request with headers in the correct order
         let authority = uri.authority().map(|a| a.as_str()).unwrap_or("");
         let scheme = uri.scheme_str().unwrap_or("https");
-        let path = uri.path_and_query().map(|pq| pq.as_str()).unwrap_or("/");
-        let h2_uri: Uri = format!("{scheme}://{authority}{path}").parse().map_err(|_| {
-            Error::InvalidHeader("Failed to build H2 URI".into())
-        })?;
+        let path = uri
+            .path_and_query()
+            .map(|pq| pq.as_str())
+            .unwrap_or("/");
+        let h2_uri: Uri = format!("{scheme}://{authority}{path}")
+            .parse()
+            .map_err(|_| Error::InvalidHeader("Failed to build H2 URI".into()))?;
 
         let req_builder = Request::builder()
             .method(method.clone())
             .uri(h2_uri)
             .version(Version::HTTP_2);
 
-        let mut req = req_builder.body(()).map_err(|e| {
-            Error::InvalidHeader(format!("Failed to build request: {e}"))
-        })?;
+        let mut req = req_builder
+            .body(())
+            .map_err(|e| Error::InvalidHeader(format!("Failed to build request: {e}")))?;
 
         // Add headers in profile order
         let headers = req.headers_mut();
@@ -332,6 +694,10 @@ impl Client {
         for (name, value) in &self.profile.headers {
             let lower = name.to_lowercase();
             if lower == "host" {
+                continue;
+            }
+            // Skip cookie header from profile — we inject from jar
+            if lower == "cookie" {
                 continue;
             }
             if let (Ok(hn), Ok(hv)) = (
@@ -352,9 +718,19 @@ impl Client {
             }
         }
 
+        // Inject cookie header from jar
+        if let Some(cookie_val) = cookie_header {
+            if let Ok(hv) = HeaderValue::from_str(cookie_val) {
+                headers.insert(http::header::COOKIE, hv);
+            }
+        }
+
+        // Sort headers to match profile order (critical for fingerprinting)
+        sort_headers_by_profile(headers, &self.profile.headers);
+
         // Send the request
         let has_body = body.is_some();
-        let (response_future, mut send_stream) = client
+        let (response_future, mut send_stream) = sender
             .send_request(req, !has_body)
             .map_err(Error::Http2)?;
 
@@ -409,6 +785,163 @@ impl Client {
             url: uri.to_string(),
         })
     }
+    /// Send an HTTP/1.1 request on an existing TLS stream.
+    /// Returns the response and whether the connection supports keep-alive.
+    async fn send_on_h1(
+        &self,
+        stream: &mut SslStream<TcpStream>,
+        method: Method,
+        uri: &Uri,
+        body: Option<Vec<u8>>,
+        cookie_header: Option<&str>,
+    ) -> Result<(HttpResponse, bool), Error> {
+        let authority = uri.authority().map(|a| a.as_str()).unwrap_or("");
+
+        // Build headers in profile order
+        let mut headers = http::HeaderMap::new();
+
+        // Add Host header first (required for HTTP/1.1)
+        if let Ok(hv) = HeaderValue::from_str(authority) {
+            headers.insert(http::header::HOST, hv);
+        }
+
+        // Add profile headers
+        for (name, value) in &self.profile.headers {
+            let lower = name.to_lowercase();
+            if lower == "host" || lower == "cookie" {
+                continue;
+            }
+            if let (Ok(hn), Ok(hv)) = (
+                HeaderName::from_bytes(name.as_bytes()),
+                HeaderValue::from_str(value),
+            ) {
+                headers.insert(hn, hv);
+            }
+        }
+
+        // Apply custom headers
+        for (name, value) in &self.custom_headers {
+            if let (Ok(hn), Ok(hv)) = (
+                HeaderName::from_bytes(name.as_bytes()),
+                HeaderValue::from_str(value),
+            ) {
+                headers.insert(hn, hv);
+            }
+        }
+
+        // Inject cookie header from jar
+        if let Some(cookie_val) = cookie_header {
+            if let Ok(hv) = HeaderValue::from_str(cookie_val) {
+                headers.insert(http::header::COOKIE, hv);
+            }
+        }
+
+        // Add Connection: keep-alive
+        headers.insert(
+            http::header::CONNECTION,
+            HeaderValue::from_static("keep-alive"),
+        );
+
+        // Sort headers to match profile order
+        sort_headers_by_profile(&mut headers, &self.profile.headers);
+
+        // Write request
+        let body_ref = body.as_deref();
+        http1::write_request(stream, &method, uri, &headers, body_ref).await?;
+
+        // Read response (with timeout)
+        let raw = tokio::time::timeout(self.timeout, http1::read_response(stream))
+            .await
+            .map_err(|_| Error::Timeout)??;
+
+        // Check keep-alive from response
+        let keep_alive = !raw
+            .headers
+            .iter()
+            .any(|(k, v)| k == "connection" && v.eq_ignore_ascii_case("close"));
+
+        // Decompress body
+        let content_encoding = raw
+            .headers
+            .iter()
+            .find(|(k, _)| k == "content-encoding")
+            .map(|(_, v)| v.as_str());
+        let body = decompress_body(raw.body, content_encoding)?;
+
+        let response = HttpResponse {
+            status: raw.status,
+            headers: raw.headers,
+            body,
+            version: "HTTP/1.1".to_string(),
+            url: uri.to_string(),
+        };
+
+        Ok((response, keep_alive))
+    }
+}
+
+/// Check if a status code is a redirect.
+fn is_redirect(status: u16) -> bool {
+    matches!(status, 301 | 302 | 303 | 307 | 308)
+}
+
+/// Resolve a redirect Location against the current URL.
+fn resolve_redirect(base: &Uri, location: &str) -> Result<Uri, Error> {
+    // If location is already absolute, use it directly
+    if location.starts_with("http://") || location.starts_with("https://") {
+        return location
+            .parse()
+            .map_err(|_| Error::Url(url::ParseError::EmptyHost));
+    }
+
+    // Relative URL — resolve against base
+    let scheme = base.scheme_str().unwrap_or("https");
+    let authority = base.authority().map(|a| a.as_str()).unwrap_or("");
+
+    let absolute = if location.starts_with('/') {
+        // Absolute path
+        format!("{scheme}://{authority}{location}")
+    } else {
+        // Relative path — resolve against base path directory
+        let base_path = base.path();
+        let dir = match base_path.rfind('/') {
+            Some(i) => &base_path[..=i],
+            None => "/",
+        };
+        format!("{scheme}://{authority}{dir}{location}")
+    };
+
+    absolute
+        .parse()
+        .map_err(|_| Error::Url(url::ParseError::EmptyHost))
+}
+
+/// Sort headers to match the profile's header order.
+/// Headers listed in the profile are inserted first in profile order,
+/// then any remaining headers (custom, cookie) are appended.
+fn sort_headers_by_profile(
+    headers: &mut http::HeaderMap,
+    profile_order: &[(String, String)],
+) {
+    let mut sorted = http::HeaderMap::with_capacity(headers.keys_len());
+
+    // 1. Headers in profile order
+    for (name, _) in profile_order {
+        if let Ok(hn) = HeaderName::from_bytes(name.as_bytes()) {
+            if let Some(val) = headers.remove(&hn) {
+                sorted.insert(hn, val);
+            }
+        }
+    }
+
+    // 2. Remaining headers (custom, cookie, etc.)
+    for (name, value) in headers.drain() {
+        if let Some(name) = name {
+            sorted.insert(name, value);
+        }
+    }
+
+    std::mem::swap(headers, &mut sorted);
 }
 
 /// Decompress response body based on Content-Encoding header.

@@ -108,7 +108,7 @@ const CHROME_CURVES: &str = "X25519MLKEM768:X25519:P-256:P-384";
 
 // ========== Chrome 131 TLS ==========
 
-fn chrome_tls_v131() -> TlsConfig {
+pub(super) fn chrome_tls_v131() -> TlsConfig {
     TlsConfig {
         cipher_list: Cow::Borrowed(CHROME_CIPHER_LIST),
         curves: Cow::Borrowed(CHROME_CURVES),
@@ -152,7 +152,7 @@ fn chrome_http2_v145() -> Http2Config {
     chrome_http2_base()
 }
 
-fn chrome_http2_base() -> Http2Config {
+pub(super) fn chrome_http2_base() -> Http2Config {
     Http2Config {
         header_table_size: Some(65536),
         enable_push: Some(false),
