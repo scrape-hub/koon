@@ -17,10 +17,10 @@ impl Firefox {
     /// Firefox 135 on Windows.
     pub fn v135_windows() -> BrowserProfile {
         BrowserProfile {
-            tls: firefox_tls_v135(),
-            http2: firefox_http2_v135(),
+            tls: firefox_tls(),
+            http2: firefox_http2(),
             quic: Some(firefox_quic()),
-            headers: firefox_headers_v135(
+            headers: firefox_headers(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0",
             ),
         }
@@ -29,10 +29,10 @@ impl Firefox {
     /// Firefox 135 on macOS.
     pub fn v135_macos() -> BrowserProfile {
         BrowserProfile {
-            tls: firefox_tls_v135(),
-            http2: firefox_http2_v135(),
+            tls: firefox_tls(),
+            http2: firefox_http2(),
             quic: Some(firefox_quic()),
-            headers: firefox_headers_v135(
+            headers: firefox_headers(
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:135.0) Gecko/20100101 Firefox/135.0",
             ),
         }
@@ -41,22 +41,59 @@ impl Firefox {
     /// Firefox 135 on Linux.
     pub fn v135_linux() -> BrowserProfile {
         BrowserProfile {
-            tls: firefox_tls_v135(),
-            http2: firefox_http2_v135(),
+            tls: firefox_tls(),
+            http2: firefox_http2(),
             quic: Some(firefox_quic()),
-            headers: firefox_headers_v135(
+            headers: firefox_headers(
                 "Mozilla/5.0 (X11; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0",
             ),
         }
     }
 
-    /// Latest Firefox profile (currently v135 on Windows).
+    /// Firefox 147 on Windows.
+    pub fn v147_windows() -> BrowserProfile {
+        BrowserProfile {
+            tls: firefox_tls(),
+            http2: firefox_http2(),
+            quic: Some(firefox_quic()),
+            headers: firefox_headers(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0",
+            ),
+        }
+    }
+
+    /// Firefox 147 on macOS.
+    pub fn v147_macos() -> BrowserProfile {
+        BrowserProfile {
+            tls: firefox_tls(),
+            http2: firefox_http2(),
+            quic: Some(firefox_quic()),
+            headers: firefox_headers(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:147.0) Gecko/20100101 Firefox/147.0",
+            ),
+        }
+    }
+
+    /// Firefox 147 on Linux.
+    pub fn v147_linux() -> BrowserProfile {
+        BrowserProfile {
+            tls: firefox_tls(),
+            http2: firefox_http2(),
+            quic: Some(firefox_quic()),
+            headers: firefox_headers(
+                "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0",
+            ),
+        }
+    }
+
+    /// Latest Firefox profile (currently v147 on Windows).
     pub fn latest() -> BrowserProfile {
-        Self::v135_windows()
+        Self::v147_windows()
     }
 }
 
 // Firefox cipher list: AES128 > ChaCha > AES256, plus CBC fallbacks
+// Identical across Firefox 135–147 (verified via capture tool)
 const FIREFOX_CIPHER_LIST: &str = "\
 TLS_AES_128_GCM_SHA256:\
 TLS_CHACHA20_POLY1305_SHA256:\
@@ -94,7 +131,8 @@ const FIREFOX_CURVES: &str = "X25519MLKEM768:X25519:P-256:P-384:P-521:ffdhe2048:
 
 const FIREFOX_DC_SIGALGS: &str = "ecdsa_secp256r1_sha256:ecdsa_secp384r1_sha384:ecdsa_secp521r1_sha512:ecdsa_sha1";
 
-fn firefox_tls_v135() -> TlsConfig {
+// TLS config shared across Firefox 135–147
+fn firefox_tls() -> TlsConfig {
     TlsConfig {
         cipher_list: Cow::Borrowed(FIREFOX_CIPHER_LIST),
         curves: Cow::Borrowed(FIREFOX_CURVES),
@@ -122,7 +160,8 @@ fn firefox_tls_v135() -> TlsConfig {
     }
 }
 
-fn firefox_http2_v135() -> Http2Config {
+// H2 config shared across Firefox 135–147
+fn firefox_http2() -> Http2Config {
     Http2Config {
         header_table_size: Some(65536),
         enable_push: Some(false),
@@ -177,7 +216,8 @@ fn firefox_quic() -> QuicConfig {
     }
 }
 
-fn firefox_headers_v135(user_agent: &str) -> Vec<(String, String)> {
+// Headers shared across Firefox 135–147 (only user-agent differs)
+fn firefox_headers(user_agent: &str) -> Vec<(String, String)> {
     vec![
         ("te".into(), "trailers".into()),
         ("user-agent".into(), user_agent.into()),

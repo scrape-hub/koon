@@ -59,6 +59,9 @@ All notable changes to koon will be documented in this file.
 - `Client` struct now stores `SessionCache` and optional `DohResolver`
 - Chrome profiles: `no_rfc7540_priorities: Some(true)` (was `None`)
 - Firefox profile: 5 PRIORITY frames in H2 config (was empty)
+- Firefox 147 profile added (Windows/macOS/Linux) — same TLS/H2 fingerprint as 135, different UA
+- `Firefox::latest()` now returns v147 (was v135)
+- Node.js/Python bindings: `firefox147`, `firefox147windows`, `firefox147macos`, `firefox147linux` options
 
 ## [0.2.0] - 2026-02-19
 

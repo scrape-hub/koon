@@ -21,7 +21,10 @@ fn resolve_profile(browser: &str) -> PyResult<BrowserProfile> {
         "chrome131" | "chrome131windows" => Ok(Chrome::v131_windows()),
         "chrome131macos" => Ok(Chrome::v131_macos()),
         "chrome131linux" => Ok(Chrome::v131_linux()),
-        "firefox" | "firefox135" | "firefox135windows" => Ok(Firefox::v135_windows()),
+        "firefox" | "firefox147" | "firefox147windows" => Ok(Firefox::v147_windows()),
+        "firefox147macos" => Ok(Firefox::v147_macos()),
+        "firefox147linux" => Ok(Firefox::v147_linux()),
+        "firefox135" | "firefox135windows" => Ok(Firefox::v135_windows()),
         "firefox135macos" => Ok(Firefox::v135_macos()),
         "firefox135linux" => Ok(Firefox::v135_linux()),
         "safari" | "safari183" | "safari183macos" => Ok(Safari::latest()),
@@ -29,7 +32,7 @@ fn resolve_profile(browser: &str) -> PyResult<BrowserProfile> {
         "edge131macos" => Ok(Edge::v131_macos()),
         other => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
             "Unknown browser: '{other}'. Use: chrome, chrome131, chrome145, \
-             firefox, firefox135, safari, safari183, edge, edge131"
+             firefox, firefox135, firefox147, safari, safari183, edge, edge131"
         ))),
     }
 }
