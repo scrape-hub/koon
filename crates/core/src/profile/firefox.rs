@@ -171,6 +171,7 @@ fn firefox_tls() -> TlsConfig {
         session_ticket: true,
         key_shares_limit: Some(3),
         delegated_credentials: Some(Cow::Borrowed(FIREFOX_DC_SIGALGS)),
+        record_size_limit: Some(16385),
         danger_accept_invalid_certs: false,
     }
 }

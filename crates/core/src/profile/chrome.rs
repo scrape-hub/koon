@@ -171,6 +171,7 @@ fn chrome_tls(major: u32) -> TlsConfig {
         session_ticket: true,
         key_shares_limit: None,
         delegated_credentials: None,
+        record_size_limit: None,
         danger_accept_invalid_certs: false,
     }
 }

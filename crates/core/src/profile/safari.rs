@@ -154,6 +154,7 @@ fn safari_tls_legacy() -> TlsConfig {
         session_ticket: false,
         key_shares_limit: None,
         delegated_credentials: None,
+        record_size_limit: None,
         danger_accept_invalid_certs: false,
     }
 }

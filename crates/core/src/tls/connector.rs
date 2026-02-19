@@ -96,6 +96,11 @@ impl TlsConnector {
             builder.set_delegated_credentials(dc_sigalgs)?;
         }
 
+        // === Record size limit (RFC 8449) ===
+        if let Some(limit) = config.record_size_limit {
+            builder.set_record_size_limit(limit);
+        }
+
         // === Certificate verification ===
         if config.danger_accept_invalid_certs {
             builder.set_verify(SslVerifyMode::NONE);

@@ -10,6 +10,10 @@ All notable changes to koon will be documented in this file.
   - Asserts JA4, Akamai hash, and Akamai text against reference captures
   - `#[ignore]` attribute — run with `cargo test --test fingerprint -- --ignored`
 
+- **TLS record_size_limit**: `TlsConfig::record_size_limit` option (RFC 8449)
+  - Firefox profiles set `record_size_limit: Some(16385)` — matches real Firefox extension count (17)
+  - Fixes JA4 mismatch: `t13d1717h2` (correct) instead of `t13d1716h2` (was missing extension 0x001c)
+
 ### Fixed
 - **Firefox PRIORITY frames**: Removed 5 spurious PRIORITY frames from Firefox 135–147 profiles
   - Real Firefox 135+ does not send RFC 7540 PRIORITY frames (deprecated since ~FF100)

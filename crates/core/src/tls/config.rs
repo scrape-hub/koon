@@ -63,6 +63,9 @@ pub struct TlsConfig {
     /// Delegated credentials sigalgs.
     pub delegated_credentials: Option<Cow<'static, str>>,
 
+    /// Record size limit (RFC 8449). Firefox sends 16385.
+    pub record_size_limit: Option<u16>,
+
     /// Whether to disable certificate verification (for testing only).
     pub danger_accept_invalid_certs: bool,
 }
@@ -123,6 +126,7 @@ impl Default for TlsConfig {
             session_ticket: true,
             key_shares_limit: None,
             delegated_credentials: None,
+            record_size_limit: None,
             danger_accept_invalid_certs: false,
         }
     }

@@ -39,10 +39,8 @@ const CHROME_NEW_ALPS: Expected = Expected {
 };
 
 // Firefox 135–147 (identical fingerprint across all versions)
-// JA4 note: Real Firefox sends 17 TLS extensions (d1717), BoringSSL sends 16 (d1716).
-// This is a known BoringSSL limitation. The Akamai fingerprint matches perfectly.
 const FIREFOX: Expected = Expected {
-    ja4: "t13d1716h2_5b57614c22b0_36c4f964cab1",
+    ja4: "t13d1717h2_5b57614c22b0_3cbfd9057e0d",
     akamai_hash: "6ea73faa8fc5aac76bded7bd238f6433",
     akamai_text: "1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s",
 };
