@@ -6,6 +6,8 @@ pub mod quic;
 pub mod profile;
 pub mod client;
 pub mod cookie;
+#[cfg(feature = "doh")]
+pub mod dns;
 pub mod error;
 pub mod pool;
 pub mod proxy;
@@ -16,4 +18,5 @@ pub use cookie::CookieJar;
 pub use error::Error;
 pub use profile::{BrowserProfile, Chrome, Edge, Firefox, Safari};
 pub use quic::QuicConfig;
+pub use tls::SessionCache;
 pub use websocket::{WebSocket, Message as WsMessage};

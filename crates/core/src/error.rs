@@ -14,6 +14,8 @@ pub enum Error {
     ConnectionFailed(String),
     Json(serde_json::Error),
     WebSocket(tungstenite::error::Error),
+    #[cfg(feature = "doh")]
+    Dns(String),
     Timeout,
     TooManyRedirects,
 }
@@ -33,6 +35,8 @@ impl fmt::Display for Error {
             Error::ConnectionFailed(e) => write!(f, "Connection failed: {e}"),
             Error::Json(e) => write!(f, "JSON error: {e}"),
             Error::WebSocket(e) => write!(f, "WebSocket error: {e}"),
+            #[cfg(feature = "doh")]
+            Error::Dns(e) => write!(f, "DNS error: {e}"),
             Error::Timeout => write!(f, "Request timed out"),
             Error::TooManyRedirects => write!(f, "Too many redirects"),
         }

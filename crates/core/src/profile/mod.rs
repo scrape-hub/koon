@@ -10,6 +10,7 @@ pub use safari::Safari;
 
 use std::path::Path;
 
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::http2::Http2Config;
@@ -58,5 +59,86 @@ impl BrowserProfile {
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self, crate::Error> {
         let contents = std::fs::read_to_string(path).map_err(crate::Error::Io)?;
         serde_json::from_str(&contents).map_err(crate::Error::Json)
+    }
+
+    /// Apply subtle randomization to make each client instance unique.
+    ///
+    /// Randomizes fields that anti-bot systems can use to correlate clients
+    /// sharing the same profile, while keeping TLS/H2 fingerprint-critical
+    /// values (ciphers, curves, sigalgs, extension order) untouched.
+    ///
+    /// What changes:
+    /// - Chrome/Edge: UA build number within the same major version range
+    /// - `sec-ch-ua` version kept in sync with randomized UA
+    /// - `accept-language` q-values get small jitter
+    /// - H2 `initial_window_size` and `initial_conn_window_size` get ±32KB jitter
+    pub fn randomize(&mut self) {
+        let mut rng = rand::rng();
+        self.randomize_user_agent(&mut rng);
+        self.randomize_accept_language(&mut rng);
+        self.randomize_h2_window_sizes(&mut rng);
+    }
+
+    fn randomize_user_agent(&mut self, rng: &mut impl Rng) {
+        // Find user-agent header and detect Chrome/Edge pattern
+        let ua_idx = self.headers.iter().position(|(k, _)| k == "user-agent");
+        let ua_idx = match ua_idx { Some(i) => i, None => return };
+
+        let ua = &self.headers[ua_idx].1;
+
+        // Match Chrome UA pattern: "Chrome/MAJOR.0.BUILD.PATCH"
+        // We randomize BUILD and PATCH within realistic ranges
+        if let Some(chrome_pos) = ua.find("Chrome/") {
+            let after = &ua[chrome_pos + 7..];
+            // Parse "MAJOR.0.BUILD.PATCH"
+            let parts: Vec<&str> = after.split(|c: char| !c.is_ascii_digit() && c != '.')
+                .next().unwrap_or("").split('.').collect();
+            if parts.len() >= 4 {
+                let major = parts[0];
+                let build: u32 = rng.random_range(6778..=6810);
+                let patch: u32 = rng.random_range(0..=265);
+                let new_version = format!("{major}.0.{build}.{patch}");
+                let old_version = format!("{}.{}.{}.{}", parts[0], parts[1], parts[2], parts[3]);
+
+                // Replace in UA string
+                let new_ua = ua.replace(&old_version, &new_version);
+                self.headers[ua_idx].1 = new_ua;
+
+                // Update sec-ch-ua to match (keep same major version)
+                // sec-ch-ua only contains major version, so no change needed
+            }
+        }
+    }
+
+    fn randomize_accept_language(&mut self, rng: &mut impl Rng) {
+        if let Some(idx) = self.headers.iter().position(|(k, _)| k == "accept-language") {
+            let val = &self.headers[idx].1;
+            // Replace q=0.9 or q=0.5 with random jitter
+            let new_val = val
+                .split(',')
+                .map(|part| {
+                    if let Some(q_pos) = part.find(";q=0.") {
+                        let prefix = &part[..q_pos];
+                        let q_digit: u8 = rng.random_range(7..=9);
+                        format!("{prefix};q=0.{q_digit}")
+                    } else {
+                        part.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            self.headers[idx].1 = new_val;
+        }
+    }
+
+    fn randomize_h2_window_sizes(&mut self, rng: &mut impl Rng) {
+        // ±32KB jitter on window sizes (32768 bytes)
+        let jitter: i32 = rng.random_range(-32768..=32768);
+        self.http2.initial_window_size =
+            (self.http2.initial_window_size as i64 + jitter as i64) as u32;
+
+        let jitter: i32 = rng.random_range(-32768..=32768);
+        self.http2.initial_conn_window_size =
+            (self.http2.initial_conn_window_size as i64 + jitter as i64) as u32;
     }
 }

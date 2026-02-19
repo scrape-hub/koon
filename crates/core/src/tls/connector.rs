@@ -1,9 +1,11 @@
 use boring2::ssl::{
-    Ssl, SslConnector, SslMethod, SslOptions, SslVerifyMode, SslVersion,
+    NameType, Ssl, SslConnector, SslMethod, SslOptions, SslSessionCacheMode, SslVerifyMode,
+    SslVersion,
 };
 
 use super::cert_compression::{BrotliCertCompressor, ZlibCertCompressor, ZstdCertCompressor};
 use super::config::{AlpnProtocol, CertCompression, TlsConfig, TlsVersion};
+use super::session_cache::SessionCache;
 use crate::Error;
 
 /// Two-phase TLS connector for browser fingerprint impersonation.
@@ -20,7 +22,10 @@ impl TlsConnector {
     ///
     /// Sets all context-level TLS parameters that affect the JA3/JA4 fingerprint.
     /// The returned `SslConnector` can be reused across multiple connections.
-    pub fn build_connector(config: &TlsConfig) -> Result<SslConnector, Error> {
+    pub fn build_connector(
+        config: &TlsConfig,
+        session_cache: Option<SessionCache>,
+    ) -> Result<SslConnector, Error> {
         let mut builder = SslConnector::builder(SslMethod::tls_client())?;
 
         // === Cipher suites (directly affects JA3 hash) ===
@@ -99,6 +104,16 @@ impl TlsConnector {
             load_root_certs(&mut builder)?;
         }
 
+        // === Session resumption ===
+        if let Some(cache) = session_cache {
+            builder.set_session_cache_mode(SslSessionCacheMode::CLIENT);
+            builder.set_new_session_callback(move |ssl, session| {
+                if let Some(hostname) = ssl.servername(NameType::HOST_NAME) {
+                    cache.insert(hostname, session);
+                }
+            });
+        }
+
         Ok(builder.build())
     }
 
@@ -111,6 +126,8 @@ impl TlsConnector {
         config: &TlsConfig,
         host: &str,
         force_h1_only: bool,
+        session_cache: Option<&SessionCache>,
+        ech_config_list: Option<&[u8]>,
     ) -> Result<Ssl, Error> {
         let mut cfg = connector.configure()?;
 
@@ -123,8 +140,13 @@ impl TlsConnector {
             cfg.set_alpn_protos(&alpn_wire)?;
         }
 
-        // ECH GREASE (per-connection, Chrome sends this)
-        cfg.set_enable_ech_grease(config.ech_grease);
+        // ECH: real ECH from DNS HTTPS record, or fallback to GREASE
+        if let Some(ech_bytes) = ech_config_list {
+            cfg.set_ech_config_list(ech_bytes)
+                .map_err(|e| Error::ConnectionFailed(format!("ECH config failed: {e}")))?;
+        } else {
+            cfg.set_enable_ech_grease(config.ech_grease);
+        }
 
         // ALPS (h2-specific, skip when forcing h1)
         if !force_h1_only {
@@ -139,7 +161,15 @@ impl TlsConnector {
             cfg.set_verify_hostname(false);
         }
 
-        let ssl = cfg.into_ssl(host)?;
+        let mut ssl = cfg.into_ssl(host)?;
+
+        // Session resumption: set cached session before handshake
+        if let Some(cache) = session_cache {
+            if let Some(session) = cache.get(host) {
+                unsafe { ssl.set_session(&session)?; }
+            }
+        }
+
         Ok(ssl)
     }
 }

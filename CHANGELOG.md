@@ -2,6 +2,45 @@
 
 All notable changes to koon will be documented in this file.
 
+## [0.3.0] - 2026-02-19
+
+### Added
+
+#### Anti-Bot Evasion
+- **H2 PRIORITY Frames**: Firefox priority tree (streams 3/5/7/9/11) now sent during H2 handshake
+  - Chrome/Edge: `no_rfc7540_priorities=true` sent in SETTINGS (matching real Chrome 131+)
+  - `enable_connect_protocol` SETTINGS support (Safari 18.3)
+- **TLS Session Resumption**: Automatic session caching keyed by hostname
+  - `SessionCache` stores `SslSession` objects across connections
+  - `set_new_session_callback` on `SslContext` + `set_session` before handshake
+  - `ClientBuilder::session_resumption(bool)` toggle (default: true)
+- **Fingerprint Randomization**: `BrowserProfile::randomize()` method
+  - Chrome/Edge: UA build number jittered within version range (6778-6810.0-265)
+  - `accept-language` q-values randomized (0.7-0.9)
+  - H2 `initial_window_size` and `initial_conn_window_size` ±32KB jitter
+  - TLS fingerprint (JA3/JA4) unchanged — only non-critical fields modified
+- **DNS-over-HTTPS** (optional `doh` feature): Encrypted DNS via HTTPS POST
+  - `DohResolver::with_cloudflare()` / `with_google()` presets
+  - A/AAAA resolution with 5-minute TTL cache
+  - HTTPS record queries (type 65) for ECHConfigList + ALPN
+  - Minimal TLS config (not browser-fingerprinted) for DoH transport
+  - `ClientBuilder::doh(resolver)` integration
+- **Real ECH** (Encrypted Client Hello): Uses ECHConfigList from DNS HTTPS records
+  - `configure_connection()` applies `set_ech_config_list()` when available
+  - Automatic fallback to ECH GREASE when no DNS record found
+  - Requires `doh` feature for DNS HTTPS record queries
+
+### Dependencies Added
+- `rand` v0.9 (fingerprint randomization)
+- `hickory-proto` v0.25 (optional, DNS wire format for DoH)
+
+### Changed
+- `TlsConnector::build_connector()` now accepts `Option<SessionCache>`
+- `TlsConnector::configure_connection()` now accepts `Option<&SessionCache>` + `Option<&[u8]>` (ECH config)
+- `Client` struct now stores `SessionCache` and optional `DohResolver`
+- Chrome profiles: `no_rfc7540_priorities: Some(true)` (was `None`)
+- Firefox profile: 5 PRIORITY frames in H2 config (was empty)
+
 ## [0.2.0] - 2026-02-19
 
 ### Added

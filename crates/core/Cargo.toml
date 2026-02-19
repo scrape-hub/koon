@@ -9,6 +9,7 @@ description = "Browser impersonation HTTP client with TLS and HTTP/2 fingerprint
 [features]
 default = ["socks"]
 socks = ["dep:tokio-socks"]
+doh = ["dep:hickory-proto"]
 
 [dependencies]
 # TLS via BoringSSL
@@ -59,6 +60,12 @@ tokio-tungstenite = { version = "0.24", default-features = false }
 
 # Async stream utilities (SinkExt, StreamExt for WebSocket)
 futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+
+# DNS-over-HTTPS (optional)
+hickory-proto = { version = "0.25", optional = true }
+
+# Randomization (fingerprint jitter)
+rand = "0.9"
 
 # Utilities
 url = "2"

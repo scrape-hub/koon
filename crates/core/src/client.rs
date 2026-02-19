@@ -10,13 +10,15 @@ use tokio::net::TcpStream;
 use tokio_boring2::SslStream;
 
 use crate::cookie::CookieJar;
+#[cfg(feature = "doh")]
+use crate::dns::DohResolver;
 use crate::error::Error;
 use crate::http1;
 use crate::http2::config::{PseudoHeader, SettingId};
 use crate::pool::ConnectionPool;
 use crate::profile::BrowserProfile;
 use crate::proxy::{ProxyConfig, ProxyKind};
-use crate::tls::TlsConnector;
+use crate::tls::{SessionCache, TlsConnector};
 use crate::websocket::{self, WebSocket};
 use crate::{http3, quic};
 
@@ -45,6 +47,9 @@ pub struct ClientBuilder {
     follow_redirects: bool,
     max_redirects: u32,
     cookie_jar: bool,
+    session_resumption: bool,
+    #[cfg(feature = "doh")]
+    doh_resolver: Option<DohResolver>,
 }
 
 impl ClientBuilder {
@@ -57,6 +62,9 @@ impl ClientBuilder {
             follow_redirects: true,
             max_redirects: 10,
             cookie_jar: true,
+            session_resumption: true,
+            #[cfg(feature = "doh")]
+            doh_resolver: None,
         }
     }
 
@@ -96,9 +104,30 @@ impl ClientBuilder {
         self
     }
 
+    /// Enable or disable TLS session resumption. Default: true.
+    pub fn session_resumption(mut self, enabled: bool) -> Self {
+        self.session_resumption = enabled;
+        self
+    }
+
+    /// Set a DNS-over-HTTPS resolver for encrypted DNS and ECH support.
+    #[cfg(feature = "doh")]
+    pub fn doh(mut self, resolver: DohResolver) -> Self {
+        self.doh_resolver = Some(resolver);
+        self
+    }
+
     /// Build the [`Client`]. This creates the TLS connector (Phase 1).
     pub fn build(self) -> Result<Client, Error> {
-        let tls_connector = TlsConnector::build_connector(&self.profile.tls)?;
+        let session_cache = if self.session_resumption {
+            Some(SessionCache::new())
+        } else {
+            None
+        };
+
+        let tls_connector =
+            TlsConnector::build_connector(&self.profile.tls, session_cache.clone())?;
+
         let jar = if self.cookie_jar {
             Some(Mutex::new(CookieJar::new()))
         } else {
@@ -114,6 +143,9 @@ impl ClientBuilder {
             follow_redirects: self.follow_redirects,
             max_redirects: self.max_redirects,
             cookie_jar: jar,
+            session_cache,
+            #[cfg(feature = "doh")]
+            doh_resolver: self.doh_resolver,
             pool: ConnectionPool::new(),
             alt_svc_cache: Mutex::new(HashMap::new()),
             quic_endpoint: Mutex::new(None),
@@ -134,6 +166,9 @@ pub struct Client {
     follow_redirects: bool,
     max_redirects: u32,
     cookie_jar: Option<Mutex<CookieJar>>,
+    session_cache: Option<SessionCache>,
+    #[cfg(feature = "doh")]
+    doh_resolver: Option<DohResolver>,
     pool: ConnectionPool,
     /// Alt-Svc cache: maps (host, port) → H3 port + expiry.
     alt_svc_cache: Mutex<HashMap<(String, u16), AltSvcEntry>>,
@@ -623,9 +658,25 @@ impl Client {
     }
 
     /// Establish TCP connection, optionally through a proxy.
+    /// When DoH is enabled, resolves hostname via encrypted DNS first.
     async fn connect_tcp(&self, host: &str, port: u16) -> Result<TcpStream, Error> {
         match &self.proxy {
             None => {
+                #[cfg(feature = "doh")]
+                if let Some(resolver) = &self.doh_resolver {
+                    // Resolve via DoH, then connect to IP directly
+                    let addrs = resolver.resolve(host).await?;
+                    let addr = std::net::SocketAddr::new(addrs[0], port);
+                    let stream =
+                        tokio::time::timeout(self.timeout, TcpStream::connect(addr))
+                            .await
+                            .map_err(|_| Error::Timeout)?
+                            .map_err(Error::Io)?;
+                    stream.set_nodelay(true).ok();
+                    return Ok(stream);
+                }
+
+                // Fallback: OS DNS resolution
                 let addr = format!("{host}:{port}");
                 let stream = tokio::time::timeout(self.timeout, TcpStream::connect(&addr))
                     .await
@@ -736,11 +787,16 @@ impl Client {
         host: &str,
         force_h1_only: bool,
     ) -> Result<SslStream<TcpStream>, Error> {
+        // ECH config from DNS HTTPS record (when DoH is available)
+        let ech_config = self.get_ech_config(host).await;
+
         let ssl = TlsConnector::configure_connection(
             &self.tls_connector,
             &self.profile.tls,
             host,
             force_h1_only,
+            self.session_cache.as_ref(),
+            ech_config.as_deref(),
         )?;
 
         let mut stream = tokio_boring2::SslStream::new(ssl, tcp)?;
@@ -750,6 +806,19 @@ impl Client {
             .map_err(|e| Error::ConnectionFailed(format!("TLS handshake failed: {e}")))?;
 
         Ok(stream)
+    }
+
+    /// Get ECH config from DNS HTTPS record if DoH is available.
+    async fn get_ech_config(&self, _host: &str) -> Option<Vec<u8>> {
+        #[cfg(feature = "doh")]
+        {
+            if let Some(resolver) = &self.doh_resolver {
+                if let Ok(Some(record)) = resolver.query_https_record(_host).await {
+                    return record.ech_config_list;
+                }
+            }
+        }
+        None
     }
 
     /// Perform the HTTP/2 handshake over a TLS connection.
@@ -831,6 +900,34 @@ impl Client {
                 dep.weight,
                 dep.exclusive,
             ));
+        }
+
+        // PRIORITY frames (Firefox sends these, Chrome/Safari disable them)
+        if !h2_config.priorities.is_empty() {
+            let mut prio_builder = http2::frame::Priorities::builder();
+            for pf in &h2_config.priorities {
+                let dep = http2::frame::StreamDependency::new(
+                    http2::frame::StreamId::from(pf.dependency),
+                    pf.weight,
+                    pf.exclusive,
+                );
+                let priority = http2::frame::Priority::new(
+                    http2::frame::StreamId::from(pf.stream_id),
+                    dep,
+                );
+                prio_builder = prio_builder.push(priority);
+            }
+            h2_builder.priorities(prio_builder.build());
+        }
+
+        // RFC 7540 Priorities deaktivieren (Chrome 131+, Safari 18.3)
+        if let Some(val) = h2_config.no_rfc7540_priorities {
+            h2_builder.no_rfc7540_priorities(val);
+        }
+
+        // CONNECT protocol (Safari 18.3)
+        if let Some(val) = h2_config.enable_connect_protocol {
+            h2_builder.enable_connect_protocol(val);
         }
 
         // Headers field order (for HTTP/2 fingerprinting)

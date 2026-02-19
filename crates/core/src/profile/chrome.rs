@@ -190,7 +190,7 @@ pub(super) fn chrome_http2_base() -> Http2Config {
             exclusive: true,
         }),
         priorities: Vec::new(),
-        no_rfc7540_priorities: None,
+        no_rfc7540_priorities: Some(true),
         enable_connect_protocol: None,
     }
 }
