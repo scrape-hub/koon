@@ -1,6 +1,7 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use koon_core::dns::DohResolver;
+use koon_core::multipart::Multipart;
 use koon_core::profile::{BrowserProfile, Chrome, Edge, Firefox, Opera, Safari};
 use koon_core::Client;
 use std::collections::HashMap;
@@ -323,6 +324,7 @@ pub struct KoonOptions {
 
 /// A single HTTP header (name-value pair).
 /// Using an array instead of a map preserves duplicate headers like Set-Cookie.
+#[derive(Clone)]
 #[napi(object)]
 pub struct KoonHeader {
     /// Header name (lowercase).
@@ -349,6 +351,23 @@ pub struct KoonResponse {
 
     /// Final URL after redirects.
     pub url: String,
+}
+
+/// A field in a multipart/form-data request.
+/// Provide either `value` (text field) or `fileData` (file upload).
+#[napi(object)]
+pub struct KoonMultipartField {
+    /// Field name.
+    pub name: String,
+    /// Text value (for text fields).
+    pub value: Option<String>,
+    /// File content (for file uploads, mutually exclusive with `value`).
+    pub file_data: Option<Buffer>,
+    /// Filename for file uploads.
+    pub filename: Option<String>,
+    /// Content-Type for file uploads.
+    /// @default "application/octet-stream"
+    pub content_type: Option<String>,
 }
 
 /// The main Koon HTTP client with browser fingerprint impersonation.
@@ -519,6 +538,104 @@ impl Koon {
         })
     }
 
+    /// Perform an HTTP POST request with multipart/form-data body.
+    ///
+    /// @example
+    /// ```ts
+    /// const response = await client.postMultipart('https://httpbin.org/post', [
+    ///   { name: 'field', value: 'hello' },
+    ///   { name: 'file', fileData: Buffer.from('content'), filename: 'test.txt', contentType: 'text/plain' },
+    /// ]);
+    /// ```
+    #[napi]
+    pub async fn post_multipart(
+        &self,
+        url: String,
+        fields: Vec<KoonMultipartField>,
+    ) -> Result<KoonResponse> {
+        let mut mp = Multipart::new();
+        for field in fields {
+            if let Some(file_data) = field.file_data {
+                mp = mp.file(
+                    field.name,
+                    field.filename.unwrap_or_else(|| "file".to_string()),
+                    field.content_type.unwrap_or_else(|| "application/octet-stream".to_string()),
+                    file_data.to_vec(),
+                );
+            } else if let Some(value) = field.value {
+                mp = mp.text(field.name, value);
+            }
+        }
+
+        let response = self
+            .client
+            .post_multipart(&url, mp)
+            .await
+            .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?;
+
+        let headers: Vec<KoonHeader> = response
+            .headers
+            .into_iter()
+            .map(|(name, value)| KoonHeader { name, value })
+            .collect();
+
+        Ok(KoonResponse {
+            status: response.status as u32,
+            headers,
+            body: response.body.into(),
+            version: response.version,
+            url: response.url,
+        })
+    }
+
+    /// Perform a streaming HTTP request.
+    /// The response body is delivered in chunks via `nextChunk()`.
+    /// Does NOT follow redirects — handle 3xx responses manually.
+    ///
+    /// @example
+    /// ```ts
+    /// const resp = await client.requestStreaming('GET', 'https://example.com/large-file');
+    /// let chunk;
+    /// while ((chunk = await resp.nextChunk()) !== null) {
+    ///   process(chunk);
+    /// }
+    /// ```
+    #[napi]
+    pub async fn request_streaming(
+        &self,
+        method: String,
+        url: String,
+        body: Option<Buffer>,
+    ) -> Result<KoonStreamingResponse> {
+        let method = method.parse().map_err(|_| {
+            napi::Error::from_reason(format!("Invalid HTTP method: {method}"))
+        })?;
+        let body_bytes = body.map(|b| b.to_vec());
+
+        let resp = self
+            .client
+            .request_streaming(method, &url, body_bytes)
+            .await
+            .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?;
+
+        let headers: Vec<KoonHeader> = resp
+            .headers
+            .iter()
+            .map(|(name, value)| KoonHeader {
+                name: name.clone(),
+                value: value.clone(),
+            })
+            .collect();
+
+        Ok(KoonStreamingResponse {
+            status_val: resp.status as u32,
+            headers_val: headers,
+            version_val: resp.version.clone(),
+            url_val: resp.url.clone(),
+            inner: tokio::sync::Mutex::new(Some(resp)),
+        })
+    }
+
     /// Open a WebSocket connection to a wss:// URL.
     ///
     /// @example
@@ -549,6 +666,75 @@ impl Koon {
         Ok(KoonWebSocket {
             inner: tokio::sync::Mutex::new(Some(ws)),
         })
+    }
+}
+
+/// A streaming HTTP response that delivers the body in chunks.
+#[napi]
+pub struct KoonStreamingResponse {
+    inner: tokio::sync::Mutex<Option<koon_core::StreamingResponse>>,
+    status_val: u32,
+    headers_val: Vec<KoonHeader>,
+    version_val: String,
+    url_val: String,
+}
+
+#[napi]
+impl KoonStreamingResponse {
+    /// HTTP status code.
+    #[napi(getter)]
+    pub fn status(&self) -> u32 {
+        self.status_val
+    }
+
+    /// Response headers.
+    #[napi(getter)]
+    pub fn headers(&self) -> Vec<KoonHeader> {
+        self.headers_val.clone()
+    }
+
+    /// HTTP version used.
+    #[napi(getter)]
+    pub fn version(&self) -> String {
+        self.version_val.clone()
+    }
+
+    /// Request URL.
+    #[napi(getter)]
+    pub fn url(&self) -> String {
+        self.url_val.clone()
+    }
+
+    /// Get the next body chunk. Returns null when the body is complete.
+    #[napi]
+    pub async fn next_chunk(&self) -> Result<Option<Buffer>> {
+        let mut guard = self.inner.lock().await;
+        let resp = guard
+            .as_mut()
+            .ok_or_else(|| napi::Error::from_reason("Stream already consumed"))?;
+
+        match resp.next_chunk().await {
+            Some(Ok(data)) => Ok(Some(data.into())),
+            Some(Err(e)) => Err(napi::Error::from_reason(format!("Stream error: {e}"))),
+            None => Ok(None),
+        }
+    }
+
+    /// Collect the entire remaining body into a single Buffer.
+    /// Consumes the streaming response.
+    #[napi]
+    pub async fn collect(&self) -> Result<Buffer> {
+        let mut guard = self.inner.lock().await;
+        let resp = guard
+            .take()
+            .ok_or_else(|| napi::Error::from_reason("Stream already consumed"))?;
+
+        let body = resp
+            .collect_body()
+            .await
+            .map_err(|e| napi::Error::from_reason(format!("Stream error: {e}")))?;
+
+        Ok(body.into())
     }
 }
 

@@ -7,6 +7,7 @@ use boring2::ssl::SslConnector;
 use h3_quinn::quinn;
 use http::{HeaderName, HeaderValue, Method, Request, Uri, Version};
 use tokio::net::TcpStream;
+use tokio::sync::mpsc;
 use tokio_boring2::SslStream;
 
 use crate::cookie::CookieJar;
@@ -15,9 +16,11 @@ use crate::dns::DohResolver;
 use crate::error::Error;
 use crate::http1;
 use crate::http2::config::{PseudoHeader, SettingId};
+use crate::multipart::Multipart;
 use crate::pool::ConnectionPool;
 use crate::profile::BrowserProfile;
 use crate::proxy::{ProxyConfig, ProxyKind};
+use crate::streaming::StreamingResponse;
 use crate::tls::{SessionCache, TlsConnector};
 use crate::websocket::{self, WebSocket};
 use crate::{http3, quic};
@@ -222,6 +225,283 @@ impl Client {
         self.request(Method::HEAD, url, None).await
     }
 
+    /// Perform an HTTP POST request with a multipart/form-data body.
+    pub async fn post_multipart(&self, url: &str, multipart: Multipart) -> Result<HttpResponse, Error> {
+        let (body, content_type) = multipart.build();
+        self.request_with_headers(
+            Method::POST,
+            url,
+            Some(body),
+            vec![("content-type".into(), content_type)],
+        )
+        .await
+    }
+
+    /// Perform a streaming HTTP request.
+    ///
+    /// Unlike [`request()`](Self::request), the response body is not buffered.
+    /// Instead, chunks are delivered via [`StreamingResponse::next_chunk()`].
+    ///
+    /// Streaming responses do **not** follow redirects — the caller must handle
+    /// 3xx responses manually (similar to `fetch(redirect: 'manual')`).
+    ///
+    /// Decompression is **not** applied to streaming responses.
+    pub async fn request_streaming(
+        &self,
+        method: Method,
+        url: &str,
+        body: Option<Vec<u8>>,
+    ) -> Result<StreamingResponse, Error> {
+        let uri: Uri = url.parse().map_err(|_| Error::Url(url::ParseError::EmptyHost))?;
+
+        let host = uri
+            .host()
+            .ok_or(Error::ConnectionFailed("No host in URL".into()))?;
+        let port = uri
+            .port_u16()
+            .unwrap_or(if uri.scheme_str() == Some("https") { 443 } else { 80 });
+        let is_https = uri.scheme_str() == Some("https");
+
+        if !is_https {
+            return Err(Error::ConnectionFailed(
+                "Only HTTPS is supported (HTTP would leak fingerprint)".into(),
+            ));
+        }
+
+        let cookie_header = self
+            .cookie_jar
+            .as_ref()
+            .and_then(|jar| jar.lock().unwrap().cookie_header(&uri));
+
+        // Try pooled H2 connection first
+        if let Some(mut sender) = self.pool.try_get_h2(host, port) {
+            match self
+                .send_on_h2_streaming(&mut sender, method.clone(), &uri, body.clone(), cookie_header.as_deref())
+                .await
+            {
+                Ok(resp) => {
+                    // Keep H2 connection in pool (it's multiplexed)
+                    self.pool.insert_h2(host, port, sender);
+                    return Ok(resp);
+                }
+                Err(e) => {
+                    self.pool.remove(host, port);
+                    if !e.is_h2_goaway() {
+                        return Err(e);
+                    }
+                    // GOAWAY: fall through to new connection
+                }
+            }
+        }
+
+        // New connection: TCP → TLS → H2/H1
+        let tcp = self.connect_tcp(host, port).await?;
+        let tls_stream = self.tls_connect(tcp, host, port).await?;
+
+        let alpn = tls_stream.ssl().selected_alpn_protocol();
+        let is_h2 = matches!(alpn, Some(b"h2"));
+
+        if is_h2 {
+            let mut sender = self.h2_handshake(tls_stream).await?;
+            let resp = self
+                .send_on_h2_streaming(&mut sender, method, &uri, body, cookie_header.as_deref())
+                .await?;
+            self.pool.insert_h2(host, port, sender);
+            Ok(resp)
+        } else {
+            self.send_on_h1_streaming(tls_stream, method, &uri, body, cookie_header.as_deref())
+                .await
+        }
+    }
+
+    /// Send an H2 request and return a streaming response.
+    async fn send_on_h2_streaming(
+        &self,
+        sender: &mut http2::client::SendRequest<bytes::Bytes>,
+        method: Method,
+        uri: &Uri,
+        body: Option<Vec<u8>>,
+        cookie_header: Option<&str>,
+    ) -> Result<StreamingResponse, Error> {
+        sender.clone().ready().await.map_err(Error::Http2)?;
+
+        let authority = uri.authority().map(|a| a.as_str()).unwrap_or("");
+        let scheme = uri.scheme_str().unwrap_or("https");
+        let path = uri.path_and_query().map(|pq| pq.as_str()).unwrap_or("/");
+        let h2_uri: Uri = format!("{scheme}://{authority}{path}")
+            .parse()
+            .map_err(|_| Error::InvalidHeader("Failed to build H2 URI".into()))?;
+
+        let req_builder = Request::builder()
+            .method(method.clone())
+            .uri(h2_uri)
+            .version(Version::HTTP_2);
+
+        let mut req = req_builder
+            .body(())
+            .map_err(|e| Error::InvalidHeader(format!("Failed to build request: {e}")))?;
+
+        let headers = req.headers_mut();
+        for (name, value) in &self.profile.headers {
+            let lower = name.to_lowercase();
+            if lower == "host" || lower == "cookie" {
+                continue;
+            }
+            if let (Ok(hn), Ok(hv)) = (
+                HeaderName::from_bytes(name.as_bytes()),
+                HeaderValue::from_str(value),
+            ) {
+                headers.insert(hn, hv);
+            }
+        }
+        for (name, value) in &self.custom_headers {
+            if let (Ok(hn), Ok(hv)) = (
+                HeaderName::from_bytes(name.as_bytes()),
+                HeaderValue::from_str(value),
+            ) {
+                headers.insert(hn, hv);
+            }
+        }
+        if let Some(cookie_val) = cookie_header {
+            if let Ok(hv) = HeaderValue::from_str(cookie_val) {
+                headers.insert(http::header::COOKIE, hv);
+            }
+        }
+        sort_headers_by_profile(headers, &self.profile.headers);
+
+        let has_body = body.is_some();
+        let (response_future, mut send_stream) = sender
+            .send_request(req, !has_body)
+            .map_err(Error::Http2)?;
+
+        if let Some(body_bytes) = body {
+            send_stream.send_data(body_bytes.into(), true).map_err(Error::Http2)?;
+        }
+
+        let response = tokio::time::timeout(self.timeout, response_future)
+            .await
+            .map_err(|_| Error::Timeout)?
+            .map_err(Error::Http2)?;
+
+        let status = response.status().as_u16();
+        let resp_headers: Vec<(String, String)> = response
+            .headers()
+            .iter()
+            .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
+            .collect();
+
+        let mut recv_stream = response.into_body();
+        let (tx, rx) = mpsc::channel(16);
+
+        tokio::spawn(async move {
+            while let Some(chunk) = recv_stream.data().await {
+                match chunk {
+                    Ok(data) => {
+                        let _ = recv_stream.flow_control().release_capacity(data.len());
+                        if tx.send(Ok(data.to_vec())).await.is_err() {
+                            return;
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Err(Error::Http2(e))).await;
+                        return;
+                    }
+                }
+            }
+        });
+
+        Ok(StreamingResponse::new(
+            status,
+            resp_headers,
+            "h2".to_string(),
+            uri.to_string(),
+            rx,
+        ))
+    }
+
+    /// Send an H1 request and return a streaming response.
+    /// The TLS stream is moved into a background task that streams body chunks.
+    async fn send_on_h1_streaming(
+        &self,
+        mut stream: SslStream<TcpStream>,
+        method: Method,
+        uri: &Uri,
+        body: Option<Vec<u8>>,
+        cookie_header: Option<&str>,
+    ) -> Result<StreamingResponse, Error> {
+        let authority = uri.authority().map(|a| a.as_str()).unwrap_or("");
+
+        let mut headers = http::HeaderMap::new();
+        if let Ok(hv) = HeaderValue::from_str(authority) {
+            headers.insert(http::header::HOST, hv);
+        }
+        for (name, value) in &self.profile.headers {
+            let lower = name.to_lowercase();
+            if lower == "host" || lower == "cookie" {
+                continue;
+            }
+            if let (Ok(hn), Ok(hv)) = (
+                HeaderName::from_bytes(name.as_bytes()),
+                HeaderValue::from_str(value),
+            ) {
+                headers.insert(hn, hv);
+            }
+        }
+        for (name, value) in &self.custom_headers {
+            if let (Ok(hn), Ok(hv)) = (
+                HeaderName::from_bytes(name.as_bytes()),
+                HeaderValue::from_str(value),
+            ) {
+                headers.insert(hn, hv);
+            }
+        }
+        if let Some(cookie_val) = cookie_header {
+            if let Ok(hv) = HeaderValue::from_str(cookie_val) {
+                headers.insert(http::header::COOKIE, hv);
+            }
+        }
+        headers.insert(http::header::CONNECTION, HeaderValue::from_static("keep-alive"));
+        sort_headers_by_profile(&mut headers, &self.profile.headers);
+
+        let body_ref = body.as_deref();
+        http1::write_request(&mut stream, &method, uri, &headers, body_ref).await?;
+
+        // Read only headers
+        let (status, resp_headers, remaining) =
+            tokio::time::timeout(self.timeout, http1::read_response_for_streaming(&mut stream))
+                .await
+                .map_err(|_| Error::Timeout)??;
+
+        let is_chunked = resp_headers
+            .iter()
+            .any(|(k, v)| k == "transfer-encoding" && v.contains("chunked"));
+        let content_length: Option<usize> = resp_headers
+            .iter()
+            .find(|(k, _)| k == "content-length")
+            .and_then(|(_, v)| v.trim().parse().ok());
+
+        let (tx, rx) = mpsc::channel(16);
+
+        // Spawn background task to stream body — connection is NOT returned to pool
+        tokio::spawn(async move {
+            if is_chunked {
+                http1::stream_chunked_body(&mut stream, &remaining, tx).await;
+            } else if let Some(len) = content_length {
+                http1::stream_content_length_body(&mut stream, &remaining, len, tx).await;
+            } else {
+                http1::stream_until_close(&mut stream, &remaining, tx).await;
+            }
+        });
+
+        Ok(StreamingResponse::new(
+            status,
+            resp_headers,
+            "HTTP/1.1".to_string(),
+            uri.to_string(),
+            rx,
+        ))
+    }
+
     /// Open a WebSocket connection to a `wss://` URL.
     ///
     /// Uses the same TLS fingerprint as HTTP requests but forces HTTP/1.1
@@ -325,6 +605,18 @@ impl Client {
         url: &str,
         body: Option<Vec<u8>>,
     ) -> Result<HttpResponse, Error> {
+        self.request_with_headers(method, url, body, Vec::new()).await
+    }
+
+    /// Perform an HTTP request with extra headers (e.g. multipart content-type).
+    /// These headers are injected after custom_headers and override them.
+    pub async fn request_with_headers(
+        &self,
+        method: Method,
+        url: &str,
+        body: Option<Vec<u8>>,
+        extra_headers: Vec<(String, String)>,
+    ) -> Result<HttpResponse, Error> {
         let mut current_url: Uri = url.parse().map_err(|_| Error::Url(url::ParseError::EmptyHost))?;
         let mut current_method = method;
         let mut current_body = body;
@@ -343,6 +635,7 @@ impl Client {
                     &current_url,
                     current_body.clone(),
                     cookie_header.as_deref(),
+                    &extra_headers,
                 )
                 .await?;
 
@@ -408,6 +701,7 @@ impl Client {
         uri: &Uri,
         body: Option<Vec<u8>>,
         cookie_header: Option<&str>,
+        extra_headers: &[(String, String)],
     ) -> Result<HttpResponse, Error> {
         let host = uri
             .host()
@@ -449,12 +743,18 @@ impl Client {
         // 2. Try cached H2 connection from pool
         if let Some(mut sender) = self.pool.try_get_h2(host, port) {
             match self
-                .send_on_h2(&mut sender, method.clone(), uri, body.clone(), cookie_header)
+                .send_on_h2(&mut sender, method.clone(), uri, body.clone(), cookie_header, extra_headers)
                 .await
             {
                 Ok(response) => return Ok(response),
-                Err(_) => {
+                Err(e) => {
                     self.pool.remove(host, port);
+                    // GOAWAY: retry on a fresh connection
+                    if e.is_h2_goaway() {
+                        return self
+                            .new_connection_request(method, uri, body, cookie_header, host, port, extra_headers)
+                            .await;
+                    }
                 }
             }
         }
@@ -462,7 +762,7 @@ impl Client {
         // 3. Try cached H1.1 connection from pool
         if let Some(mut stream) = self.pool.try_take_h1(host, port) {
             match self
-                .send_on_h1(&mut stream, method.clone(), uri, body.clone(), cookie_header)
+                .send_on_h1(&mut stream, method.clone(), uri, body.clone(), cookie_header, extra_headers)
                 .await
             {
                 Ok((response, keep_alive)) => {
@@ -475,6 +775,22 @@ impl Client {
             }
         }
 
+        self.new_connection_request(method, uri, body, cookie_header, host, port, extra_headers)
+            .await
+    }
+
+    /// Open a new connection (H3 or TCP→TLS→H2/H1) and send a request.
+    /// Extracted from `execute_single_request` steps 4+5 to allow GOAWAY retry.
+    async fn new_connection_request(
+        &self,
+        method: Method,
+        uri: &Uri,
+        body: Option<Vec<u8>>,
+        cookie_header: Option<&str>,
+        host: &str,
+        port: u16,
+        extra_headers: &[(String, String)],
+    ) -> Result<HttpResponse, Error> {
         // 4. Try HTTP/3 if: no proxy, profile has QuicConfig, and Alt-Svc cache says H3 is available
         let has_proxy = self.proxy.is_some();
         let has_quic = self.profile.quic.is_some();
@@ -507,14 +823,14 @@ impl Client {
         let response = if is_h2 {
             let mut sender = self.h2_handshake(tls_stream).await?;
             let response = self
-                .send_on_h2(&mut sender, method, uri, body, cookie_header)
+                .send_on_h2(&mut sender, method, uri, body, cookie_header, extra_headers)
                 .await?;
             self.pool.insert_h2(host, port, sender);
             response
         } else {
             let mut stream = tls_stream;
             let (response, keep_alive) = self
-                .send_on_h1(&mut stream, method, uri, body, cookie_header)
+                .send_on_h1(&mut stream, method, uri, body, cookie_header, extra_headers)
                 .await?;
             if keep_alive {
                 self.pool.insert_h1(host, port, stream);
@@ -547,8 +863,7 @@ impl Client {
 
         // Spawn the H3 connection driver
         tokio::spawn(async move {
-            let e = driver.wait_idle().await;
-            eprintln!("HTTP/3 connection closed: {e}");
+            let _ = driver.wait_idle().await;
         });
 
         let response = http3::send_request(
@@ -994,9 +1309,7 @@ impl Client {
 
         // Spawn a task to drive the HTTP/2 connection
         tokio::spawn(async move {
-            if let Err(e) = h2_conn.await {
-                eprintln!("HTTP/2 connection error: {e}");
-            }
+            let _ = h2_conn.await;
         });
 
         Ok(client)
@@ -1011,6 +1324,7 @@ impl Client {
         uri: &Uri,
         body: Option<Vec<u8>>,
         cookie_header: Option<&str>,
+        extra_headers: &[(String, String)],
     ) -> Result<HttpResponse, Error> {
         // Wait until the connection can accept a new stream.
         // Clone is cheap — clones share the same underlying H2 connection via Arc.
@@ -1058,6 +1372,16 @@ impl Client {
 
         // Apply custom headers (override profile defaults)
         for (name, value) in &self.custom_headers {
+            if let (Ok(hn), Ok(hv)) = (
+                HeaderName::from_bytes(name.as_bytes()),
+                HeaderValue::from_str(value),
+            ) {
+                headers.insert(hn, hv);
+            }
+        }
+
+        // Apply extra headers (override custom headers, e.g. multipart content-type)
+        for (name, value) in extra_headers {
             if let (Ok(hn), Ok(hv)) = (
                 HeaderName::from_bytes(name.as_bytes()),
                 HeaderValue::from_str(value),
@@ -1142,6 +1466,7 @@ impl Client {
         uri: &Uri,
         body: Option<Vec<u8>>,
         cookie_header: Option<&str>,
+        extra_headers: &[(String, String)],
     ) -> Result<(HttpResponse, bool), Error> {
         let authority = uri.authority().map(|a| a.as_str()).unwrap_or("");
 
@@ -1169,6 +1494,16 @@ impl Client {
 
         // Apply custom headers
         for (name, value) in &self.custom_headers {
+            if let (Ok(hn), Ok(hv)) = (
+                HeaderName::from_bytes(name.as_bytes()),
+                HeaderValue::from_str(value),
+            ) {
+                headers.insert(hn, hv);
+            }
+        }
+
+        // Apply extra headers (override custom headers, e.g. multipart content-type)
+        for (name, value) in extra_headers {
             if let (Ok(hn), Ok(hv)) = (
                 HeaderName::from_bytes(name.as_bytes()),
                 HeaderValue::from_str(value),

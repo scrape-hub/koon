@@ -45,6 +45,16 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
+impl Error {
+    /// Check if this error is an HTTP/2 GOAWAY from the remote peer.
+    pub fn is_h2_goaway(&self) -> bool {
+        match self {
+            Error::Http2(e) => e.is_go_away() && e.is_remote(),
+            _ => false,
+        }
+    }
+}
+
 impl From<boring2::ssl::Error> for Error {
     fn from(e: boring2::ssl::Error) -> Self {
         Error::Tls(e)

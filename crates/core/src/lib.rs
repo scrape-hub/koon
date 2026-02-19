@@ -9,14 +9,18 @@ pub mod cookie;
 #[cfg(feature = "doh")]
 pub mod dns;
 pub mod error;
+pub mod multipart;
 pub mod pool;
 pub mod proxy;
+pub mod streaming;
 pub mod websocket;
 
-pub use client::{Client, ClientBuilder};
+pub use client::{Client, ClientBuilder, HttpResponse};
 pub use cookie::CookieJar;
 pub use error::Error;
+pub use multipart::{Multipart, Part};
 pub use profile::{BrowserProfile, Chrome, Edge, Firefox, Safari};
 pub use quic::QuicConfig;
+pub use streaming::StreamingResponse;
 pub use tls::SessionCache;
 pub use websocket::{WebSocket, Message as WsMessage};

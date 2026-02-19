@@ -359,6 +359,239 @@ pub(crate) async fn read_response_headers<S: AsyncRead + Unpin>(
     })
 }
 
+/// Stream a chunked transfer-encoded body through a channel.
+/// Each decoded chunk is sent individually.
+pub(crate) async fn stream_chunked_body<S: AsyncRead + Unpin>(
+    stream: &mut S,
+    initial: &[u8],
+    tx: tokio::sync::mpsc::Sender<Result<Vec<u8>, crate::error::Error>>,
+) {
+    let mut buf = Vec::from(initial);
+    let mut pos = 0;
+
+    loop {
+        // Ensure we have a chunk-size line
+        loop {
+            if let Some(crlf) = find_crlf(&buf[pos..]) {
+                let line = &buf[pos..pos + crlf];
+                let size_str = match std::str::from_utf8(line) {
+                    Ok(s) => s.trim().to_string(),
+                    Err(_) => {
+                        let _ = tx
+                            .send(Err(crate::error::Error::ConnectionFailed(
+                                "Invalid chunk size encoding".into(),
+                            )))
+                            .await;
+                        return;
+                    }
+                };
+
+                let size_hex = size_str.split(';').next().unwrap_or("0").trim();
+                let chunk_size = match usize::from_str_radix(size_hex, 16) {
+                    Ok(s) => s,
+                    Err(_) => {
+                        let _ = tx
+                            .send(Err(crate::error::Error::ConnectionFailed(
+                                format!("Invalid chunk size: {size_hex}"),
+                            )))
+                            .await;
+                        return;
+                    }
+                };
+
+                pos += crlf + 2;
+
+                if chunk_size == 0 {
+                    return; // Terminal chunk
+                }
+
+                // Ensure we have the full chunk data + trailing \r\n
+                let needed = pos + chunk_size + 2;
+                while buf.len() < needed {
+                    let mut tmp = [0u8; 8192];
+                    match stream.read(&mut tmp).await {
+                        Ok(0) => {
+                            let _ = tx
+                                .send(Err(crate::error::Error::ConnectionFailed(
+                                    "Connection closed during chunked body".into(),
+                                )))
+                                .await;
+                            return;
+                        }
+                        Ok(n) => buf.extend_from_slice(&tmp[..n]),
+                        Err(e) => {
+                            let _ = tx.send(Err(crate::error::Error::Io(e))).await;
+                            return;
+                        }
+                    }
+                }
+
+                let chunk = buf[pos..pos + chunk_size].to_vec();
+                pos += chunk_size + 2;
+
+                if tx.send(Ok(chunk)).await.is_err() {
+                    return; // Receiver dropped
+                }
+
+                break;
+            }
+
+            // Need more data
+            let mut tmp = [0u8; 4096];
+            match stream.read(&mut tmp).await {
+                Ok(0) => {
+                    let _ = tx
+                        .send(Err(crate::error::Error::ConnectionFailed(
+                            "Connection closed before chunk size".into(),
+                        )))
+                        .await;
+                    return;
+                }
+                Ok(n) => buf.extend_from_slice(&tmp[..n]),
+                Err(e) => {
+                    let _ = tx.send(Err(crate::error::Error::Io(e))).await;
+                    return;
+                }
+            }
+        }
+    }
+}
+
+/// Stream a content-length body through a channel in 8KB chunks.
+pub(crate) async fn stream_content_length_body<S: AsyncRead + Unpin>(
+    stream: &mut S,
+    initial: &[u8],
+    content_length: usize,
+    tx: tokio::sync::mpsc::Sender<Result<Vec<u8>, crate::error::Error>>,
+) {
+    let mut sent = 0usize;
+
+    // Send initial bytes
+    if !initial.is_empty() {
+        let to_send = initial.len().min(content_length);
+        if tx.send(Ok(initial[..to_send].to_vec())).await.is_err() {
+            return;
+        }
+        sent += to_send;
+    }
+
+    // Read remaining
+    let mut tmp = [0u8; 8192];
+    while sent < content_length {
+        let to_read = (content_length - sent).min(tmp.len());
+        match stream.read(&mut tmp[..to_read]).await {
+            Ok(0) => {
+                let _ = tx
+                    .send(Err(crate::error::Error::ConnectionFailed(format!(
+                        "Connection closed after {sent} bytes, expected {content_length}"
+                    ))))
+                    .await;
+                return;
+            }
+            Ok(n) => {
+                sent += n;
+                if tx.send(Ok(tmp[..n].to_vec())).await.is_err() {
+                    return;
+                }
+            }
+            Err(e) => {
+                let _ = tx.send(Err(crate::error::Error::Io(e))).await;
+                return;
+            }
+        }
+    }
+}
+
+/// Stream body until connection close through a channel.
+pub(crate) async fn stream_until_close<S: AsyncRead + Unpin>(
+    stream: &mut S,
+    initial: &[u8],
+    tx: tokio::sync::mpsc::Sender<Result<Vec<u8>, crate::error::Error>>,
+) {
+    if !initial.is_empty() {
+        if tx.send(Ok(initial.to_vec())).await.is_err() {
+            return;
+        }
+    }
+
+    let mut tmp = [0u8; 8192];
+    loop {
+        match stream.read(&mut tmp).await {
+            Ok(0) => return,
+            Ok(n) => {
+                if tx.send(Ok(tmp[..n].to_vec())).await.is_err() {
+                    return;
+                }
+            }
+            Err(e) => {
+                let _ = tx.send(Err(crate::error::Error::Io(e))).await;
+                return;
+            }
+        }
+    }
+}
+
+/// Read HTTP/1.1 response headers and return parsed headers + leftover body bytes.
+/// This is like `read_response` but stops after headers — for streaming.
+pub(crate) async fn read_response_for_streaming<S: AsyncRead + Unpin>(
+    stream: &mut S,
+) -> Result<(u16, Vec<(String, String)>, Vec<u8>), crate::error::Error> {
+    let mut buf = Vec::with_capacity(INITIAL_BUF_SIZE);
+    let mut tmp = [0u8; 4096];
+
+    let header_end;
+    loop {
+        let n = stream.read(&mut tmp).await?;
+        if n == 0 {
+            return Err(crate::error::Error::ConnectionFailed(
+                "Connection closed before headers complete".into(),
+            ));
+        }
+        buf.extend_from_slice(&tmp[..n]);
+
+        if let Some(pos) = find_header_end(&buf) {
+            header_end = pos;
+            break;
+        }
+
+        if buf.len() > MAX_HEADER_SIZE {
+            return Err(crate::error::Error::ConnectionFailed(
+                "Response headers exceed 64KB limit".into(),
+            ));
+        }
+    }
+
+    let mut parsed_headers = [httparse::EMPTY_HEADER; MAX_HEADERS];
+    let mut response = httparse::Response::new(&mut parsed_headers);
+
+    let parse_result = response
+        .parse(&buf[..header_end + 4])
+        .map_err(|e| crate::error::Error::ConnectionFailed(format!("HTTP/1.1 parse error: {e}")))?;
+
+    if parse_result.is_partial() {
+        return Err(crate::error::Error::ConnectionFailed(
+            "Incomplete HTTP/1.1 response headers".into(),
+        ));
+    }
+
+    let status = response.code.unwrap_or(0);
+    let headers: Vec<(String, String)> = response
+        .headers
+        .iter()
+        .map(|h| {
+            (
+                h.name.to_lowercase(),
+                String::from_utf8_lossy(h.value).to_string(),
+            )
+        })
+        .collect();
+
+    let body_start = header_end + 4;
+    let remaining = buf[body_start..].to_vec();
+
+    Ok((status, headers, remaining))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

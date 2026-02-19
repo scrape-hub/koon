@@ -2,6 +2,41 @@
 
 All notable changes to koon will be documented in this file.
 
+## [0.3.2] - 2026-02-19
+
+### Added
+- **HTTP/2 GOAWAY Handling**: Transparent retry on fresh connection when server sends GOAWAY
+  - `Error::is_h2_goaway()` helper to detect remote GOAWAY errors
+  - `new_connection_request()` extracted from `execute_single_request` to enable retry without duplication
+  - Pooled H2 connections that receive GOAWAY are evicted and the request is retried on a new connection
+  - Removed `eprintln!` from H2 and H3 connection driver tasks
+- **Multipart Form-Data**: `multipart::Multipart` builder for `multipart/form-data` POST requests
+  - `Multipart::new()` with random boundary (`----koon` + 24 alphanums)
+  - `.text(name, value)` and `.file(name, filename, content_type, data)` builder methods
+  - `.build()` returns `(body_bytes, content_type_header)`
+  - `Client::post_multipart(url, multipart)` convenience method
+  - 6 unit tests (boundary format, content-type, text/file encoding, mixed fields, closing boundary)
+  - **Node.js**: `postMultipart(url, fields)` with `KoonMultipartField` interface
+  - **Python**: `post_multipart(url, fields=[{name, value/file_data, filename, content_type}])`
+- **Streaming Response Body**: `streaming::StreamingResponse` for large downloads without full buffering
+  - `Client::request_streaming(method, url, body)` — returns `StreamingResponse` instead of `HttpResponse`
+  - `StreamingResponse::next_chunk()` delivers body data in chunks via `mpsc` channel
+  - `StreamingResponse::collect_body()` collects entire body (convenience fallback)
+  - H2 streaming: background task forwards `recv_stream.data()` chunks through channel
+  - H1 streaming: background task owns TLS stream, streams chunked/content-length/close body
+  - H1 streaming helpers: `stream_chunked_body`, `stream_content_length_body`, `stream_until_close`
+  - No redirect following (caller handles 3xx manually, like `fetch(redirect: 'manual')`)
+  - No decompression (raw compressed chunks delivered as-is)
+  - **Node.js**: `KoonStreamingResponse` class with `nextChunk()`, `collect()`, status/headers/version/url getters
+  - **Python**: `KoonStreamingResponse` with `next_chunk()`, `collect()`, `async for chunk in resp` iteration
+
+### Changed
+- `execute_single_request()` now accepts `extra_headers: &[(String, String)]` parameter
+- `send_on_h2()` and `send_on_h1()` now accept `extra_headers` for per-request header injection
+- `request_with_headers()` public method for sending requests with extra headers
+- `HttpResponse` re-exported from `lib.rs`
+- `KoonHeader` in Node.js bindings now derives `Clone`
+
 ## [0.3.1] - 2026-02-19
 
 ### Added

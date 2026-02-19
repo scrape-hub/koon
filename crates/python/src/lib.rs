@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use koon_core::dns::DohResolver;
+use koon_core::multipart::Multipart;
 use koon_core::profile::{BrowserProfile, Chrome, Edge, Firefox, Opera, Safari};
 use koon_core::{Client, WsMessage};
 
@@ -345,6 +346,96 @@ impl Koon {
         })
     }
 
+    /// Perform an HTTP POST request with multipart/form-data body.
+    ///
+    /// Each field is a dict with 'name' (required), plus either 'value' (text)
+    /// or 'file_data' (bytes) + optional 'filename' and 'content_type'.
+    fn post_multipart<'py>(
+        &self,
+        py: Python<'py>,
+        url: String,
+        fields: Vec<HashMap<String, Py<PyAny>>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        // Build Multipart from field dicts while we still have the GIL
+        let mut parts = Vec::new();
+        for field in fields {
+            let name: String = field
+                .get("name")
+                .ok_or_else(|| {
+                    PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                        "Each field must have a 'name' key",
+                    )
+                })?
+                .extract(py)?;
+
+            if let Some(file_data_obj) = field.get("file_data") {
+                let data: Vec<u8> = file_data_obj.extract(py)?;
+                let filename: String = field
+                    .get("filename")
+                    .map(|v| v.extract(py))
+                    .transpose()?
+                    .unwrap_or_else(|| "file".to_string());
+                let content_type: String = field
+                    .get("content_type")
+                    .map(|v| v.extract(py))
+                    .transpose()?
+                    .unwrap_or_else(|| "application/octet-stream".to_string());
+                parts.push((name, filename, content_type, data));
+            } else if let Some(value_obj) = field.get("value") {
+                let value: String = value_obj.extract(py)?;
+                parts.push((name, value, String::new(), Vec::new()));
+            }
+        }
+
+        let client = self.client.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let mut mp = Multipart::new();
+            for (name, second, third, data) in parts {
+                if data.is_empty() && third.is_empty() {
+                    // Text field: second = value
+                    mp = mp.text(name, second);
+                } else {
+                    // File field: second = filename, third = content_type
+                    mp = mp.file(name, second, third, data);
+                }
+            }
+            let resp = client.post_multipart(&url, mp).await.map_err(to_py_err)?;
+            Ok(KoonResponse::from_core(resp))
+        })
+    }
+
+    /// Perform a streaming HTTP request.
+    /// Returns a KoonStreamingResponse. Does NOT follow redirects.
+    #[pyo3(signature = (method, url, body=None))]
+    fn request_streaming<'py>(
+        &self,
+        py: Python<'py>,
+        method: String,
+        url: String,
+        body: Option<Vec<u8>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let client = self.client.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let method: http::Method = method.parse().map_err(|_| {
+                PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "Invalid HTTP method: {method}"
+                ))
+            })?;
+            let resp = client
+                .request_streaming(method, &url, body)
+                .await
+                .map_err(to_py_err)?;
+
+            Ok(KoonStreamingResponse {
+                status: resp.status,
+                headers_vec: resp.headers.clone(),
+                version: resp.version.clone(),
+                url: resp.url.clone(),
+                inner: Arc::new(tokio::sync::Mutex::new(Some(resp))),
+            })
+        })
+    }
+
     /// Open a WebSocket connection to a wss:// URL.
     #[pyo3(signature = (url, headers=None))]
     fn websocket<'py>(
@@ -426,6 +517,93 @@ impl KoonResponse {
 
     fn __repr__(&self) -> String {
         format!("<KoonResponse status={} url='{}'>", self.status, self.url)
+    }
+}
+
+/// A streaming HTTP response that delivers the body in chunks.
+#[pyclass]
+struct KoonStreamingResponse {
+    #[pyo3(get)]
+    status: u16,
+    headers_vec: Vec<(String, String)>,
+    #[pyo3(get)]
+    version: String,
+    #[pyo3(get)]
+    url: String,
+    inner: Arc<tokio::sync::Mutex<Option<koon_core::StreamingResponse>>>,
+}
+
+#[pymethods]
+impl KoonStreamingResponse {
+    /// Response headers as a list of (name, value) tuples.
+    #[getter]
+    fn headers(&self) -> Vec<(String, String)> {
+        self.headers_vec.clone()
+    }
+
+    /// Get the next body chunk. Returns None when the body is complete.
+    fn next_chunk<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let mut guard = inner.lock().await;
+            let resp = guard.as_mut().ok_or_else(|| {
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Stream already consumed")
+            })?;
+            match resp.next_chunk().await {
+                Some(Ok(data)) => Python::attach(|py| -> PyResult<Py<PyAny>> {
+                    Ok(PyBytes::new(py, &data).into_any().unbind())
+                }),
+                Some(Err(e)) => Err(to_py_err(e)),
+                None => Ok(Python::attach(|py| py.None())),
+            }
+        })
+    }
+
+    /// Collect the entire remaining body into bytes.
+    fn collect<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let mut guard = inner.lock().await;
+            let resp = guard.take().ok_or_else(|| {
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Stream already consumed")
+            })?;
+            let body = resp.collect_body().await.map_err(to_py_err)?;
+            Python::attach(|py| -> PyResult<Py<PyAny>> {
+                Ok(PyBytes::new(py, &body).into_any().unbind())
+            })
+        })
+    }
+
+    /// Support async iteration: `async for chunk in resp:`
+    fn __aiter__(slf: Py<Self>) -> Py<Self> {
+        slf
+    }
+
+    /// Async iterator next — returns bytes or raises StopAsyncIteration.
+    fn __anext__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let mut guard = inner.lock().await;
+            let resp = guard.as_mut().ok_or_else(|| {
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Stream already consumed")
+            })?;
+            match resp.next_chunk().await {
+                Some(Ok(data)) => Python::attach(|py| -> PyResult<Py<PyAny>> {
+                    Ok(PyBytes::new(py, &data).into_any().unbind())
+                }),
+                Some(Err(e)) => Err(to_py_err(e)),
+                None => Err(PyErr::new::<pyo3::exceptions::PyStopAsyncIteration, _>(
+                    "end of stream",
+                )),
+            }
+        })
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<KoonStreamingResponse status={} url='{}'>",
+            self.status, self.url
+        )
     }
 }
 
@@ -549,6 +727,7 @@ impl KoonWebSocket {
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Koon>()?;
     m.add_class::<KoonResponse>()?;
+    m.add_class::<KoonStreamingResponse>()?;
     m.add_class::<KoonWebSocket>()?;
     Ok(())
 }
