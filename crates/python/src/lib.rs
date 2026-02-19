@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
+use koon_core::dns::DohResolver;
 use koon_core::profile::{BrowserProfile, Chrome, Edge, Firefox, Opera, Safari};
 use koon_core::{Client, WsMessage};
 
@@ -181,7 +182,7 @@ struct Koon {
 #[pymethods]
 impl Koon {
     #[new]
-    #[pyo3(signature = (browser="chrome", *, profile_json=None, proxy=None, timeout=30000, ignore_tls_errors=false, headers=None, follow_redirects=true, max_redirects=10, cookie_jar=true))]
+    #[pyo3(signature = (browser="chrome", *, profile_json=None, proxy=None, timeout=30000, ignore_tls_errors=false, headers=None, follow_redirects=true, max_redirects=10, cookie_jar=true, randomize=false, session_resumption=true, doh=None))]
     fn new(
         browser: &str,
         profile_json: Option<&str>,
@@ -192,6 +193,9 @@ impl Koon {
         follow_redirects: bool,
         max_redirects: u32,
         cookie_jar: bool,
+        randomize: bool,
+        session_resumption: bool,
+        doh: Option<&str>,
     ) -> PyResult<Self> {
         let mut profile = if let Some(json) = profile_json {
             BrowserProfile::from_json(json).map_err(to_py_err)?
@@ -203,6 +207,10 @@ impl Koon {
             profile.tls.danger_accept_invalid_certs = true;
         }
 
+        if randomize {
+            profile.randomize();
+        }
+
         let custom_headers: Vec<(String, String)> =
             headers.unwrap_or_default().into_iter().collect();
 
@@ -211,10 +219,25 @@ impl Koon {
             .headers(custom_headers)
             .follow_redirects(follow_redirects)
             .max_redirects(max_redirects)
-            .cookie_jar(cookie_jar);
+            .cookie_jar(cookie_jar)
+            .session_resumption(session_resumption);
 
         if let Some(proxy_url) = proxy {
             builder = builder.proxy(proxy_url).map_err(to_py_err)?;
+        }
+
+        if let Some(doh_provider) = doh {
+            let resolver = match doh_provider.to_lowercase().as_str() {
+                "cloudflare" => DohResolver::with_cloudflare(),
+                "google" => DohResolver::with_google(),
+                other => {
+                    return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                        "Unknown DoH provider: '{other}'. Supported: 'cloudflare', 'google'"
+                    )));
+                }
+            }
+            .map_err(to_py_err)?;
+            builder = builder.doh(resolver);
         }
 
         let client = builder.build().map_err(to_py_err)?;

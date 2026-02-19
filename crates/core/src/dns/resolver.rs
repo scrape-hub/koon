@@ -11,7 +11,6 @@ use hickory_proto::rr::record_data::RData;
 use hickory_proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
 use hickory_proto::rr::{DNSClass, Name, RecordType};
 use hickory_proto::serialize::binary::{BinDecodable, BinEncodable};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_boring2::SslStream;
 
@@ -54,11 +53,16 @@ struct HttpsCacheEntry {
 /// Makes encrypted DNS queries via HTTPS POST to a trusted resolver
 /// (Cloudflare or Google). This prevents DNS fingerprinting and enables
 /// HTTPS record queries for ECH support.
+///
+/// Uses a persistent HTTP/2 connection to the DoH server, multiplexing
+/// all queries on a single TCP+TLS connection for efficiency.
 pub struct DohResolver {
     config: DohConfig,
     tls_connector: SslConnector,
     ip_cache: Mutex<HashMap<String, DnsCacheEntry>>,
     https_cache: Mutex<HashMap<String, HttpsCacheEntry>>,
+    /// Persistent H2 connection to the DoH server (lazily created, auto-reconnects).
+    h2_sender: tokio::sync::Mutex<Option<http2::client::SendRequest<bytes::Bytes>>>,
 }
 
 impl DohResolver {
@@ -105,6 +109,7 @@ impl DohResolver {
             tls_connector,
             ip_cache: Mutex::new(HashMap::new()),
             https_cache: Mutex::new(HashMap::new()),
+            h2_sender: tokio::sync::Mutex::new(None),
         })
     }
 
@@ -236,16 +241,30 @@ impl DohResolver {
     /// Send a single DoH query and return the parsed response.
     async fn doh_query(&self, fqdn: &str, rtype: RecordType) -> Result<Message, Error> {
         let wire = build_dns_wire(fqdn, rtype)?;
-        let response_bytes = self.doh_post(&wire).await?;
+        let response_bytes = self.doh_h2_post(&wire).await?;
         Message::from_bytes(&response_bytes)
             .map_err(|e| Error::Dns(format!("Failed to parse DNS response: {e}")))
     }
 
-    /// Perform DoH POST: TCP → TLS → HTTP/1.1 POST /dns-query.
-    async fn doh_post(&self, dns_wire: &[u8]) -> Result<Vec<u8>, Error> {
+    /// Get or create a persistent H2 connection to the DoH server.
+    async fn get_or_connect_h2(
+        &self,
+    ) -> Result<http2::client::SendRequest<bytes::Bytes>, Error> {
+        let mut guard = self.h2_sender.lock().await;
+
+        // Try to reuse existing sender
+        if let Some(ref sender) = *guard {
+            match sender.clone().ready().await {
+                Ok(_) => return Ok(sender.clone()),
+                Err(_) => {
+                    *guard = None;
+                }
+            }
+        }
+
+        // Create new TCP+TLS+H2 connection
         let addr = format!("{}:{}", self.config.server_ip, self.config.server_port);
 
-        // TCP connect directly to IP (no DNS needed for the resolver itself)
         let tcp = tokio::time::timeout(Duration::from_secs(10), TcpStream::connect(&addr))
             .await
             .map_err(|_| Error::Dns("DoH connection timed out".into()))?
@@ -253,8 +272,9 @@ impl DohResolver {
 
         tcp.set_nodelay(true).ok();
 
-        // Minimal TLS handshake
-        let cfg = self.tls_connector.configure()?;
+        // TLS handshake with h2 ALPN
+        let mut cfg = self.tls_connector.configure()?;
+        cfg.set_alpn_protos(b"\x02h2")?;
         let ssl = cfg.into_ssl(&self.config.server_hostname)?;
         let mut stream = SslStream::new(ssl, tcp)?;
         Pin::new(&mut stream)
@@ -262,50 +282,69 @@ impl DohResolver {
             .await
             .map_err(|e| Error::Dns(format!("DoH TLS handshake failed: {e}")))?;
 
-        // HTTP/1.1 POST request
-        let req = format!(
-            "POST /dns-query HTTP/1.1\r\n\
-             Host: {}\r\n\
-             Content-Type: application/dns-message\r\n\
-             Accept: application/dns-message\r\n\
-             Content-Length: {}\r\n\
-             Connection: close\r\n\
-             \r\n",
-            self.config.server_hostname,
-            dns_wire.len(),
-        );
-
-        stream
-            .write_all(req.as_bytes())
+        // H2 handshake
+        let (sender, conn) = http2::client::Builder::new()
+            .handshake::<_, bytes::Bytes>(stream)
             .await
-            .map_err(|e| Error::Dns(format!("DoH write failed: {e}")))?;
-        stream
-            .write_all(dns_wire)
+            .map_err(|e| Error::Dns(format!("DoH H2 handshake failed: {e}")))?;
+
+        // Spawn connection driver
+        tokio::spawn(async move {
+            if let Err(e) = conn.await {
+                eprintln!("DoH H2 connection error: {e}");
+            }
+        });
+
+        *guard = Some(sender.clone());
+        Ok(sender)
+    }
+
+    /// Perform DoH POST over persistent H2 connection.
+    async fn doh_h2_post(&self, dns_wire: &[u8]) -> Result<Vec<u8>, Error> {
+        let mut sender = self.get_or_connect_h2().await?;
+
+        sender
+            .clone()
+            .ready()
             .await
-            .map_err(|e| Error::Dns(format!("DoH write body failed: {e}")))?;
+            .map_err(|e| Error::Dns(format!("DoH H2 not ready: {e}")))?;
 
-        // Read response
-        let mut buf = Vec::with_capacity(4096);
-        stream
-            .read_to_end(&mut buf)
+        let req = http::Request::builder()
+            .method("POST")
+            .uri(format!("https://{}/dns-query", self.config.server_hostname))
+            .header("content-type", "application/dns-message")
+            .header("accept", "application/dns-message")
+            .body(())
+            .map_err(|e| Error::Dns(format!("DoH request build failed: {e}")))?;
+
+        let (response, mut send_stream) = sender
+            .send_request(req, false)
+            .map_err(|e| Error::Dns(format!("DoH H2 send failed: {e}")))?;
+
+        send_stream
+            .send_data(bytes::Bytes::copy_from_slice(dns_wire), true)
+            .map_err(|e| Error::Dns(format!("DoH H2 send data failed: {e}")))?;
+
+        let response = response
             .await
-            .map_err(|e| Error::Dns(format!("DoH read failed: {e}")))?;
+            .map_err(|e| Error::Dns(format!("DoH H2 response failed: {e}")))?;
 
-        // Parse HTTP response: find \r\n\r\n header/body separator
-        let header_end = buf
-            .windows(4)
-            .position(|w| w == b"\r\n\r\n")
-            .ok_or_else(|| Error::Dns("DoH: invalid HTTP response".into()))?;
-
-        let header_str = String::from_utf8_lossy(&buf[..header_end]);
-        if !header_str.starts_with("HTTP/1.1 200") && !header_str.starts_with("HTTP/1.0 200") {
+        if response.status() != http::StatusCode::OK {
             return Err(Error::Dns(format!(
                 "DoH HTTP error: {}",
-                header_str.lines().next().unwrap_or("unknown")
+                response.status()
             )));
         }
 
-        let body = buf[header_end + 4..].to_vec();
+        let mut body = Vec::new();
+        let mut recv_stream = response.into_body();
+        while let Some(chunk) = recv_stream.data().await {
+            let chunk =
+                chunk.map_err(|e| Error::Dns(format!("DoH H2 body read failed: {e}")))?;
+            body.extend_from_slice(&chunk);
+            let _ = recv_stream.flow_control().release_capacity(chunk.len());
+        }
+
         Ok(body)
     }
 }

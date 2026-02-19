@@ -10,7 +10,7 @@ description = "Node.js bindings for koon browser impersonation client"
 crate-type = ["cdylib"]
 
 [dependencies]
-koon-core = { path = "../core" }
+koon-core = { path = "../core", features = ["doh"] }
 napi = { version = "2", default-features = false, features = ["napi9", "async", "serde-json"] }
 napi-derive = "2"
 tokio = { version = "1", features = ["rt-multi-thread"] }

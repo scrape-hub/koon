@@ -2,6 +2,31 @@
 
 All notable changes to koon will be documented in this file.
 
+## [0.3.1] - 2026-02-19
+
+### Added
+- **DoH Connection Reuse**: `DohResolver` now uses a persistent HTTP/2 connection to the DoH server
+  - All DNS queries (A, AAAA, HTTPS) are multiplexed on a single TCP+TLS connection
+  - Lazy connection creation with automatic reconnection on failure
+  - Replaces per-query HTTP/1.1 `Connection: close` approach
+- **ECH Retry Logic**: Automatic retry with server-provided ECH configs after ECH rejection
+  - `tls_connect_inner()` catches `SSL_R_ECH_REJECTED` and calls `get_ech_retry_configs()`
+  - Single retry with new TCP+TLS connection using retry configs (no infinite loop)
+  - Port parameter propagated through `tls_connect()` / `tls_connect_ws()` / `tls_connect_inner()`
+- **Node.js Bindings**: 3 new `KoonOptions` fields exposed
+  - `randomize: boolean` — fingerprint randomization (UA build, q-val, H2 window jitter)
+  - `session_resumption: boolean` — TLS session resumption toggle (default: true)
+  - `doh: 'cloudflare' | 'google'` — encrypted DNS with ECH support
+- **Python Bindings**: 3 new `Koon()` constructor parameters exposed
+  - `randomize: bool` — fingerprint randomization (default: False)
+  - `session_resumption: bool` — TLS session resumption toggle (default: True)
+  - `doh: str | None` — encrypted DNS provider ('cloudflare' or 'google')
+
+### Changed
+- `koon-node` and `koon-python` Cargo.toml: `koon-core` dependency now includes `features = ["doh"]`
+- `DohResolver` struct gains `h2_sender` field for persistent H2 connection
+- `Client::tls_connect()`, `tls_connect_ws()`, `tls_connect_inner()` now accept `port: u16` parameter
+
 ## [0.3.0] - 2026-02-19
 
 ### Added

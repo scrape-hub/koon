@@ -261,7 +261,7 @@ impl Client {
         let tcp = self.connect_tcp(host, port).await?;
 
         // 2. TLS handshake (HTTP/1.1 only ALPN)
-        let tls_stream = self.tls_connect_ws(tcp, host).await?;
+        let tls_stream = self.tls_connect_ws(tcp, host, port).await?;
 
         // 3. Build headers: Host + profile headers + extra headers
         let mut headers = http::HeaderMap::new();
@@ -499,7 +499,7 @@ impl Client {
 
         // 5. New connection: TCP → TLS → H2/H1
         let tcp = self.connect_tcp(host, port).await?;
-        let tls_stream = self.tls_connect(tcp, host).await?;
+        let tls_stream = self.tls_connect(tcp, host, port).await?;
 
         let alpn = tls_stream.ssl().selected_alpn_protocol();
         let is_h2 = matches!(alpn, Some(b"h2"));
@@ -768,8 +768,9 @@ impl Client {
         &self,
         tcp: TcpStream,
         host: &str,
+        port: u16,
     ) -> Result<SslStream<TcpStream>, Error> {
-        self.tls_connect_inner(tcp, host, false).await
+        self.tls_connect_inner(tcp, host, port, false).await
     }
 
     /// Perform TLS handshake for WebSocket (HTTP/1.1 only ALPN).
@@ -777,14 +778,16 @@ impl Client {
         &self,
         tcp: TcpStream,
         host: &str,
+        port: u16,
     ) -> Result<SslStream<TcpStream>, Error> {
-        self.tls_connect_inner(tcp, host, true).await
+        self.tls_connect_inner(tcp, host, port, true).await
     }
 
     async fn tls_connect_inner(
         &self,
         tcp: TcpStream,
         host: &str,
+        port: u16,
         force_h1_only: bool,
     ) -> Result<SslStream<TcpStream>, Error> {
         // ECH config from DNS HTTPS record (when DoH is available)
@@ -800,10 +803,52 @@ impl Client {
         )?;
 
         let mut stream = tokio_boring2::SslStream::new(ssl, tcp)?;
+        match Pin::new(&mut stream).connect().await {
+            Ok(()) => Ok(stream),
+            Err(e) => {
+                // ECH retry: if ECH was used, check for retry configs from the server
+                if ech_config.is_some() {
+                    if let Some(retry_configs) = stream.ssl().get_ech_retry_configs() {
+                        let retry_configs: Vec<u8> = retry_configs.to_vec();
+                        return self
+                            .tls_connect_ech_retry(host, port, force_h1_only, &retry_configs)
+                            .await;
+                    }
+                }
+                Err(Error::ConnectionFailed(format!(
+                    "TLS handshake failed: {e}"
+                )))
+            }
+        }
+    }
+
+    /// Retry TLS connection with ECH retry configs from the server.
+    /// Called once after an ECH rejection — no loop to prevent infinite retries.
+    async fn tls_connect_ech_retry(
+        &self,
+        host: &str,
+        port: u16,
+        force_h1_only: bool,
+        retry_configs: &[u8],
+    ) -> Result<SslStream<TcpStream>, Error> {
+        let tcp = self.connect_tcp(host, port).await?;
+
+        let ssl = TlsConnector::configure_connection(
+            &self.tls_connector,
+            &self.profile.tls,
+            host,
+            force_h1_only,
+            self.session_cache.as_ref(),
+            Some(retry_configs),
+        )?;
+
+        let mut stream = tokio_boring2::SslStream::new(ssl, tcp)?;
         Pin::new(&mut stream)
             .connect()
             .await
-            .map_err(|e| Error::ConnectionFailed(format!("TLS handshake failed: {e}")))?;
+            .map_err(|e| {
+                Error::ConnectionFailed(format!("TLS ECH retry handshake failed: {e}"))
+            })?;
 
         Ok(stream)
     }

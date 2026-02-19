@@ -10,7 +10,7 @@ name = "koon"
 crate-type = ["cdylib"]
 
 [dependencies]
-koon-core = { path = "../core" }
+koon-core = { path = "../core", features = ["doh"] }
 pyo3 = { version = "0.28", features = ["extension-module"] }
 pyo3-async-runtimes = { version = "0.28", features = ["tokio-runtime"] }
 tokio = { version = "1", features = ["rt-multi-thread"] }

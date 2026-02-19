@@ -1,5 +1,6 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
+use koon_core::dns::DohResolver;
 use koon_core::profile::{BrowserProfile, Chrome, Edge, Firefox, Opera, Safari};
 use koon_core::Client;
 use std::collections::HashMap;
@@ -306,6 +307,18 @@ pub struct KoonOptions {
     /// Enable built-in cookie jar.
     /// @default true
     pub cookie_jar: Option<bool>,
+
+    /// Randomize the browser fingerprint slightly (UA build, accept-language q-val, H2 window jitter).
+    /// @default false
+    pub randomize: Option<bool>,
+
+    /// Enable TLS session resumption for faster subsequent connections.
+    /// @default true
+    pub session_resumption: Option<bool>,
+
+    /// DNS-over-HTTPS provider for encrypted DNS and ECH support.
+    /// Supported values: 'cloudflare', 'google'.
+    pub doh: Option<String>,
 }
 
 /// A single HTTP header (name-value pair).
@@ -379,6 +392,10 @@ impl Koon {
             profile.tls.danger_accept_invalid_certs = true;
         }
 
+        if opts.randomize.unwrap_or(false) {
+            profile.randomize();
+        }
+
         let timeout = Duration::from_millis(opts.timeout.unwrap_or(30000) as u64);
 
         let custom_headers: Vec<(String, String)> = opts
@@ -392,12 +409,27 @@ impl Koon {
             .headers(custom_headers)
             .follow_redirects(opts.follow_redirects.unwrap_or(true))
             .max_redirects(opts.max_redirects.unwrap_or(10))
-            .cookie_jar(opts.cookie_jar.unwrap_or(true));
+            .cookie_jar(opts.cookie_jar.unwrap_or(true))
+            .session_resumption(opts.session_resumption.unwrap_or(true));
 
         if let Some(ref proxy_url) = opts.proxy {
             builder = builder.proxy(proxy_url).map_err(|e| {
                 napi::Error::from_reason(format!("Invalid proxy: {e}"))
             })?;
+        }
+
+        if let Some(ref doh_provider) = opts.doh {
+            let resolver = match doh_provider.to_lowercase().as_str() {
+                "cloudflare" => DohResolver::with_cloudflare(),
+                "google" => DohResolver::with_google(),
+                other => {
+                    return Err(napi::Error::from_reason(format!(
+                        "Unknown DoH provider: '{other}'. Supported: 'cloudflare', 'google'"
+                    )));
+                }
+            }
+            .map_err(|e| napi::Error::from_reason(format!("Failed to create DoH resolver: {e}")))?;
+            builder = builder.doh(resolver);
         }
 
         let client = builder.build().map_err(|e| {
