@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use crate::http2::config::{
-    Http2Config, PriorityFrame, PseudoHeader, SettingId,
+    Http2Config, PseudoHeader, SettingId,
 };
 use crate::quic::QuicConfig;
 use crate::tls::config::{
@@ -199,13 +199,9 @@ fn firefox_http2() -> Http2Config {
             SettingId::MaxFrameSize,
         ],
         headers_stream_dependency: None,
-        priorities: vec![
-            PriorityFrame { stream_id: 3,  dependency: 0, weight: 200, exclusive: false },
-            PriorityFrame { stream_id: 5,  dependency: 0, weight: 100, exclusive: false },
-            PriorityFrame { stream_id: 7,  dependency: 0, weight: 0,   exclusive: false },
-            PriorityFrame { stream_id: 9,  dependency: 7, weight: 0,   exclusive: false },
-            PriorityFrame { stream_id: 11, dependency: 3, weight: 0,   exclusive: false },
-        ],
+        // Firefox 135+ does not send RFC 7540 PRIORITY frames (deprecated since ~FF100).
+        // Verified via capture: akamai_text PRIORITY segment is "0".
+        priorities: Vec::new(),
         no_rfc7540_priorities: None,
         enable_connect_protocol: None,
     }

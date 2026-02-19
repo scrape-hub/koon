@@ -2,6 +2,25 @@
 
 All notable changes to koon will be documented in this file.
 
+## [0.3.3] - 2026-02-19
+
+### Added
+- **Integration Tests**: 6 fingerprint verification tests against `tls.browserleaks.com`
+  - Chrome 131 (old ALPS), Chrome 135, Chrome 145, Firefox 135, Firefox 147, Edge 145
+  - Asserts JA4, Akamai hash, and Akamai text against reference captures
+  - `#[ignore]` attribute — run with `cargo test --test fingerprint -- --ignored`
+
+### Fixed
+- **Firefox PRIORITY frames**: Removed 5 spurious PRIORITY frames from Firefox 135–147 profiles
+  - Real Firefox 135+ does not send RFC 7540 PRIORITY frames (deprecated since ~FF100)
+  - Verified via capture: Akamai text PRIORITY segment is `0`
+- **Chrome SETTINGS_NO_RFC7540_PRIORITIES**: Removed setting `9:1` from Chrome/Edge/Opera SETTINGS frame
+  - Real Chrome communicates this via ALPS, not the SETTINGS frame
+  - Verified: capture akamai_text contains only settings 1,2,4,6
+
+### Changed
+- Example `fingerprint_test.rs` cleaned up: fingerprint tests moved to `tests/fingerprint.rs`, smoke tests retained
+
 ## [0.3.2] - 2026-02-19
 
 ### Added

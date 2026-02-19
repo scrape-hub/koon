@@ -205,8 +205,6 @@ pub(super) fn chrome_http2() -> Http2Config {
             SettingId::InitialWindowSize,
             SettingId::MaxFrameSize,
             SettingId::MaxHeaderListSize,
-            SettingId::EnableConnectProtocol,
-            SettingId::NoRfc7540Priorities,
         ],
         headers_stream_dependency: Some(StreamDep {
             stream_id: 0,
@@ -214,7 +212,9 @@ pub(super) fn chrome_http2() -> Http2Config {
             exclusive: true,
         }),
         priorities: Vec::new(),
-        no_rfc7540_priorities: Some(true),
+        // Chrome communicates no_rfc7540_priorities via ALPS, not SETTINGS frame.
+        // Verified: real Chrome SETTINGS contain only 1,2,4,6 (no setting 9).
+        no_rfc7540_priorities: None,
         enable_connect_protocol: None,
     }
 }
