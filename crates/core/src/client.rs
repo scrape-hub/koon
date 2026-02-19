@@ -146,7 +146,7 @@ impl ClientBuilder {
             session_cache,
             #[cfg(feature = "doh")]
             doh_resolver: self.doh_resolver,
-            pool: ConnectionPool::new(),
+            pool: ConnectionPool::new(256, Duration::from_secs(90)),
             alt_svc_cache: Mutex::new(HashMap::new()),
             quic_endpoint: Mutex::new(None),
         })

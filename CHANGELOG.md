@@ -23,6 +23,12 @@ All notable changes to koon will be documented in this file.
   - `doh: str | None` — encrypted DNS provider ('cloudflare' or 'google')
 
 ### Changed
+- **Connection Pool TTL/Eviction + Max-Size**: Idle connections are now evicted after 90s (matching Chrome), pool capped at 256 entries
+  - `TimedEntry` wrapper tracks insertion timestamp per connection
+  - Expired entries evicted on every `insert_*()` via `retain()`; also checked on `try_get_*()` / `try_take_*()`
+  - Oldest entry evicted when pool reaches max capacity
+  - `ConnectionPool::new(max_size, ttl)` replaces parameterless constructor
+- `http2` dependency pinned to tag `v0.5.12-headers-order` (was `branch = "headers-order"`)
 - `koon-node` and `koon-python` Cargo.toml: `koon-core` dependency now includes `features = ["doh"]`
 - `DohResolver` struct gains `h2_sender` field for persistent H2 connection
 - `Client::tls_connect()`, `tls_connect_ws()`, `tls_connect_inner()` now accept `port: u16` parameter

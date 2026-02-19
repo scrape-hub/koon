@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use bytes::Bytes;
 use http2::client::SendRequest;
@@ -20,19 +21,51 @@ enum PoolEntry {
     Http3(h3::client::SendRequest<h3_quinn::OpenStreams, Bytes>),
 }
 
-/// Thread-safe connection pool supporting both HTTP/2 and HTTP/1.1.
+/// Wraps a pool entry with its insertion timestamp for TTL eviction.
+struct TimedEntry {
+    entry: PoolEntry,
+    inserted_at: Instant,
+}
+
+/// Thread-safe connection pool supporting HTTP/2, HTTP/1.1, and HTTP/3.
 ///
 /// Stores one connection per origin — this matches real browser behavior
 /// where a single H2 connection is multiplexed, or a single H1.1 keep-alive
 /// connection is reused.
+///
+/// Idle connections are evicted after `ttl` (default 90s, matching Chrome),
+/// and the pool is capped at `max_size` entries.
 pub(crate) struct ConnectionPool {
-    connections: Mutex<HashMap<PoolKey, PoolEntry>>,
+    connections: Mutex<HashMap<PoolKey, TimedEntry>>,
+    max_size: usize,
+    ttl: Duration,
 }
 
 impl ConnectionPool {
-    pub fn new() -> Self {
+    pub fn new(max_size: usize, ttl: Duration) -> Self {
         ConnectionPool {
             connections: Mutex::new(HashMap::new()),
+            max_size,
+            ttl,
+        }
+    }
+
+    /// Remove all entries whose TTL has expired. Must be called with lock held.
+    fn evict_expired(connections: &mut HashMap<PoolKey, TimedEntry>, ttl: Duration) {
+        let now = Instant::now();
+        connections.retain(|_, entry| now.duration_since(entry.inserted_at) < ttl);
+    }
+
+    /// If the pool is at capacity, remove the oldest entry. Must be called with lock held.
+    fn evict_oldest(connections: &mut HashMap<PoolKey, TimedEntry>, max_size: usize) {
+        if connections.len() >= max_size {
+            if let Some(oldest_key) = connections
+                .iter()
+                .min_by_key(|(_, e)| e.inserted_at)
+                .map(|(k, _)| k.clone())
+            {
+                connections.remove(&oldest_key);
+            }
         }
     }
 
@@ -42,10 +75,19 @@ impl ConnectionPool {
             host: host.to_string(),
             port,
         };
-        let conns = self.connections.lock().unwrap();
+        let mut conns = self.connections.lock().unwrap();
         match conns.get(&key) {
-            Some(PoolEntry::Http2(sender)) => Some(sender.clone()),
-            _ => None,
+            Some(timed) if Instant::now().duration_since(timed.inserted_at) < self.ttl => {
+                match &timed.entry {
+                    PoolEntry::Http2(sender) => Some(sender.clone()),
+                    _ => None,
+                }
+            }
+            Some(_) => {
+                conns.remove(&key);
+                None
+            }
+            None => None,
         }
     }
 
@@ -58,11 +100,23 @@ impl ConnectionPool {
         };
         let mut conns = self.connections.lock().unwrap();
         match conns.get(&key) {
-            Some(PoolEntry::Http11(_)) => match conns.remove(&key) {
-                Some(PoolEntry::Http11(stream)) => Some(stream),
-                _ => None,
-            },
-            _ => None,
+            Some(timed) if Instant::now().duration_since(timed.inserted_at) < self.ttl => {
+                match &timed.entry {
+                    PoolEntry::Http11(_) => match conns.remove(&key) {
+                        Some(TimedEntry {
+                            entry: PoolEntry::Http11(stream),
+                            ..
+                        }) => Some(stream),
+                        _ => None,
+                    },
+                    _ => None,
+                }
+            }
+            Some(_) => {
+                conns.remove(&key);
+                None
+            }
+            None => None,
         }
     }
 
@@ -72,10 +126,16 @@ impl ConnectionPool {
             host: host.to_string(),
             port,
         };
-        self.connections
-            .lock()
-            .unwrap()
-            .insert(key, PoolEntry::Http2(sender));
+        let mut conns = self.connections.lock().unwrap();
+        Self::evict_expired(&mut conns, self.ttl);
+        Self::evict_oldest(&mut conns, self.max_size);
+        conns.insert(
+            key,
+            TimedEntry {
+                entry: PoolEntry::Http2(sender),
+                inserted_at: Instant::now(),
+            },
+        );
     }
 
     /// Store an H1.1 connection in the pool for keep-alive reuse.
@@ -84,10 +144,16 @@ impl ConnectionPool {
             host: host.to_string(),
             port,
         };
-        self.connections
-            .lock()
-            .unwrap()
-            .insert(key, PoolEntry::Http11(stream));
+        let mut conns = self.connections.lock().unwrap();
+        Self::evict_expired(&mut conns, self.ttl);
+        Self::evict_oldest(&mut conns, self.max_size);
+        conns.insert(
+            key,
+            TimedEntry {
+                entry: PoolEntry::Http11(stream),
+                inserted_at: Instant::now(),
+            },
+        );
     }
 
     /// Try to get an existing H3 connection for the given origin.
@@ -100,10 +166,19 @@ impl ConnectionPool {
             host: host.to_string(),
             port,
         };
-        let conns = self.connections.lock().unwrap();
+        let mut conns = self.connections.lock().unwrap();
         match conns.get(&key) {
-            Some(PoolEntry::Http3(sender)) => Some(sender.clone()),
-            _ => None,
+            Some(timed) if Instant::now().duration_since(timed.inserted_at) < self.ttl => {
+                match &timed.entry {
+                    PoolEntry::Http3(sender) => Some(sender.clone()),
+                    _ => None,
+                }
+            }
+            Some(_) => {
+                conns.remove(&key);
+                None
+            }
+            None => None,
         }
     }
 
@@ -118,10 +193,16 @@ impl ConnectionPool {
             host: host.to_string(),
             port,
         };
-        self.connections
-            .lock()
-            .unwrap()
-            .insert(key, PoolEntry::Http3(sender));
+        let mut conns = self.connections.lock().unwrap();
+        Self::evict_expired(&mut conns, self.ttl);
+        Self::evict_oldest(&mut conns, self.max_size);
+        conns.insert(
+            key,
+            TimedEntry {
+                entry: PoolEntry::Http3(sender),
+                inserted_at: Instant::now(),
+            },
+        );
     }
 
     /// Remove a dead connection from the pool.

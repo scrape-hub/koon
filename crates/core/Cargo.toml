@@ -17,7 +17,7 @@ boring2 = "5.0.0-alpha.13"
 tokio-boring2 = { version = "5.0.0-alpha.13", features = ["read_uninit"] }
 
 # HTTP/2 with frame-level control (fork with HeadersOrder support)
-http2 = { git = "https://github.com/hrylx/http2.git", branch = "headers-order", features = ["unstable"] }
+http2 = { git = "https://github.com/hrylx/http2.git", tag = "v0.5.12-headers-order", features = ["unstable"] }
 
 # HTTP types
 http = "1"
