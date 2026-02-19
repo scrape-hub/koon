@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use crate::http2::config::{
-    Http2Config, PriorityFrame, PseudoHeader, SettingId, StreamDep,
+    Http2Config, PriorityFrame, PseudoHeader, SettingId,
 };
 use crate::quic::QuicConfig;
 use crate::tls::config::{
@@ -128,8 +128,8 @@ fn firefox_http2_v135() -> Http2Config {
         enable_push: Some(false),
         max_concurrent_streams: None,
         initial_window_size: 131072,
-        max_frame_size: None,
-        max_header_list_size: Some(65536),
+        max_frame_size: Some(16384),
+        max_header_list_size: None,
         initial_conn_window_size: 12582912,
         pseudo_header_order: vec![
             PseudoHeader::Method,
@@ -140,16 +140,10 @@ fn firefox_http2_v135() -> Http2Config {
         settings_order: vec![
             SettingId::HeaderTableSize,
             SettingId::EnablePush,
-            SettingId::MaxConcurrentStreams,
             SettingId::InitialWindowSize,
             SettingId::MaxFrameSize,
-            SettingId::MaxHeaderListSize,
         ],
-        headers_stream_dependency: Some(StreamDep {
-            stream_id: 0,
-            weight: 41,
-            exclusive: false,
-        }),
+        headers_stream_dependency: None,
         priorities: vec![
             PriorityFrame { stream_id: 3,  dependency: 0, weight: 200, exclusive: false },
             PriorityFrame { stream_id: 5,  dependency: 0, weight: 100, exclusive: false },

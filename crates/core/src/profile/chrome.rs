@@ -122,7 +122,7 @@ pub(super) fn chrome_tls_v131() -> TlsConfig {
         sigalgs: Cow::Borrowed(CHROME_SIGALGS),
         alpn: vec![AlpnProtocol::Http2, AlpnProtocol::Http11],
         alps: Some(AlpsProtocol::Http2),
-        alps_use_new_codepoint: true,
+        alps_use_new_codepoint: false, // Chrome 131 uses old ALPS codepoint (0x4469)
         min_version: TlsVersion::Tls12,
         max_version: TlsVersion::Tls13,
         grease: true,
@@ -140,10 +140,13 @@ pub(super) fn chrome_tls_v131() -> TlsConfig {
 }
 
 // ========== Chrome 145 TLS ==========
-// TLS config is identical to v131 (cipher suites rarely change between versions).
+// Same ciphers/curves/sigalgs as v131, but uses new ALPS codepoint (0x44CD).
 
 fn chrome_tls_v145() -> TlsConfig {
-    chrome_tls_v131()
+    TlsConfig {
+        alps_use_new_codepoint: true, // Chrome 145 uses new ALPS codepoint (0x44CD)
+        ..chrome_tls_v131()
+    }
 }
 
 // ========== Chrome 131 HTTP/2 ==========

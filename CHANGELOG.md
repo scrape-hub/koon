@@ -6,6 +6,15 @@ All notable changes to koon will be documented in this file.
 
 ### Added
 
+#### Automated Capture Tool (`tools/capture/`)
+- **Browser fingerprint capture pipeline**: Automated download, launch, and capture
+  - `download.mjs`: Chrome for Testing API + Mozilla FTP download with version resolution
+  - `capture.mjs`: Playwright (Chrome) + geckodriver/WebDriver (Firefox) fingerprint capture
+  - `convert.mjs`: Raw browserleaks.com JSON → koon BrowserProfile JSON conversion
+  - `index.mjs`: CLI entry point (`--browser chrome --versions 131,145`)
+  - `mappings.mjs`: IANA → BoringSSL cipher/curve/sigalg/extension name mappings
+- Captured and verified: Chrome 131, Chrome 145, Firefox 135 (Windows)
+
 #### Anti-Bot Evasion
 - **H2 PRIORITY Frames**: Firefox priority tree (streams 3/5/7/9/11) now sent during H2 handshake
   - Chrome/Edge: `no_rfc7540_priorities=true` sent in SETTINGS (matching real Chrome 131+)
@@ -29,6 +38,16 @@ All notable changes to koon will be documented in this file.
   - `configure_connection()` applies `set_ech_config_list()` when available
   - Automatic fallback to ECH GREASE when no DNS record found
   - Requires `doh` feature for DNS HTTPS record queries
+
+### Fixed
+- **Chrome 131 ALPS codepoint**: Was incorrectly set to `alps_use_new_codepoint: true` (new codepoint 0x44CD).
+  Real Chrome 131 uses old codepoint 0x4469. Verified via capture tool against tls.browserleaks.com.
+  Chrome 145 correctly uses the new codepoint — now has separate `chrome_tls_v145()` function.
+- **Firefox 135 H2 settings**: 4 corrections from real browser capture:
+  - `max_frame_size`: `None` → `Some(16384)` (Firefox sends SETTINGS_MAX_FRAME_SIZE=16384)
+  - `max_header_list_size`: `Some(65536)` → `None` (Firefox doesn't send this setting)
+  - `settings_order`: Removed `MaxConcurrentStreams` and `MaxHeaderListSize` (Firefox only sends 4 settings)
+  - `headers_stream_dependency`: Removed (Firefox doesn't set stream dependency on HEADERS frame)
 
 ### Dependencies Added
 - `rand` v0.9 (fingerprint randomization)
