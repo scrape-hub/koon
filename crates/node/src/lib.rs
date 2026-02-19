@@ -1,6 +1,6 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use koon_core::profile::{BrowserProfile, Chrome, Edge, Firefox, Safari};
+use koon_core::profile::{BrowserProfile, Chrome, Edge, Firefox, Opera, Safari};
 use koon_core::Client;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -47,6 +47,12 @@ pub enum Browser {
     Safari170, Safari170Macos,
     Safari180, Safari180Macos,
     Safari183, Safari183Macos,
+    // Opera
+    Opera,
+    Opera124, Opera124Windows, Opera124Macos, Opera124Linux,
+    Opera125, Opera125Windows, Opera125Macos, Opera125Linux,
+    Opera126, Opera126Windows, Opera126Macos, Opera126Linux,
+    Opera127, Opera127Windows, Opera127Macos, Opera127Linux,
     // Edge
     Edge,
     Edge131, Edge131Windows, Edge131Macos,
@@ -191,6 +197,24 @@ fn resolve_browser(browser: &Browser) -> BrowserProfile {
         Browser::Safari180Macos | Browser::Safari180 => Safari::v18_0_macos(),
         Browser::Safari183Macos | Browser::Safari183 => Safari::v18_3_macos(),
         Browser::Safari => Safari::latest(),
+        // Opera — version-specific
+        Browser::Opera124Windows => Opera::v124_windows(),
+        Browser::Opera124Macos => Opera::v124_macos(),
+        Browser::Opera124Linux => Opera::v124_linux(),
+        Browser::Opera124 => Opera::v124_windows(),
+        Browser::Opera125Windows => Opera::v125_windows(),
+        Browser::Opera125Macos => Opera::v125_macos(),
+        Browser::Opera125Linux => Opera::v125_linux(),
+        Browser::Opera125 => Opera::v125_windows(),
+        Browser::Opera126Windows => Opera::v126_windows(),
+        Browser::Opera126Macos => Opera::v126_macos(),
+        Browser::Opera126Linux => Opera::v126_linux(),
+        Browser::Opera126 => Opera::v126_windows(),
+        Browser::Opera127Windows => Opera::v127_windows(),
+        Browser::Opera127Macos => Opera::v127_macos(),
+        Browser::Opera127Linux => Opera::v127_linux(),
+        Browser::Opera127 => Opera::v127_windows(),
+        Browser::Opera => Opera::latest(),
         // Edge — version-specific
         Browser::Edge131Windows => Edge::v131_windows(),
         Browser::Edge131Macos => Edge::v131_macos(),

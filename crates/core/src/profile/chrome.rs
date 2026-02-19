@@ -175,8 +175,8 @@ fn chrome_tls(major: u32) -> TlsConfig {
     }
 }
 
-// Also export for Edge which shares the same TLS config.
-pub(super) fn chrome_tls_for_edge(major: u32) -> TlsConfig {
+// Export for Chromium-based browsers (Edge, Opera) which share the same TLS config.
+pub(super) fn chromium_tls(major: u32) -> TlsConfig {
     chrome_tls(major)
 }
 

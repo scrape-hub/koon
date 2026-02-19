@@ -1,4 +1,4 @@
-use super::chrome::{chrome_http2, chrome_quic, chrome_tls_for_edge};
+use super::chrome::{chrome_http2, chrome_quic, chromium_tls};
 use super::BrowserProfile;
 
 /// Edge browser profile factory.
@@ -83,7 +83,7 @@ enum Os {
 
 fn edge_profile(major: u32, os: Os) -> BrowserProfile {
     BrowserProfile {
-        tls: chrome_tls_for_edge(major),
+        tls: chromium_tls(major),
         http2: chrome_http2(),
         quic: Some(chrome_quic()),
         headers: edge_headers(major, os),

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use koon_core::profile::{BrowserProfile, Chrome, Edge, Firefox, Safari};
+use koon_core::profile::{BrowserProfile, Chrome, Edge, Firefox, Opera, Safari};
 use koon_core::{Client, WsMessage};
 
 /// Convert any Display error to a Python RuntimeError.
@@ -112,6 +112,20 @@ fn resolve_profile(browser: &str) -> PyResult<BrowserProfile> {
         "safari170" | "safari170macos" => Ok(Safari::v17_0_macos()),
         "safari180" | "safari180macos" => Ok(Safari::v18_0_macos()),
         "safari183" | "safari183macos" => Ok(Safari::v18_3_macos()),
+        // Opera
+        "opera" => Ok(Opera::latest()),
+        "opera124" | "opera124windows" => Ok(Opera::v124_windows()),
+        "opera124macos" => Ok(Opera::v124_macos()),
+        "opera124linux" => Ok(Opera::v124_linux()),
+        "opera125" | "opera125windows" => Ok(Opera::v125_windows()),
+        "opera125macos" => Ok(Opera::v125_macos()),
+        "opera125linux" => Ok(Opera::v125_linux()),
+        "opera126" | "opera126windows" => Ok(Opera::v126_windows()),
+        "opera126macos" => Ok(Opera::v126_macos()),
+        "opera126linux" => Ok(Opera::v126_linux()),
+        "opera127" | "opera127windows" => Ok(Opera::v127_windows()),
+        "opera127macos" => Ok(Opera::v127_macos()),
+        "opera127linux" => Ok(Opera::v127_linux()),
         // Edge — latest
         "edge" => Ok(Edge::latest()),
         // Edge 131–145
@@ -147,7 +161,7 @@ fn resolve_profile(browser: &str) -> PyResult<BrowserProfile> {
         "edge145macos" => Ok(Edge::v145_macos()),
         other => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
             "Unknown browser: '{other}'. Supported: chrome/chrome131-145, \
-             firefox/firefox135-147, safari/safari156-183, edge/edge131-145"
+             firefox/firefox135-147, safari/safari156-183, opera/opera124-127, edge/edge131-145"
         ))),
     }
 }

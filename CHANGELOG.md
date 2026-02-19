@@ -72,8 +72,11 @@ All notable changes to koon will be documented in this file.
   - Safari 17.0: H2 initial_window drops to 2MB
   - Safari 18.0+: pseudo order changes to m/sc/a/p, adds no_rfc7540_priorities
   - Safari 18.3: sigalgs updated (ecdsa_sha1 removed, ecdsa_secp521r1_sha512 added)
-- `Chrome::latest()` → v145, `Firefox::latest()` → v147, `Edge::latest()` → v145
-- Node.js/Python bindings: all 122 profiles exposed (e.g. `chrome138windows`, `firefox146linux`, `safari170macos`)
+- **Opera 124–127** (4 versions × 3 platforms = 12 profiles) — shares Chrome TLS/H2/QUIC engine
+  - Opera 124→Chromium 140, Opera 125→141, Opera 126→142, Opera 127→143
+  - `sec-ch-ua` uses `"Opera"` brand, UA includes `OPR/` suffix
+- `Chrome::latest()` → v145, `Firefox::latest()` → v147, `Edge::latest()` → v145, `Opera::latest()` → v127
+- Node.js/Python bindings: all 134 profiles exposed (e.g. `chrome138windows`, `firefox146linux`, `opera127macos`)
 
 ## [0.2.0] - 2026-02-19
 
