@@ -1,8 +1,10 @@
+use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use boring2::ssl::SslConnector;
+use h3_quinn::quinn;
 use http::{HeaderName, HeaderValue, Method, Request, Uri, Version};
 use tokio::net::TcpStream;
 use tokio_boring2::SslStream;
@@ -16,6 +18,13 @@ use crate::profile::BrowserProfile;
 use crate::proxy::{ProxyConfig, ProxyKind};
 use crate::tls::TlsConnector;
 use crate::websocket::{self, WebSocket};
+use crate::{http3, quic};
+
+/// Cached Alt-Svc entry for HTTP/3 discovery.
+struct AltSvcEntry {
+    h3_port: u16,
+    expires: Instant,
+}
 
 /// HTTP response with body.
 #[derive(Debug)]
@@ -106,6 +115,8 @@ impl ClientBuilder {
             max_redirects: self.max_redirects,
             cookie_jar: jar,
             pool: ConnectionPool::new(),
+            alt_svc_cache: Mutex::new(HashMap::new()),
+            quic_endpoint: Mutex::new(None),
         })
     }
 }
@@ -124,6 +135,10 @@ pub struct Client {
     max_redirects: u32,
     cookie_jar: Option<Mutex<CookieJar>>,
     pool: ConnectionPool,
+    /// Alt-Svc cache: maps (host, port) → H3 port + expiry.
+    alt_svc_cache: Mutex<HashMap<(String, u16), AltSvcEntry>>,
+    /// Lazily-initialized QUIC endpoint (shared across all H3 connections).
+    quic_endpoint: Mutex<Option<quinn::Endpoint>>,
 }
 
 impl Client {
@@ -344,7 +359,14 @@ impl Client {
 
     /// Execute a single HTTP request without redirect following.
     /// Uses the connection pool to reuse existing connections.
-    /// Supports both HTTP/2 and HTTP/1.1 via ALPN negotiation.
+    /// Supports HTTP/3, HTTP/2, and HTTP/1.1.
+    ///
+    /// Protocol selection order:
+    /// 1. Existing pooled H3 connection
+    /// 2. Existing pooled H2 connection
+    /// 3. Existing pooled H1.1 connection
+    /// 4. New connection: if Alt-Svc cache says H3 is available and no proxy → try H3
+    /// 5. Fallback: TCP → TLS → H2/H1 via ALPN
     async fn execute_single_request(
         &self,
         method: Method,
@@ -366,7 +388,30 @@ impl Client {
             ));
         }
 
-        // 1. Try cached H2 connection from pool
+        // 1. Try cached H3 connection from pool
+        if let Some(mut sender) = self.pool.try_get_h3(host, port) {
+            match http3::send_request(
+                &mut sender,
+                method.clone(),
+                uri,
+                &self.profile,
+                &self.custom_headers,
+                body.clone(),
+                cookie_header,
+            )
+            .await
+            {
+                Ok(response) => {
+                    let response = self.decompress_response(response)?;
+                    return Ok(response);
+                }
+                Err(_) => {
+                    self.pool.remove(host, port);
+                }
+            }
+        }
+
+        // 2. Try cached H2 connection from pool
         if let Some(mut sender) = self.pool.try_get_h2(host, port) {
             match self
                 .send_on_h2(&mut sender, method.clone(), uri, body.clone(), cookie_header)
@@ -374,13 +419,12 @@ impl Client {
             {
                 Ok(response) => return Ok(response),
                 Err(_) => {
-                    // Connection dead — remove from pool, fall through to new connection
                     self.pool.remove(host, port);
                 }
             }
         }
 
-        // 2. Try cached H1.1 connection from pool
+        // 3. Try cached H1.1 connection from pool
         if let Some(mut stream) = self.pool.try_take_h1(host, port) {
             match self
                 .send_on_h1(&mut stream, method.clone(), uri, body.clone(), cookie_header)
@@ -392,30 +436,47 @@ impl Client {
                     }
                     return Ok(response);
                 }
+                Err(_) => {}
+            }
+        }
+
+        // 4. Try HTTP/3 if: no proxy, profile has QuicConfig, and Alt-Svc cache says H3 is available
+        let has_proxy = self.proxy.is_some();
+        let has_quic = self.profile.quic.is_some();
+        let h3_port = if !has_proxy && has_quic {
+            self.get_alt_svc_h3_port(host, port)
+        } else {
+            None
+        };
+
+        if let Some(h3_port) = h3_port {
+            match self.try_h3_connection(host, h3_port, method.clone(), uri, body.clone(), cookie_header).await {
+                Ok(response) => {
+                    let response = self.decompress_response(response)?;
+                    return Ok(response);
+                }
                 Err(_) => {
-                    // Connection dead — fall through to new connection
+                    // H3 failed — remove Alt-Svc entry and fall through to H2/H1
+                    self.remove_alt_svc(host, port);
                 }
             }
         }
 
-        // 3. New connection: TCP → TLS
+        // 5. New connection: TCP → TLS → H2/H1
         let tcp = self.connect_tcp(host, port).await?;
         let tls_stream = self.tls_connect(tcp, host).await?;
 
-        // 4. Check ALPN result to decide protocol
         let alpn = tls_stream.ssl().selected_alpn_protocol();
         let is_h2 = matches!(alpn, Some(b"h2"));
 
-        if is_h2 {
-            // HTTP/2 path
+        let response = if is_h2 {
             let mut sender = self.h2_handshake(tls_stream).await?;
             let response = self
                 .send_on_h2(&mut sender, method, uri, body, cookie_header)
                 .await?;
             self.pool.insert_h2(host, port, sender);
-            Ok(response)
+            response
         } else {
-            // HTTP/1.1 path
             let mut stream = tls_stream;
             let (response, keep_alive) = self
                 .send_on_h1(&mut stream, method, uri, body, cookie_header)
@@ -423,8 +484,138 @@ impl Client {
             if keep_alive {
                 self.pool.insert_h1(host, port, stream);
             }
-            Ok(response)
+            response
+        };
+
+        // Parse Alt-Svc header for future H3 discovery
+        if !has_proxy && has_quic {
+            self.parse_alt_svc_from_response(host, port, &response.headers);
         }
+
+        Ok(response)
+    }
+
+    /// Try to establish an HTTP/3 connection and send a request.
+    async fn try_h3_connection(
+        &self,
+        host: &str,
+        h3_port: u16,
+        method: Method,
+        uri: &Uri,
+        body: Option<Vec<u8>>,
+        cookie_header: Option<&str>,
+    ) -> Result<HttpResponse, Error> {
+        let endpoint = self.get_or_create_quic_endpoint()?;
+
+        let (mut send_request, mut driver) =
+            http3::connect(&endpoint, host, h3_port, &self.profile).await?;
+
+        // Spawn the H3 connection driver
+        tokio::spawn(async move {
+            let e = driver.wait_idle().await;
+            eprintln!("HTTP/3 connection closed: {e}");
+        });
+
+        let response = http3::send_request(
+            &mut send_request,
+            method,
+            uri,
+            &self.profile,
+            &self.custom_headers,
+            body,
+            cookie_header,
+        )
+        .await?;
+
+        // Store H3 connection in pool
+        self.pool.insert_h3(host, h3_port, send_request);
+
+        Ok(response)
+    }
+
+    /// Get or lazily create the shared QUIC endpoint.
+    fn get_or_create_quic_endpoint(&self) -> Result<quinn::Endpoint, Error> {
+        let mut ep = self.quic_endpoint.lock().unwrap();
+        if let Some(endpoint) = ep.as_ref() {
+            return Ok(endpoint.clone());
+        }
+        let quic_config = self
+            .profile
+            .quic
+            .as_ref()
+            .ok_or_else(|| Error::Quic("No QuicConfig in profile".into()))?;
+        let endpoint = quic::transport::build_endpoint(quic_config)?;
+        *ep = Some(endpoint.clone());
+        Ok(endpoint)
+    }
+
+    /// Check Alt-Svc cache for an H3 port for the given origin.
+    fn get_alt_svc_h3_port(&self, host: &str, port: u16) -> Option<u16> {
+        let cache = self.alt_svc_cache.lock().unwrap();
+        if let Some(entry) = cache.get(&(host.to_string(), port)) {
+            if entry.expires > Instant::now() {
+                return Some(entry.h3_port);
+            }
+        }
+        None
+    }
+
+    /// Remove an Alt-Svc entry.
+    fn remove_alt_svc(&self, host: &str, port: u16) {
+        self.alt_svc_cache
+            .lock()
+            .unwrap()
+            .remove(&(host.to_string(), port));
+    }
+
+    /// Parse Alt-Svc header from H1/H2 response and cache H3 port.
+    fn parse_alt_svc_from_response(
+        &self,
+        host: &str,
+        port: u16,
+        headers: &[(String, String)],
+    ) {
+        for (name, value) in headers {
+            if !name.eq_ignore_ascii_case("alt-svc") {
+                continue;
+            }
+            // Look for h3=":PORT" or h3=":443"
+            // Format: h3=":443"; ma=86400, h3-29=":443"; ma=86400
+            for part in value.split(',') {
+                let part = part.trim();
+                if let Some(rest) = part.strip_prefix("h3=\":") {
+                    if let Some(end) = rest.find('"') {
+                        if let Ok(h3_port) = rest[..end].parse::<u16>() {
+                            // Parse max-age
+                            let max_age = parse_alt_svc_max_age(part).unwrap_or(86400);
+                            let entry = AltSvcEntry {
+                                h3_port,
+                                expires: Instant::now() + Duration::from_secs(max_age),
+                            };
+                            self.alt_svc_cache
+                                .lock()
+                                .unwrap()
+                                .insert((host.to_string(), port), entry);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Decompress an HTTP/3 response body.
+    fn decompress_response(&self, response: HttpResponse) -> Result<HttpResponse, Error> {
+        let content_encoding = response
+            .headers
+            .iter()
+            .find(|(k, _)| k == "content-encoding")
+            .map(|(_, v)| v.as_str());
+        let body = decompress_body(response.body, content_encoding)?;
+        Ok(HttpResponse {
+            body,
+            ..response
+        })
     }
 
     /// Establish TCP connection, optionally through a proxy.
@@ -636,6 +827,17 @@ impl Client {
                 dep.weight,
                 dep.exclusive,
             ));
+        }
+
+        // Headers field order (for HTTP/2 fingerprinting)
+        if !self.profile.headers.is_empty() {
+            let mut order = http2::frame::HeadersOrder::builder();
+            for (name, _) in &self.profile.headers {
+                if let Ok(hn) = HeaderName::from_bytes(name.as_bytes()) {
+                    order = order.push(hn);
+                }
+            }
+            h2_builder.headers_order(order.build());
         }
 
         // Perform the HTTP/2 handshake
@@ -942,6 +1144,17 @@ fn sort_headers_by_profile(
     }
 
     std::mem::swap(headers, &mut sorted);
+}
+
+/// Parse `ma=SECONDS` from an Alt-Svc entry.
+fn parse_alt_svc_max_age(entry: &str) -> Option<u64> {
+    for part in entry.split(';') {
+        let part = part.trim();
+        if let Some(rest) = part.strip_prefix("ma=") {
+            return rest.trim().parse().ok();
+        }
+    }
+    None
 }
 
 /// Decompress response body based on Content-Encoding header.

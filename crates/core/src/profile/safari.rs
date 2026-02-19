@@ -18,6 +18,7 @@ impl Safari {
         BrowserProfile {
             tls: safari_tls_v18_3(),
             http2: safari_http2_v18_3(),
+            quic: None, // Safari does not use HTTP/3 with custom QUIC params yet
             headers: safari_headers_v18_3(),
         }
     }

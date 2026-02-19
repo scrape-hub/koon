@@ -2,6 +2,39 @@
 
 All notable changes to koon will be documented in this file.
 
+## [0.2.0] - 2026-02-19
+
+### Added
+
+#### Core
+- **HTTP/2 Header Field Order**: Forked `http2` crate with `HeadersOrder` API
+  - H2 request headers now sent in exact profile-defined order (critical for Akamai fingerprinting)
+  - `HeadersOrder` + `HeadersOrderBuilder` types following existing `PseudoOrder` pattern
+  - Threaded through client → proto → streams → frame encoding pipeline
+- **HTTP/3 (QUIC) Support**: Full HTTP/3 protocol via Quinn + h3 + h3-quinn
+  - QUIC transport parameters fingerprinting (RFC 9000): window sizes, stream limits, MTU, idle timeout
+  - HTTP/3 settings (RFC 9114): QPACK table capacity, blocked streams
+  - Alt-Svc header discovery: automatic H3 upgrade after H1/H2 response
+  - Connection pooling: H3 connections multiplexed alongside H2/H1.1
+  - Proxy fallback: automatic H2/H1 when proxy is configured (no CONNECT-UDP/MASQUE)
+  - TLS via rustls for QUIC (separate from BoringSSL TCP TLS fingerprint)
+- **QuicConfig**: New profile field with browser-specific QUIC transport parameters
+  - Chrome v131/v145, Firefox v135, Edge v131 QUIC profiles
+  - Safari: no H3 (matches real browser behavior)
+
+### Changed
+- `http2` dependency changed from crates.io to forked version with `HeadersOrder` support
+- `BrowserProfile` now includes optional `quic: Option<QuicConfig>` field
+- `ConnectionPool` now supports `PoolEntry::Http3` variant
+- `Error` enum extended with `Quic(String)` and `Http3(String)` variants
+
+### Dependencies Added
+- `quinn` v0.11 (QUIC transport, rustls-ring crypto)
+- `h3` v0.0.8 (HTTP/3 protocol)
+- `h3-quinn` v0.0.10 (Quinn adapter for h3)
+- `rustls` v0.23 (TLS for QUIC connections)
+- `webpki-roots` v1 (Root CA certs for rustls)
+
 ## [0.1.0] - 2026-02-19
 
 ### Added

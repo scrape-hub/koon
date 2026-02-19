@@ -13,11 +13,12 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::http2::Http2Config;
+use crate::quic::QuicConfig;
 use crate::tls::TlsConfig;
 
 /// A complete browser fingerprint profile.
 ///
-/// Combines TLS, HTTP/2, and header configurations to fully impersonate
+/// Combines TLS, HTTP/2, HTTP/3, and header configurations to fully impersonate
 /// a specific browser version on a specific OS.
 ///
 /// Profiles can be serialized to/from JSON, allowing users to:
@@ -31,6 +32,11 @@ pub struct BrowserProfile {
 
     /// HTTP/2 fingerprint settings (Akamai H2).
     pub http2: Http2Config,
+
+    /// QUIC/HTTP/3 transport settings.
+    /// When None, HTTP/3 is disabled for this profile.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quic: Option<QuicConfig>,
 
     /// Default headers in the correct order.
     /// The order matters for fingerprinting.

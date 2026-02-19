@@ -1,6 +1,8 @@
 pub mod tls;
 pub mod http2;
 pub(crate) mod http1;
+pub(crate) mod http3;
+pub mod quic;
 pub mod profile;
 pub mod client;
 pub mod cookie;
@@ -13,4 +15,5 @@ pub use client::{Client, ClientBuilder};
 pub use cookie::CookieJar;
 pub use error::Error;
 pub use profile::{BrowserProfile, Chrome, Edge, Firefox, Safari};
+pub use quic::QuicConfig;
 pub use websocket::{WebSocket, Message as WsMessage};

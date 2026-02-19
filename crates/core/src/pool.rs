@@ -13,10 +13,11 @@ struct PoolKey {
     port: u16,
 }
 
-/// A cached connection to an origin — either H2 (multiplexed) or H1.1 (single stream).
+/// A cached connection to an origin — H2, H1.1, or H3.
 enum PoolEntry {
     Http2(SendRequest<Bytes>),
     Http11(SslStream<TcpStream>),
+    Http3(h3::client::SendRequest<h3_quinn::OpenStreams, Bytes>),
 }
 
 /// Thread-safe connection pool supporting both HTTP/2 and HTTP/1.1.
@@ -87,6 +88,40 @@ impl ConnectionPool {
             .lock()
             .unwrap()
             .insert(key, PoolEntry::Http11(stream));
+    }
+
+    /// Try to get an existing H3 connection for the given origin.
+    pub fn try_get_h3(
+        &self,
+        host: &str,
+        port: u16,
+    ) -> Option<h3::client::SendRequest<h3_quinn::OpenStreams, Bytes>> {
+        let key = PoolKey {
+            host: host.to_string(),
+            port,
+        };
+        let conns = self.connections.lock().unwrap();
+        match conns.get(&key) {
+            Some(PoolEntry::Http3(sender)) => Some(sender.clone()),
+            _ => None,
+        }
+    }
+
+    /// Store an H3 connection in the pool.
+    pub fn insert_h3(
+        &self,
+        host: &str,
+        port: u16,
+        sender: h3::client::SendRequest<h3_quinn::OpenStreams, Bytes>,
+    ) {
+        let key = PoolKey {
+            host: host.to_string(),
+            port,
+        };
+        self.connections
+            .lock()
+            .unwrap()
+            .insert(key, PoolEntry::Http3(sender));
     }
 
     /// Remove a dead connection from the pool.

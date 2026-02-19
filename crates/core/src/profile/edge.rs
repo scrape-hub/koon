@@ -1,4 +1,4 @@
-use super::chrome::{chrome_http2_base, chrome_tls_v131};
+use super::chrome::{chrome_http2_base, chrome_quic, chrome_tls_v131};
 use super::BrowserProfile;
 
 /// Edge browser profile factory.
@@ -12,6 +12,7 @@ impl Edge {
         BrowserProfile {
             tls: chrome_tls_v131(),
             http2: chrome_http2_base(),
+            quic: Some(chrome_quic()),
             headers: edge_headers_v131_windows(),
         }
     }
@@ -21,6 +22,7 @@ impl Edge {
         BrowserProfile {
             tls: chrome_tls_v131(),
             http2: chrome_http2_base(),
+            quic: Some(chrome_quic()),
             headers: edge_headers_v131_macos(),
         }
     }

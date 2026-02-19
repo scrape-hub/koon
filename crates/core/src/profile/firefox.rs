@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use crate::http2::config::{
     Http2Config, PseudoHeader, SettingId, StreamDep,
 };
+use crate::quic::QuicConfig;
 use crate::tls::config::{
     AlpnProtocol, CertCompression, TlsConfig, TlsVersion,
 };
@@ -18,6 +19,7 @@ impl Firefox {
         BrowserProfile {
             tls: firefox_tls_v135(),
             http2: firefox_http2_v135(),
+            quic: Some(firefox_quic()),
             headers: firefox_headers_v135(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0",
             ),
@@ -29,6 +31,7 @@ impl Firefox {
         BrowserProfile {
             tls: firefox_tls_v135(),
             http2: firefox_http2_v135(),
+            quic: Some(firefox_quic()),
             headers: firefox_headers_v135(
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:135.0) Gecko/20100101 Firefox/135.0",
             ),
@@ -40,6 +43,7 @@ impl Firefox {
         BrowserProfile {
             tls: firefox_tls_v135(),
             http2: firefox_http2_v135(),
+            quic: Some(firefox_quic()),
             headers: firefox_headers_v135(
                 "Mozilla/5.0 (X11; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0",
             ),
@@ -149,6 +153,27 @@ fn firefox_http2_v135() -> Http2Config {
         priorities: Vec::new(),
         no_rfc7540_priorities: None,
         enable_connect_protocol: None,
+    }
+}
+
+fn firefox_quic() -> QuicConfig {
+    QuicConfig {
+        initial_max_data: 12582912,
+        initial_max_stream_data_bidi_local: 1048576,
+        initial_max_stream_data_bidi_remote: 1048576,
+        initial_max_stream_data_uni: 1048576,
+        initial_max_streams_bidi: 16,
+        initial_max_streams_uni: 16,
+        max_idle_timeout_ms: 30000,
+        max_udp_payload_size: 1472,
+        ack_delay_exponent: 3,
+        max_ack_delay_ms: 25,
+        active_connection_id_limit: 2,
+        disable_active_migration: false,
+        grease_quic_bit: false,
+        qpack_max_table_capacity: 0,
+        qpack_blocked_streams: 0,
+        max_field_section_size: None,
     }
 }
 

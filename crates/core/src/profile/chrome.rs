@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use crate::http2::config::{
     Http2Config, PseudoHeader, SettingId, StreamDep,
 };
+use crate::quic::QuicConfig;
 use crate::tls::config::{
     AlpnProtocol, AlpsProtocol, CertCompression, TlsConfig, TlsVersion,
 };
@@ -18,6 +19,7 @@ impl Chrome {
         BrowserProfile {
             tls: chrome_tls_v131(),
             http2: chrome_http2_v131(),
+            quic: Some(chrome_quic()),
             headers: chrome_headers_v131_windows(),
         }
     }
@@ -27,6 +29,7 @@ impl Chrome {
         BrowserProfile {
             tls: chrome_tls_v131(),
             http2: chrome_http2_v131(),
+            quic: Some(chrome_quic()),
             headers: chrome_headers_v131_macos(),
         }
     }
@@ -36,6 +39,7 @@ impl Chrome {
         BrowserProfile {
             tls: chrome_tls_v131(),
             http2: chrome_http2_v131(),
+            quic: Some(chrome_quic()),
             headers: chrome_headers_v131_linux(),
         }
     }
@@ -45,6 +49,7 @@ impl Chrome {
         BrowserProfile {
             tls: chrome_tls_v145(),
             http2: chrome_http2_v145(),
+            quic: Some(chrome_quic()),
             headers: chrome_headers_v145_windows(),
         }
     }
@@ -54,6 +59,7 @@ impl Chrome {
         BrowserProfile {
             tls: chrome_tls_v145(),
             http2: chrome_http2_v145(),
+            quic: Some(chrome_quic()),
             headers: chrome_headers_v145_macos(),
         }
     }
@@ -63,6 +69,7 @@ impl Chrome {
         BrowserProfile {
             tls: chrome_tls_v145(),
             http2: chrome_http2_v145(),
+            quic: Some(chrome_quic()),
             headers: chrome_headers_v145_linux(),
         }
     }
@@ -185,6 +192,29 @@ pub(super) fn chrome_http2_base() -> Http2Config {
         priorities: Vec::new(),
         no_rfc7540_priorities: None,
         enable_connect_protocol: None,
+    }
+}
+
+// ========== Chrome QUIC ==========
+
+pub(super) fn chrome_quic() -> QuicConfig {
+    QuicConfig {
+        initial_max_data: 15728640,
+        initial_max_stream_data_bidi_local: 6291456,
+        initial_max_stream_data_bidi_remote: 6291456,
+        initial_max_stream_data_uni: 6291456,
+        initial_max_streams_bidi: 100,
+        initial_max_streams_uni: 100,
+        max_idle_timeout_ms: 30000,
+        max_udp_payload_size: 1350,
+        ack_delay_exponent: 3,
+        max_ack_delay_ms: 25,
+        active_connection_id_limit: 4,
+        disable_active_migration: true,
+        grease_quic_bit: true,
+        qpack_max_table_capacity: 0,
+        qpack_blocked_streams: 0,
+        max_field_section_size: None,
     }
 }
 
