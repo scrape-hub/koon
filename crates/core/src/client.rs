@@ -569,6 +569,8 @@ impl Client {
     }
 
     /// Parse Alt-Svc header from H1/H2 response and cache H3 port.
+    /// When a new Alt-Svc entry is discovered, evict the existing H2/H1 pool entry
+    /// so the next request to this origin will attempt H3.
     fn parse_alt_svc_from_response(
         &self,
         host: &str,
@@ -596,6 +598,8 @@ impl Client {
                                 .lock()
                                 .unwrap()
                                 .insert((host.to_string(), port), entry);
+                            // Evict existing H2/H1 pool entry so next request tries H3
+                            self.pool.remove(host, port);
                             return;
                         }
                     }

@@ -32,7 +32,7 @@ pub(crate) fn build_endpoint(quic_config: &QuicConfig) -> Result<Endpoint, Error
 
 /// Build a Quinn `ClientConfig` with transport parameters matching a browser profile.
 pub(crate) fn build_client_config(quic_config: &QuicConfig) -> Result<ClientConfig, Error> {
-    let crypto = rustls::ClientConfig::builder()
+    let mut crypto = rustls::ClientConfig::builder()
         .with_webpki_verifier(
             rustls::client::WebPkiServerVerifier::builder(Arc::new(
                 rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned()),
@@ -41,6 +41,9 @@ pub(crate) fn build_client_config(quic_config: &QuicConfig) -> Result<ClientConf
             .map_err(|e| Error::Quic(format!("Failed to build verifier: {e}")))?,
         )
         .with_no_client_auth();
+
+    // ALPN must be set to "h3" for HTTP/3 over QUIC
+    crypto.alpn_protocols = vec![b"h3".to_vec()];
 
     let quic_crypto = QuicClientConfig::try_from(crypto)
         .map_err(|e| Error::Quic(format!("Failed to build QUIC crypto: {e}")))?;
