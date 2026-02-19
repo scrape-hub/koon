@@ -22,6 +22,9 @@ Thumbs.db
 node_modules/
 *.tgz
 
+# Capture tool: downloaded browser binaries (large)
+tools/capture/browsers/
+
 # Python
 __pycache__/
 *.pyc
