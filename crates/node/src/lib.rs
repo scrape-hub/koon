@@ -41,7 +41,12 @@ pub enum Browser {
     Firefox146, Firefox146Windows, Firefox146Macos, Firefox146Linux,
     Firefox147, Firefox147Windows, Firefox147Macos, Firefox147Linux,
     // Safari
-    Safari, Safari183, Safari183Macos,
+    Safari,
+    Safari156, Safari156Macos,
+    Safari160, Safari160Macos,
+    Safari170, Safari170Macos,
+    Safari180, Safari180Macos,
+    Safari183, Safari183Macos,
     // Edge
     Edge,
     Edge131, Edge131Windows, Edge131Macos,
@@ -180,7 +185,12 @@ fn resolve_browser(browser: &Browser) -> BrowserProfile {
         Browser::Firefox147 => Firefox::v147_windows(),
         Browser::Firefox => Firefox::latest(),
         // Safari
-        Browser::Safari183Macos | Browser::Safari183 | Browser::Safari => Safari::latest(),
+        Browser::Safari156Macos | Browser::Safari156 => Safari::v15_6_macos(),
+        Browser::Safari160Macos | Browser::Safari160 => Safari::v16_0_macos(),
+        Browser::Safari170Macos | Browser::Safari170 => Safari::v17_0_macos(),
+        Browser::Safari180Macos | Browser::Safari180 => Safari::v18_0_macos(),
+        Browser::Safari183Macos | Browser::Safari183 => Safari::v18_3_macos(),
+        Browser::Safari => Safari::latest(),
         // Edge — version-specific
         Browser::Edge131Windows => Edge::v131_windows(),
         Browser::Edge131Macos => Edge::v131_macos(),

@@ -67,8 +67,13 @@ All notable changes to koon will be documented in this file.
   - TLS/H2/QUIC fingerprint identical across all versions (same JA3/JA4/Akamai hash)
   - Only User-Agent differs per version
 - **Edge 131–145** (15 versions × 2 platforms = 30 profiles) — shares Chrome TLS/H2 engine
+- **Safari 15.6–18.3** (5 versions × 1 platform = 5 profiles) — data sourced from tls-client (bogdanfinn)
+  - Safari 15.6–16.0: H2 initial_window=4MB, pseudo m/sc/p/a
+  - Safari 17.0: H2 initial_window drops to 2MB
+  - Safari 18.0+: pseudo order changes to m/sc/a/p, adds no_rfc7540_priorities
+  - Safari 18.3: sigalgs updated (ecdsa_sha1 removed, ecdsa_secp521r1_sha512 added)
 - `Chrome::latest()` → v145, `Firefox::latest()` → v147, `Edge::latest()` → v145
-- Node.js/Python bindings: all 114 profiles exposed (e.g. `chrome138windows`, `firefox146linux`, `edge145macos`)
+- Node.js/Python bindings: all 122 profiles exposed (e.g. `chrome138windows`, `firefox146linux`, `safari170macos`)
 
 ## [0.2.0] - 2026-02-19
 
