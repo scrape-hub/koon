@@ -59,9 +59,16 @@ All notable changes to koon will be documented in this file.
 - `Client` struct now stores `SessionCache` and optional `DohResolver`
 - Chrome profiles: `no_rfc7540_priorities: Some(true)` (was `None`)
 - Firefox profile: 5 PRIORITY frames in H2 config (was empty)
-- Firefox 147 profile added (Windows/macOS/Linux) — same TLS/H2 fingerprint as 135, different UA
-- `Firefox::latest()` now returns v147 (was v135)
-- Node.js/Python bindings: `firefox147`, `firefox147windows`, `firefox147macos`, `firefox147linux` options
+- **Chrome 131–145** (15 versions × 3 platforms = 45 profiles) — all verified via capture tool
+  - Chrome ≤134: old ALPS codepoint (0x4469), Chrome ≥135: new ALPS codepoint (0x44CD)
+  - H2/QUIC fingerprint identical across all versions (same Akamai hash)
+  - Generic `chrome_profile(major, os)` generator replaces per-version boilerplate
+- **Firefox 135–147** (13 versions × 3 platforms = 39 profiles) — all verified via capture tool
+  - TLS/H2/QUIC fingerprint identical across all versions (same JA3/JA4/Akamai hash)
+  - Only User-Agent differs per version
+- **Edge 131–145** (15 versions × 2 platforms = 30 profiles) — shares Chrome TLS/H2 engine
+- `Chrome::latest()` → v145, `Firefox::latest()` → v147, `Edge::latest()` → v145
+- Node.js/Python bindings: all 114 profiles exposed (e.g. `chrome138windows`, `firefox146linux`, `edge145macos`)
 
 ## [0.2.0] - 2026-02-19
 

@@ -11,80 +11,76 @@ use crate::tls::config::{
 use super::BrowserProfile;
 
 /// Firefox browser profile factory.
+///
+/// Supports Firefox 135–147. TLS/H2/QUIC fingerprint is identical across all
+/// versions (verified via capture tool). Only User-Agent differs per version.
 pub struct Firefox;
 
 impl Firefox {
-    /// Firefox 135 on Windows.
-    pub fn v135_windows() -> BrowserProfile {
-        BrowserProfile {
-            tls: firefox_tls(),
-            http2: firefox_http2(),
-            quic: Some(firefox_quic()),
-            headers: firefox_headers(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0",
-            ),
-        }
-    }
+    // ========== Firefox 135 ==========
+    pub fn v135_windows() -> BrowserProfile { firefox_profile(135, Os::Windows) }
+    pub fn v135_macos() -> BrowserProfile { firefox_profile(135, Os::MacOS) }
+    pub fn v135_linux() -> BrowserProfile { firefox_profile(135, Os::Linux) }
 
-    /// Firefox 135 on macOS.
-    pub fn v135_macos() -> BrowserProfile {
-        BrowserProfile {
-            tls: firefox_tls(),
-            http2: firefox_http2(),
-            quic: Some(firefox_quic()),
-            headers: firefox_headers(
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:135.0) Gecko/20100101 Firefox/135.0",
-            ),
-        }
-    }
+    // ========== Firefox 136 ==========
+    pub fn v136_windows() -> BrowserProfile { firefox_profile(136, Os::Windows) }
+    pub fn v136_macos() -> BrowserProfile { firefox_profile(136, Os::MacOS) }
+    pub fn v136_linux() -> BrowserProfile { firefox_profile(136, Os::Linux) }
 
-    /// Firefox 135 on Linux.
-    pub fn v135_linux() -> BrowserProfile {
-        BrowserProfile {
-            tls: firefox_tls(),
-            http2: firefox_http2(),
-            quic: Some(firefox_quic()),
-            headers: firefox_headers(
-                "Mozilla/5.0 (X11; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0",
-            ),
-        }
-    }
+    // ========== Firefox 137 ==========
+    pub fn v137_windows() -> BrowserProfile { firefox_profile(137, Os::Windows) }
+    pub fn v137_macos() -> BrowserProfile { firefox_profile(137, Os::MacOS) }
+    pub fn v137_linux() -> BrowserProfile { firefox_profile(137, Os::Linux) }
 
-    /// Firefox 147 on Windows.
-    pub fn v147_windows() -> BrowserProfile {
-        BrowserProfile {
-            tls: firefox_tls(),
-            http2: firefox_http2(),
-            quic: Some(firefox_quic()),
-            headers: firefox_headers(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0",
-            ),
-        }
-    }
+    // ========== Firefox 138 ==========
+    pub fn v138_windows() -> BrowserProfile { firefox_profile(138, Os::Windows) }
+    pub fn v138_macos() -> BrowserProfile { firefox_profile(138, Os::MacOS) }
+    pub fn v138_linux() -> BrowserProfile { firefox_profile(138, Os::Linux) }
 
-    /// Firefox 147 on macOS.
-    pub fn v147_macos() -> BrowserProfile {
-        BrowserProfile {
-            tls: firefox_tls(),
-            http2: firefox_http2(),
-            quic: Some(firefox_quic()),
-            headers: firefox_headers(
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:147.0) Gecko/20100101 Firefox/147.0",
-            ),
-        }
-    }
+    // ========== Firefox 139 ==========
+    pub fn v139_windows() -> BrowserProfile { firefox_profile(139, Os::Windows) }
+    pub fn v139_macos() -> BrowserProfile { firefox_profile(139, Os::MacOS) }
+    pub fn v139_linux() -> BrowserProfile { firefox_profile(139, Os::Linux) }
 
-    /// Firefox 147 on Linux.
-    pub fn v147_linux() -> BrowserProfile {
-        BrowserProfile {
-            tls: firefox_tls(),
-            http2: firefox_http2(),
-            quic: Some(firefox_quic()),
-            headers: firefox_headers(
-                "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0",
-            ),
-        }
-    }
+    // ========== Firefox 140 ==========
+    pub fn v140_windows() -> BrowserProfile { firefox_profile(140, Os::Windows) }
+    pub fn v140_macos() -> BrowserProfile { firefox_profile(140, Os::MacOS) }
+    pub fn v140_linux() -> BrowserProfile { firefox_profile(140, Os::Linux) }
+
+    // ========== Firefox 141 ==========
+    pub fn v141_windows() -> BrowserProfile { firefox_profile(141, Os::Windows) }
+    pub fn v141_macos() -> BrowserProfile { firefox_profile(141, Os::MacOS) }
+    pub fn v141_linux() -> BrowserProfile { firefox_profile(141, Os::Linux) }
+
+    // ========== Firefox 142 ==========
+    pub fn v142_windows() -> BrowserProfile { firefox_profile(142, Os::Windows) }
+    pub fn v142_macos() -> BrowserProfile { firefox_profile(142, Os::MacOS) }
+    pub fn v142_linux() -> BrowserProfile { firefox_profile(142, Os::Linux) }
+
+    // ========== Firefox 143 ==========
+    pub fn v143_windows() -> BrowserProfile { firefox_profile(143, Os::Windows) }
+    pub fn v143_macos() -> BrowserProfile { firefox_profile(143, Os::MacOS) }
+    pub fn v143_linux() -> BrowserProfile { firefox_profile(143, Os::Linux) }
+
+    // ========== Firefox 144 ==========
+    pub fn v144_windows() -> BrowserProfile { firefox_profile(144, Os::Windows) }
+    pub fn v144_macos() -> BrowserProfile { firefox_profile(144, Os::MacOS) }
+    pub fn v144_linux() -> BrowserProfile { firefox_profile(144, Os::Linux) }
+
+    // ========== Firefox 145 ==========
+    pub fn v145_windows() -> BrowserProfile { firefox_profile(145, Os::Windows) }
+    pub fn v145_macos() -> BrowserProfile { firefox_profile(145, Os::MacOS) }
+    pub fn v145_linux() -> BrowserProfile { firefox_profile(145, Os::Linux) }
+
+    // ========== Firefox 146 ==========
+    pub fn v146_windows() -> BrowserProfile { firefox_profile(146, Os::Windows) }
+    pub fn v146_macos() -> BrowserProfile { firefox_profile(146, Os::MacOS) }
+    pub fn v146_linux() -> BrowserProfile { firefox_profile(146, Os::Linux) }
+
+    // ========== Firefox 147 ==========
+    pub fn v147_windows() -> BrowserProfile { firefox_profile(147, Os::Windows) }
+    pub fn v147_macos() -> BrowserProfile { firefox_profile(147, Os::MacOS) }
+    pub fn v147_linux() -> BrowserProfile { firefox_profile(147, Os::Linux) }
 
     /// Latest Firefox profile (currently v147 on Windows).
     pub fn latest() -> BrowserProfile {
@@ -92,8 +88,29 @@ impl Firefox {
     }
 }
 
-// Firefox cipher list: AES128 > ChaCha > AES256, plus CBC fallbacks
-// Identical across Firefox 135–147 (verified via capture tool)
+// ========== Internal: OS enum ==========
+
+#[derive(Clone, Copy)]
+enum Os {
+    Windows,
+    MacOS,
+    Linux,
+}
+
+// ========== Internal: Profile generator ==========
+
+fn firefox_profile(major: u32, os: Os) -> BrowserProfile {
+    BrowserProfile {
+        tls: firefox_tls(),
+        http2: firefox_http2(),
+        quic: Some(firefox_quic()),
+        headers: firefox_headers(major, os),
+    }
+}
+
+// ========== TLS ==========
+// Identical across Firefox 135–147 (verified via capture tool).
+
 const FIREFOX_CIPHER_LIST: &str = "\
 TLS_AES_128_GCM_SHA256:\
 TLS_CHACHA20_POLY1305_SHA256:\
@@ -126,12 +143,10 @@ rsa_pkcs1_sha512:\
 ecdsa_sha1:\
 rsa_pkcs1_sha1";
 
-// Firefox includes more curves + ffdhe groups
 const FIREFOX_CURVES: &str = "X25519MLKEM768:X25519:P-256:P-384:P-521:ffdhe2048:ffdhe3072";
 
 const FIREFOX_DC_SIGALGS: &str = "ecdsa_secp256r1_sha256:ecdsa_secp384r1_sha384:ecdsa_secp521r1_sha512:ecdsa_sha1";
 
-// TLS config shared across Firefox 135–147
 fn firefox_tls() -> TlsConfig {
     TlsConfig {
         cipher_list: Cow::Borrowed(FIREFOX_CIPHER_LIST),
@@ -160,7 +175,8 @@ fn firefox_tls() -> TlsConfig {
     }
 }
 
-// H2 config shared across Firefox 135–147
+// ========== HTTP/2 ==========
+
 fn firefox_http2() -> Http2Config {
     Http2Config {
         header_table_size: Some(65536),
@@ -195,6 +211,8 @@ fn firefox_http2() -> Http2Config {
     }
 }
 
+// ========== QUIC ==========
+
 fn firefox_quic() -> QuicConfig {
     QuicConfig {
         initial_max_data: 12582912,
@@ -216,11 +234,26 @@ fn firefox_quic() -> QuicConfig {
     }
 }
 
-// Headers shared across Firefox 135–147 (only user-agent differs)
-fn firefox_headers(user_agent: &str) -> Vec<(String, String)> {
+// ========== Headers ==========
+
+fn firefox_headers(major: u32, os: Os) -> Vec<(String, String)> {
+    let ver = major.to_string();
+
+    let user_agent = match os {
+        Os::Windows => format!(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:{ver}.0) Gecko/20100101 Firefox/{ver}.0"
+        ),
+        Os::MacOS => format!(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:{ver}.0) Gecko/20100101 Firefox/{ver}.0"
+        ),
+        Os::Linux => format!(
+            "Mozilla/5.0 (X11; Linux x86_64; rv:{ver}.0) Gecko/20100101 Firefox/{ver}.0"
+        ),
+    };
+
     vec![
         ("te".into(), "trailers".into()),
-        ("user-agent".into(), user_agent.into()),
+        ("user-agent".into(), user_agent),
         ("accept".into(), "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8".into()),
         ("accept-language".into(), "en-US,en;q=0.5".into()),
         ("accept-encoding".into(), "gzip, deflate, br, zstd".into()),
