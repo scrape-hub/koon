@@ -25,6 +25,7 @@ node_modules/
 # Python
 __pycache__/
 *.pyc
+*.pyd
 *.egg-info/
 dist/
 .venv/
