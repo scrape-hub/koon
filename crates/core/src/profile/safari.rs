@@ -12,14 +12,14 @@ use super::BrowserProfile;
 /// Safari browser profile factory.
 ///
 /// Supports Safari 15.6, 16.0, 17.0, 18.0, and 18.3.
-/// Safari is macOS-only. Profile data sourced from tls-client (bogdanfinn)
-/// and public fingerprint databases, cross-referenced for accuracy.
+/// Safari is macOS-only. Profile data verified against real Safari 18.2 captures
+/// (curl_cffi#460) and tls-client (bogdanfinn) for older versions.
 ///
 /// Key evolution:
-/// - Safari 15.x-16.x: H2 initial_window=4MB, pseudo m/sc/p/a
+/// - Safari 15.x–16.x: H2 initial_window=4MB
 /// - Safari 17.x: H2 initial_window drops to 2MB
-/// - Safari 18.0+: pseudo order changes to m/sc/a/p, adds no_rfc7540_priorities
-/// - Safari 18.3+: removes ecdsa_sha1 from sigalgs
+/// - Safari 18.0+: H2 initial_window back to 4MB (verified via real capture)
+/// - Safari 18.3+: removes ecdsa_sha1 from sigalgs, adds ecdsa_secp521r1_sha512
 pub struct Safari;
 
 impl Safari {
@@ -27,7 +27,7 @@ impl Safari {
     pub fn v15_6_macos() -> BrowserProfile {
         BrowserProfile {
             tls: safari_tls_legacy(),
-            http2: safari_http2_v15(),
+            http2: safari_http2_4mb(),
             quic: None,
             headers: safari_headers("15.6"),
         }
@@ -37,7 +37,7 @@ impl Safari {
     pub fn v16_0_macos() -> BrowserProfile {
         BrowserProfile {
             tls: safari_tls_legacy(),
-            http2: safari_http2_v15(),
+            http2: safari_http2_4mb(),
             quic: None,
             headers: safari_headers("16.0"),
         }
@@ -47,7 +47,7 @@ impl Safari {
     pub fn v17_0_macos() -> BrowserProfile {
         BrowserProfile {
             tls: safari_tls_legacy(),
-            http2: safari_http2_v17(),
+            http2: safari_http2_2mb(),
             quic: None,
             headers: safari_headers("17.0"),
         }
@@ -57,7 +57,7 @@ impl Safari {
     pub fn v18_0_macos() -> BrowserProfile {
         BrowserProfile {
             tls: safari_tls_legacy(),
-            http2: safari_http2_v18(),
+            http2: safari_http2_4mb(),
             quic: None,
             headers: safari_headers("18.0"),
         }
@@ -67,7 +67,7 @@ impl Safari {
     pub fn v18_3_macos() -> BrowserProfile {
         BrowserProfile {
             tls: safari_tls_v18_3(),
-            http2: safari_http2_v18(),
+            http2: safari_http2_4mb(),
             quic: None,
             headers: safari_headers("18.3"),
         }
@@ -150,7 +150,8 @@ fn safari_tls_legacy() -> TlsConfig {
         ocsp_stapling: true,
         signed_cert_timestamps: true,
         cert_compression: vec![CertCompression::Zlib],
-        pre_shared_key: false,
+        // Safari sends psk_key_exchange_modes (0x002d) even without offering PSK.
+        pre_shared_key: true,
         session_ticket: false,
         key_shares_limit: None,
         delegated_credentials: None,
@@ -169,8 +170,10 @@ fn safari_tls_v18_3() -> TlsConfig {
 
 // ========== HTTP/2 configs ==========
 
-// Safari 15.x–16.x: 4MB initial window, old pseudo order, basic settings
-fn safari_http2_v15() -> Http2Config {
+// Safari 15.x–16.x, 18.0+: 4MB initial window.
+// Settings order verified against real Safari 18.2 capture: 2,4,3 (EnablePush, InitialWindowSize, MaxConcurrentStreams).
+// Connection window: WINDOW_UPDATE=10485760 → configured=10551295 (10485760+65535).
+fn safari_http2_4mb() -> Http2Config {
     Http2Config {
         header_table_size: None,
         enable_push: Some(false),
@@ -178,7 +181,7 @@ fn safari_http2_v15() -> Http2Config {
         initial_window_size: 4194304,
         max_frame_size: None,
         max_header_list_size: None,
-        initial_conn_window_size: 10485760,
+        initial_conn_window_size: 10551295,
         pseudo_header_order: vec![
             PseudoHeader::Method,
             PseudoHeader::Scheme,
@@ -186,6 +189,7 @@ fn safari_http2_v15() -> Http2Config {
             PseudoHeader::Authority,
         ],
         settings_order: vec![
+            SettingId::EnablePush,
             SettingId::InitialWindowSize,
             SettingId::MaxConcurrentStreams,
         ],
@@ -196,44 +200,11 @@ fn safari_http2_v15() -> Http2Config {
     }
 }
 
-// Safari 17.x: 2MB initial window (reduced), still old pseudo order
-fn safari_http2_v17() -> Http2Config {
+// Safari 17.x: 2MB initial window (reduced from 4MB).
+fn safari_http2_2mb() -> Http2Config {
     Http2Config {
         initial_window_size: 2097152,
-        ..safari_http2_v15()
-    }
-}
-
-// Safari 18.0+: 2MB window, NEW pseudo order (a before p), NoRFC7540+ConnectProtocol
-fn safari_http2_v18() -> Http2Config {
-    Http2Config {
-        header_table_size: None,
-        enable_push: Some(false),
-        max_concurrent_streams: Some(100),
-        initial_window_size: 2097152,
-        max_frame_size: None,
-        max_header_list_size: None,
-        initial_conn_window_size: 10485760,
-        pseudo_header_order: vec![
-            PseudoHeader::Method,
-            PseudoHeader::Scheme,
-            PseudoHeader::Authority,
-            PseudoHeader::Path,
-        ],
-        settings_order: vec![
-            SettingId::HeaderTableSize,
-            SettingId::EnablePush,
-            SettingId::MaxConcurrentStreams,
-            SettingId::InitialWindowSize,
-            SettingId::MaxFrameSize,
-            SettingId::MaxHeaderListSize,
-            SettingId::EnableConnectProtocol,
-            SettingId::NoRfc7540Priorities,
-        ],
-        headers_stream_dependency: None,
-        priorities: Vec::new(),
-        no_rfc7540_priorities: Some(true),
-        enable_connect_protocol: Some(true),
+        ..safari_http2_4mb()
     }
 }
 

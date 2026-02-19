@@ -5,8 +5,9 @@ All notable changes to koon will be documented in this file.
 ## [0.3.3] - 2026-02-19
 
 ### Added
-- **Integration Tests**: 6 fingerprint verification tests against `tls.browserleaks.com`
+- **Integration Tests**: 10 fingerprint verification tests against `tls.browserleaks.com`
   - Chrome 131 (old ALPS), Chrome 135, Chrome 145, Firefox 135, Firefox 147, Edge 145
+  - Safari 15.6, Safari 17.0, Safari 18.0, Safari 18.3
   - Asserts JA4, Akamai hash, and Akamai text against reference captures
   - `#[ignore]` attribute — run with `cargo test --test fingerprint -- --ignored`
 
@@ -21,6 +22,12 @@ All notable changes to koon will be documented in this file.
 - **Chrome SETTINGS_NO_RFC7540_PRIORITIES**: Removed setting `9:1` from Chrome/Edge/Opera SETTINGS frame
   - Real Chrome communicates this via ALPS, not the SETTINGS frame
   - Verified: capture akamai_text contains only settings 1,2,4,6
+- **Safari 18.x H2 profile**: Corrected against real Safari 18.2 capture (curl_cffi#460)
+  - Window size: 4MB (was 2MB), settings order: 2,4,3 (was wrong), pseudo order: m,s,p,a (was m,s,a,p)
+  - Removed EnableConnectProtocol and NoRfc7540Priorities (real Safari doesn't send these)
+  - Connection window: WINDOW_UPDATE=10485760 (was 10420225)
+- **Safari TLS extensions**: Added `pre_shared_key: true` for all Safari profiles
+  - Real Safari sends psk_key_exchange_modes (0x002d), fixes extension count 13→14
 
 ### Changed
 - Example `fingerprint_test.rs` cleaned up: fingerprint tests moved to `tests/fingerprint.rs`, smoke tests retained
