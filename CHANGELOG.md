@@ -29,6 +29,14 @@ All notable changes to koon will be documented in this file.
 - **Safari TLS extensions**: Added `pre_shared_key: true` for all Safari profiles
   - Real Safari sends psk_key_exchange_modes (0x002d), fixes extension count 13→14
 
+### Verified
+- **JA3/JA4 hashes against real browser captures**: Chrome 131–145, Firefox 135/147
+  - Chrome: JA4, JA3N, Akamai all match captures perfectly
+  - Firefox: JA4, Akamai match perfectly; JA3N differs due to BoringSSL TLS 1.3 cipher order
+  - BoringSSL uses fixed TLS 1.3 order (AES_128→CHACHA20→AES_256), Firefox/NSS uses (AES_128→AES_256→CHACHA20)
+  - `boring2::set_preserve_tls13_cipher_list()` does not work in v5.0.0-alpha.13
+- Firefox cipher_list reordered to match real Firefox TLS 1.3 preference (AES_256 before CHACHA20)
+
 ### Changed
 - Example `fingerprint_test.rs` cleaned up: fingerprint tests moved to `tests/fingerprint.rs`, smoke tests retained
 
