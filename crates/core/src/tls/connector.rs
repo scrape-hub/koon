@@ -29,9 +29,9 @@ impl TlsConnector {
         let mut builder = SslConnector::builder(SslMethod::tls_client())?;
 
         // === Cipher suites (directly affects JA3 hash) ===
-        // Note: BoringSSL's TLS 1.3 cipher order is fixed (AES_128 → CHACHA20 → AES_256)
-        // regardless of the order in cipher_list. This matches Chrome (also BoringSSL).
-        // Firefox (NSS) uses AES_128 → AES_256 → CHACHA20, causing JA3/JA3N hash mismatch.
+        // Note: BoringSSL's TLS 1.3 cipher order is fixed (AES_128 → CHACHA20 → AES_256).
+        // set_preserve_tls13_cipher_list() exists in boring2 but does not work in v5.0.0-alpha.13.
+        // This matches Chrome (also BoringSSL) and Safari, but differs from Firefox (NSS).
         // JA4 and Akamai fingerprints are unaffected.
         builder.set_cipher_list(&config.cipher_list)?;
 

@@ -30,8 +30,9 @@ All notable changes to koon will be documented in this file.
   - Real Safari sends psk_key_exchange_modes (0x002d), fixes extension count 13→14
 
 ### Verified
-- **JA3/JA4 hashes against real browser captures**: Chrome 131–145, Firefox 135/147
+- **JA3/JA4 hashes against real browser captures**: Chrome 131–145, Firefox 135/147, Safari 18.x
   - Chrome: JA4, JA3N, Akamai all match captures perfectly
+  - Safari: JA3, JA3N match real Safari 18.2 capture perfectly (ja3_hash `773906b0efdefa24a7f2b8eb6985bf37`)
   - Firefox: JA4, Akamai match perfectly; JA3N differs due to BoringSSL TLS 1.3 cipher order
   - BoringSSL uses fixed TLS 1.3 order (AES_128→CHACHA20→AES_256), Firefox/NSS uses (AES_128→AES_256→CHACHA20)
   - `boring2::set_preserve_tls13_cipher_list()` does not work in v5.0.0-alpha.13
