@@ -28,11 +28,16 @@ impl TlsConnector {
     ) -> Result<SslConnector, Error> {
         let mut builder = SslConnector::builder(SslMethod::tls_client())?;
 
+        // === TLS 1.3 cipher order preservation ===
+        // Must be called BEFORE set_cipher_list() to take effect.
+        // When true, BoringSSL uses the cipher order from our cipher_list string
+        // instead of its default AES-hardware-dependent order.
+        // Required for Firefox (NSS uses AES_128 → AES_256 → CHACHA20).
+        if config.preserve_tls13_cipher_order {
+            builder.set_preserve_tls13_cipher_list(true);
+        }
+
         // === Cipher suites (directly affects JA3 hash) ===
-        // Note: BoringSSL's TLS 1.3 cipher order is fixed (AES_128 → CHACHA20 → AES_256).
-        // set_preserve_tls13_cipher_list() exists in boring2 but does not work in v5.0.0-alpha.13.
-        // This matches Chrome (also BoringSSL) and Safari, but differs from Firefox (NSS).
-        // JA4 and Akamai fingerprints are unaffected.
         builder.set_cipher_list(&config.cipher_list)?;
 
         // === Curves / Supported Groups ===

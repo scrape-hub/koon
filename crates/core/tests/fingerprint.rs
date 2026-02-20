@@ -22,6 +22,8 @@ struct Expected {
     ja4: &'static str,
     akamai_hash: &'static str,
     akamai_text: &'static str,
+    /// Optional JA3N hash for browsers where we can match it exactly.
+    ja3n_hash: Option<&'static str>,
 }
 
 // Chrome 131–134 (old ALPS codepoint 0x4469)
@@ -29,6 +31,7 @@ const CHROME_OLD_ALPS: Expected = Expected {
     ja4: "t13d1516h2_8daaf6152771_02713d6af862",
     akamai_hash: "52d84b11737d980aef856699f885ca86",
     akamai_text: "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p",
+    ja3n_hash: Some("dee19b855b658c6aa0f575eda2525e19"),
 };
 
 // Chrome 135–145 (new ALPS codepoint 0x44CD)
@@ -36,6 +39,7 @@ const CHROME_NEW_ALPS: Expected = Expected {
     ja4: "t13d1516h2_8daaf6152771_d8a2da3f94cd",
     akamai_hash: "52d84b11737d980aef856699f885ca86",
     akamai_text: "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p",
+    ja3n_hash: Some("8e19337e7524d2573be54efb2b0784c9"),
 };
 
 // Firefox 135–147 (identical fingerprint across all versions)
@@ -43,6 +47,7 @@ const FIREFOX: Expected = Expected {
     ja4: "t13d1717h2_5b57614c22b0_3cbfd9057e0d",
     akamai_hash: "6ea73faa8fc5aac76bded7bd238f6433",
     akamai_text: "1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s",
+    ja3n_hash: Some("e4147a4860c1f347354f0a84d8787c02"),
 };
 
 async fn fetch_fingerprint(client: &Client) -> FingerprintResponse {
@@ -78,6 +83,16 @@ fn assert_fingerprint(fp: &FingerprintResponse, expected: &Expected, profile_nam
             fp.akamai_text, expected.akamai_text
         ));
         failed = true;
+    }
+
+    if let Some(expected_ja3n) = expected.ja3n_hash {
+        if fp.ja3n_hash != expected_ja3n {
+            msg.push_str(&format!(
+                "  ja3n_hash: actual={}\n               expected={}\n",
+                fp.ja3n_hash, expected_ja3n
+            ));
+            failed = true;
+        }
     }
 
     if failed {
@@ -143,6 +158,7 @@ const SAFARI_LEGACY_4MB: Expected = Expected {
     ja4: "t13d2014h2_a09f3c656075_2a6581477f52",
     akamai_hash: "959a7e813b79b909a1a0b00a38e8bba3",
     akamai_text: "2:0;4:4194304;3:100|10485760|0|m,s,p,a",
+    ja3n_hash: None,
 };
 
 // Safari 17.0: same TLS, 2MB window
@@ -150,6 +166,7 @@ const SAFARI_LEGACY_2MB: Expected = Expected {
     ja4: "t13d2014h2_a09f3c656075_2a6581477f52",
     akamai_hash: "ad8424af1cc590e09f7b0c499bf7fcdb",
     akamai_text: "2:0;4:2097152;3:100|10485760|0|m,s,p,a",
+    ja3n_hash: None,
 };
 
 // Safari 18.3: new sigalgs (ecdsa_sha1 removed), 4MB window
@@ -157,6 +174,7 @@ const SAFARI_V18_3: Expected = Expected {
     ja4: "t13d2014h2_a09f3c656075_cfb9b458de2a",
     akamai_hash: "959a7e813b79b909a1a0b00a38e8bba3",
     akamai_text: "2:0;4:4194304;3:100|10485760|0|m,s,p,a",
+    ja3n_hash: None,
 };
 
 // ========== Edge Tests ==========

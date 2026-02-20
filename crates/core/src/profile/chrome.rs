@@ -172,6 +172,7 @@ fn chrome_tls(major: u32) -> TlsConfig {
         key_shares_limit: None,
         delegated_credentials: None,
         record_size_limit: None,
+        preserve_tls13_cipher_order: false,
         danger_accept_invalid_certs: false,
     }
 }

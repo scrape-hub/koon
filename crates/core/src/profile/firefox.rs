@@ -111,10 +111,12 @@ fn firefox_profile(major: u32, os: Os) -> BrowserProfile {
 // ========== TLS ==========
 // Identical across Firefox 135–147 (verified via capture tool).
 
+// TLS 1.3 order: AES_128(4865) → CHACHA20(4867) → AES_256(4866)
+// Matches real Firefox/NSS. Requires preserve_tls13_cipher_order = true.
 const FIREFOX_CIPHER_LIST: &str = "\
 TLS_AES_128_GCM_SHA256:\
-TLS_AES_256_GCM_SHA384:\
 TLS_CHACHA20_POLY1305_SHA256:\
+TLS_AES_256_GCM_SHA384:\
 TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:\
 TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:\
 TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256:\
@@ -172,6 +174,8 @@ fn firefox_tls() -> TlsConfig {
         key_shares_limit: Some(3),
         delegated_credentials: Some(Cow::Borrowed(FIREFOX_DC_SIGALGS)),
         record_size_limit: Some(16385),
+        // Firefox/NSS uses AES_128 → AES_256 → CHACHA20 (differs from BoringSSL default).
+        preserve_tls13_cipher_order: true,
         danger_accept_invalid_certs: false,
     }
 }

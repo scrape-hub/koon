@@ -66,6 +66,12 @@ pub struct TlsConfig {
     /// Record size limit (RFC 8449). Firefox sends 16385.
     pub record_size_limit: Option<u16>,
 
+    /// Preserve TLS 1.3 cipher suite order from `cipher_list`.
+    /// When true, BoringSSL uses the cipher order as specified instead of
+    /// its default AES-hardware-dependent order.
+    /// Required for Firefox impersonation (AES_128 → AES_256 → CHACHA20).
+    pub preserve_tls13_cipher_order: bool,
+
     /// Whether to disable certificate verification (for testing only).
     pub danger_accept_invalid_certs: bool,
 }
@@ -127,6 +133,7 @@ impl Default for TlsConfig {
             key_shares_limit: None,
             delegated_credentials: None,
             record_size_limit: None,
+            preserve_tls13_cipher_order: false,
             danger_accept_invalid_certs: false,
         }
     }
