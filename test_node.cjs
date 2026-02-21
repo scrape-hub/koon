@@ -1,7 +1,7 @@
 /**
  * Unified koon test suite — Node.js bindings.
  */
-const { Koon } = require('./koon.win32-x64-msvc.node');
+const { Koon } = require('./crates/node');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');

@@ -1,0 +1,32 @@
+{
+  "name": "koon",
+  "version": "0.4.0",
+  "description": "Browser-impersonating HTTP client with TLS/HTTP2 fingerprint spoofing",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "license": "MIT",
+  "engines": {
+    "node": ">= 16"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "koon.*.node"
+  ],
+  "scripts": {
+    "build": "cargo build --release -p koon-node",
+    "test": "node ../../test_node.cjs"
+  },
+  "keywords": [
+    "tls",
+    "fingerprint",
+    "http2",
+    "browser",
+    "impersonation",
+    "anti-bot",
+    "akamai",
+    "cloudflare",
+    "ja3",
+    "ja4"
+  ]
+}
