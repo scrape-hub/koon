@@ -1,3 +1,3 @@
-from koon._native import Koon, KoonResponse, KoonWebSocket
+from koon._native import Koon, KoonResponse, KoonStreamingResponse, KoonWebSocket, KoonProxy
 
-__all__ = ["Koon", "KoonResponse", "KoonWebSocket"]
+__all__ = ["Koon", "KoonResponse", "KoonStreamingResponse", "KoonWebSocket", "KoonProxy"]

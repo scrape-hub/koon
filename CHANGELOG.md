@@ -2,6 +2,33 @@
 
 All notable changes to koon will be documented in this file.
 
+## [0.3.6] - 2026-02-21
+
+### Added
+- **CLI Tool** (`koon-cli`): curl-like command-line interface for browser-impersonating HTTP requests
+  - `koon <url>` — GET request with Chrome latest profile
+  - `-b <browser>` — browser profile selection (chrome, firefox147, safari, edge, opera, etc.)
+  - `-X <METHOD>` — HTTP method (GET, POST, PUT, DELETE, PATCH, HEAD)
+  - `-d <data>` — request body (use `@filename` to read from file)
+  - `-H "Key: Value"` — custom headers (repeatable)
+  - `--proxy <url>` — HTTP CONNECT or SOCKS5 proxy
+  - `-o <file>` — save response body to file
+  - `-v` — verbose output (request/response headers)
+  - `--json` — structured JSON output (status, headers, body, version, url)
+  - `--randomize` — slight fingerprint randomization
+  - `--doh <provider>` — DNS-over-HTTPS (cloudflare, google)
+  - `--save-session <file>` / `--load-session <file>` — session persistence (v0.3.4)
+  - `--export-profile <name>` — export browser profile as JSON
+  - `--list-browsers` — list all 134 available browser profiles
+  - `--profile <file>` — load custom profile from JSON file
+  - `--no-follow`, `--max-redirects`, `--no-cookies`, `--no-session-resumption` — request control
+  - `koon proxy` subcommand — start local MITM proxy server (v0.3.5)
+    - `--listen`, `--header-mode`, `--ca-dir`, `--browser`, `--randomize`
+
+### Fixed
+- **Python**: `KoonStreamingResponse` and `KoonProxy` now exported from `koon.__init__`
+- **Core**: `Opera` profile module now re-exported from `koon_core`
+
 ## [0.3.5] - 2026-02-21
 
 ### Added
