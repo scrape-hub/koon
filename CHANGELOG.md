@@ -2,6 +2,32 @@
 
 All notable changes to koon will be documented in this file.
 
+## [0.4.0] - 2026-02-21
+
+### Refactored
+- **client.rs split**: 1975-line monolith split into 8 focused modules
+  (`client/{mod,execute,connection,h1,h2,h3,headers,response,alt_svc}.rs`)
+- **BrowserProfile::resolve()**: Centralized browser name parsing in core, replacing
+  3x duplicated resolution code in Node.js (190 lines), Python (152), CLI (112)
+- **Header deduplication**: 8 duplicated header-building blocks consolidated into
+  `headers::build_request_headers()`
+- **Chromium headers**: Shared `chromium_headers()` for Chrome/Edge/Opera profiles
+- **HTTP/1.1 parsing**: Unified header parsing with shared `read_and_parse_headers()`
+- **Test parametrization**: Consolidated repetitive tests into shared helpers
+
+### Added
+- **README.md**: Usage examples for CLI, Node.js, Python, and Rust
+- **npm package**: `package.json`, `index.js` (platform-aware loader), `index.d.ts` (TypeScript types)
+- **LICENSE**: MIT license file
+- **Unified test suites**: `test_cli.sh` (28 tests), `test_node.cjs` (30 tests), `test_python.py` (30 tests)
+
+### Fixed
+- Version mismatch: workspace version now 0.4.0 (was 0.1.0)
+- Python type stubs updated with all missing classes and methods
+
+### Removed
+- `build.bat` (hardcoded paths, not portable)
+
 ## [0.3.6] - 2026-02-21
 
 ### Added
