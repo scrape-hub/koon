@@ -636,6 +636,51 @@ impl Koon {
         })
     }
 
+    /// Save the current session (cookies + TLS sessions) as a JSON string.
+    /// The returned string can later be passed to `loadSession()` to restore state.
+    ///
+    /// @example
+    /// ```ts
+    /// const json = client.saveSession();
+    /// fs.writeFileSync('session.json', json);
+    /// ```
+    #[napi]
+    pub fn save_session(&self) -> Result<String> {
+        self.client
+            .save_session()
+            .map_err(|e| napi::Error::from_reason(format!("Failed to save session: {e}")))
+    }
+
+    /// Load a session (cookies + TLS sessions) from a JSON string.
+    ///
+    /// @example
+    /// ```ts
+    /// const json = fs.readFileSync('session.json', 'utf8');
+    /// client.loadSession(json);
+    /// ```
+    #[napi]
+    pub fn load_session(&self, json: String) -> Result<()> {
+        self.client
+            .load_session(&json)
+            .map_err(|e| napi::Error::from_reason(format!("Failed to load session: {e}")))
+    }
+
+    /// Save the current session to a file.
+    #[napi]
+    pub fn save_session_to_file(&self, path: String) -> Result<()> {
+        self.client
+            .save_session_to_file(&path)
+            .map_err(|e| napi::Error::from_reason(format!("Failed to save session to file: {e}")))
+    }
+
+    /// Load a session from a file.
+    #[napi]
+    pub fn load_session_from_file(&self, path: String) -> Result<()> {
+        self.client
+            .load_session_from_file(&path)
+            .map_err(|e| napi::Error::from_reason(format!("Failed to load session from file: {e}")))
+    }
+
     /// Open a WebSocket connection to a wss:// URL.
     ///
     /// @example

@@ -253,6 +253,26 @@ impl Koon {
         self.client.profile().to_json_pretty().map_err(to_py_err)
     }
 
+    /// Save the current session (cookies + TLS sessions) as a JSON string.
+    fn save_session(&self) -> PyResult<String> {
+        self.client.save_session().map_err(to_py_err)
+    }
+
+    /// Load a session (cookies + TLS sessions) from a JSON string.
+    fn load_session(&self, json: &str) -> PyResult<()> {
+        self.client.load_session(json).map_err(to_py_err)
+    }
+
+    /// Save the current session to a file.
+    fn save_session_to_file(&self, path: &str) -> PyResult<()> {
+        self.client.save_session_to_file(path).map_err(to_py_err)
+    }
+
+    /// Load a session from a file.
+    fn load_session_from_file(&self, path: &str) -> PyResult<()> {
+        self.client.load_session_from_file(path).map_err(to_py_err)
+    }
+
     /// Perform an HTTP GET request.
     fn get<'py>(&self, py: Python<'py>, url: String) -> PyResult<Bound<'py, PyAny>> {
         let client = self.client.clone();

@@ -10,6 +10,8 @@ use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio_boring2::SslStream;
 
+use serde::{Deserialize, Serialize};
+
 use crate::cookie::CookieJar;
 #[cfg(feature = "doh")]
 use crate::dns::DohResolver;
@@ -39,6 +41,15 @@ pub struct HttpResponse {
     pub body: Vec<u8>,
     pub version: String,
     pub url: String,
+}
+
+/// Exported session data (cookies + TLS sessions) for save/load.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionExport {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cookies: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tls_sessions: Option<HashMap<String, String>>,
 }
 
 /// Builder for constructing a [`Client`] with custom settings.
@@ -188,6 +199,60 @@ impl Client {
     /// Get a reference to the browser profile.
     pub fn profile(&self) -> &BrowserProfile {
         &self.profile
+    }
+
+    /// Save the current session (cookies + TLS sessions) as a JSON string.
+    pub fn save_session(&self) -> Result<String, Error> {
+        let cookies = self.cookie_jar.as_ref().map(|jar| {
+            let jar = jar.lock().unwrap();
+            serde_json::to_value(jar.cookies()).unwrap_or(serde_json::Value::Array(Vec::new()))
+        });
+
+        let tls_sessions = self.session_cache.as_ref().map(|cache| {
+            cache.export().sessions
+        });
+
+        let export = SessionExport {
+            cookies,
+            tls_sessions,
+        };
+
+        serde_json::to_string_pretty(&export).map_err(Error::Json)
+    }
+
+    /// Load a session (cookies + TLS sessions) from a JSON string.
+    pub fn load_session(&self, json: &str) -> Result<(), Error> {
+        let export: SessionExport = serde_json::from_str(json).map_err(Error::Json)?;
+
+        if let Some(cookies_val) = export.cookies {
+            if let Some(jar_mutex) = &self.cookie_jar {
+                let cookies_json = serde_json::to_string(&cookies_val).map_err(Error::Json)?;
+                let loaded_jar = CookieJar::from_json(&cookies_json).map_err(Error::Json)?;
+                let mut jar = jar_mutex.lock().unwrap();
+                *jar = loaded_jar;
+            }
+        }
+
+        if let Some(sessions) = export.tls_sessions {
+            if let Some(cache) = &self.session_cache {
+                let cache_export = crate::tls::SessionCacheExport { sessions };
+                cache.import(&cache_export);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Save the current session to a file.
+    pub fn save_session_to_file(&self, path: &str) -> Result<(), Error> {
+        let json = self.save_session()?;
+        std::fs::write(path, json).map_err(Error::Io)
+    }
+
+    /// Load a session from a file.
+    pub fn load_session_from_file(&self, path: &str) -> Result<(), Error> {
+        let json = std::fs::read_to_string(path).map_err(Error::Io)?;
+        self.load_session(&json)
     }
 
     /// Create a new client with default settings (redirects on, cookies on).

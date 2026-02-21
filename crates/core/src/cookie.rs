@@ -1,6 +1,7 @@
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use http::Uri;
+use serde::{Deserialize, Serialize};
 
 /// A simple in-memory cookie jar for storing and matching cookies.
 #[derive(Debug, Clone)]
@@ -8,26 +9,54 @@ pub struct CookieJar {
     cookies: Vec<Cookie>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(not(test), allow(dead_code))]
-enum SameSite {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SameSite {
     Lax,
     Strict,
     None,
 }
 
-#[derive(Debug, Clone)]
-struct Cookie {
-    name: String,
-    value: String,
-    domain: String,
-    path: String,
-    secure: bool,
-    _http_only: bool,
-    expires: Option<SystemTime>,
-    #[cfg_attr(not(test), allow(dead_code))]
-    same_site: SameSite,
-    host_only: bool,
+/// A single stored cookie.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Cookie {
+    pub name: String,
+    pub value: String,
+    pub domain: String,
+    pub path: String,
+    pub secure: bool,
+    #[serde(rename = "http_only")]
+    pub _http_only: bool,
+    #[serde(
+        serialize_with = "serialize_expires",
+        deserialize_with = "deserialize_expires"
+    )]
+    pub expires: Option<SystemTime>,
+    pub same_site: SameSite,
+    pub host_only: bool,
+}
+
+fn serialize_expires<S: serde::Serializer>(
+    time: &Option<SystemTime>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    match time {
+        Some(t) => {
+            let secs = t
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            serializer.serialize_some(&secs)
+        }
+        None => serializer.serialize_none(),
+    }
+}
+
+fn deserialize_expires<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<SystemTime>, D::Error> {
+    let opt: Option<u64> = Option::deserialize(deserializer)?;
+    Ok(opt.map(|secs| UNIX_EPOCH + Duration::from_secs(secs)))
 }
 
 impl CookieJar {
@@ -119,6 +148,22 @@ impl CookieJar {
             .join("; ");
 
         Some(header)
+    }
+
+    /// Get a reference to all stored cookies.
+    pub fn cookies(&self) -> &[Cookie] {
+        &self.cookies
+    }
+
+    /// Serialize all cookies to a JSON string.
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string(&self.cookies)
+    }
+
+    /// Deserialize cookies from a JSON string, creating a new CookieJar.
+    pub fn from_json(json: &str) -> Result<CookieJar, serde_json::Error> {
+        let cookies: Vec<Cookie> = serde_json::from_str(json)?;
+        Ok(CookieJar { cookies })
     }
 }
 

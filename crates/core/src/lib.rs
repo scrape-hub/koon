@@ -15,12 +15,12 @@ pub mod proxy;
 pub mod streaming;
 pub mod websocket;
 
-pub use client::{Client, ClientBuilder, HttpResponse};
-pub use cookie::CookieJar;
+pub use client::{Client, ClientBuilder, HttpResponse, SessionExport};
+pub use cookie::{Cookie, CookieJar, SameSite};
 pub use error::Error;
 pub use multipart::{Multipart, Part};
 pub use profile::{BrowserProfile, Chrome, Edge, Firefox, Safari};
 pub use quic::QuicConfig;
 pub use streaming::StreamingResponse;
-pub use tls::SessionCache;
+pub use tls::{SessionCache, SessionCacheExport};
 pub use websocket::{WebSocket, Message as WsMessage};

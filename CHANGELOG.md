@@ -2,6 +2,24 @@
 
 All notable changes to koon will be documented in this file.
 
+## [0.3.4] - 2026-02-21
+
+### Added
+- **Session Save/Load**: Persist and restore client state (cookies + TLS sessions) across restarts
+  - `Client::save_session()` → JSON string with all cookies and TLS session tickets (base64-encoded DER)
+  - `Client::load_session(json)` → restore cookies and TLS sessions from JSON
+  - `Client::save_session_to_file(path)` / `Client::load_session_from_file(path)` → file I/O convenience methods
+  - `CookieJar::to_json()` / `CookieJar::from_json()` → standalone cookie serialization
+  - `CookieJar::cookies()` → read access to stored cookies
+  - `SessionCache::export()` / `SessionCache::import()` → TLS session serialization via base64-encoded DER
+  - `SessionExport`, `SessionCacheExport` — public types for session data
+  - `Cookie`, `SameSite` — now public and re-exported from `koon_core`
+  - **Node.js**: `saveSession()`, `loadSession(json)`, `saveSessionToFile(path)`, `loadSessionFromFile(path)`
+  - **Python**: `save_session()`, `load_session(json)`, `save_session_to_file(path)`, `load_session_from_file(path)`
+
+### Dependencies Added
+- `base64` v0.22 (TLS session DER encoding)
+
 ## [0.3.3] - 2026-02-19
 
 ### Added

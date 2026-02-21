@@ -67,6 +67,9 @@ hickory-proto = { version = "0.25", optional = true }
 # Randomization (fingerprint jitter)
 rand = "0.9"
 
+# Base64 encoding (session export/import)
+base64 = "0.22"
+
 # Utilities
 url = "2"
 thiserror = "2"
