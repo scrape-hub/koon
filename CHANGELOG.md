@@ -5,6 +5,12 @@ All notable changes to koon will be documented in this file.
 ## [0.4.2] - 2026-02-21
 
 ### Fixed
+- **Safari JA4 fingerprint**: Now matches real Safari 18.2 exactly (`t13d2014h2_a09f3c656075_14788d8d241b`)
+  - Added duplicate `rsa_pss_rsae_sha384` in sigalgs (real Safari/Apple SecureTransport quirk)
+  - Removed unverified `ecdsa_secp521r1_sha512` from Safari 18.3 sigalgs
+  - All Safari profiles (15.6–18.3) now use unified sigalgs matching real captures
+  - Verified via boring2's patched BoringSSL (uniqueness check removed for Safari compat)
+  - **Result**: Safari profiles now pass Cloudflare, Canva, Glassdoor, Medium (previously blocked with 403)
 - **Firefox headers**: Added missing `upgrade-insecure-requests: 1` and `sec-fetch-user: ?1` headers
   (real Firefox sends both; missing headers were detectable by anti-bot systems like Datadome)
 - **Safari headers**: Version-specific header sets matching real browser behavior:

@@ -19,14 +19,14 @@ use super::BrowserProfile;
 /// - Safari 15.x–16.x: H2 initial_window=4MB
 /// - Safari 17.x: H2 initial_window drops to 2MB
 /// - Safari 18.0+: H2 initial_window back to 4MB (verified via real capture)
-/// - Safari 18.3+: removes ecdsa_sha1 from sigalgs, adds ecdsa_secp521r1_sha512
+/// - All versions share the same TLS sigalgs (verified against real Safari 18.2)
 pub struct Safari;
 
 impl Safari {
     // ========== Safari 15.6 (macOS Monterey 12.5) ==========
     pub fn v15_6_macos() -> BrowserProfile {
         BrowserProfile {
-            tls: safari_tls_legacy(),
+            tls: safari_tls(),
             http2: safari_http2_4mb(),
             quic: None,
             headers: safari_headers_pre_sec_fetch("15.6"),
@@ -36,7 +36,7 @@ impl Safari {
     // ========== Safari 16.0 (macOS Ventura 13.0) ==========
     pub fn v16_0_macos() -> BrowserProfile {
         BrowserProfile {
-            tls: safari_tls_legacy(),
+            tls: safari_tls(),
             http2: safari_http2_4mb(),
             quic: None,
             headers: safari_headers_pre_sec_fetch("16.0"),
@@ -46,7 +46,7 @@ impl Safari {
     // ========== Safari 17.0 (macOS Sonoma 14.0) ==========
     pub fn v17_0_macos() -> BrowserProfile {
         BrowserProfile {
-            tls: safari_tls_legacy(),
+            tls: safari_tls(),
             http2: safari_http2_2mb(),
             quic: None,
             headers: safari_headers_v17("17.0"),
@@ -56,7 +56,7 @@ impl Safari {
     // ========== Safari 18.0 (macOS Sequoia 15.0) ==========
     pub fn v18_0_macos() -> BrowserProfile {
         BrowserProfile {
-            tls: safari_tls_legacy(),
+            tls: safari_tls(),
             http2: safari_http2_4mb(),
             quic: None,
             headers: safari_headers_v18("18.0"),
@@ -66,7 +66,7 @@ impl Safari {
     // ========== Safari 18.3 (macOS Sequoia 15.3) ==========
     pub fn v18_3_macos() -> BrowserProfile {
         BrowserProfile {
-            tls: safari_tls_v18_3(),
+            tls: safari_tls(),
             http2: safari_http2_4mb(),
             quic: None,
             headers: safari_headers_v18("18.3"),
@@ -124,40 +124,32 @@ TLS_RSA_WITH_3DES_EDE_CBC_SHA";
 
 const SAFARI_CURVES: &str = "X25519:P-256:P-384:P-521";
 
-// Safari 15.x–18.0: includes ecdsa_sha1
-const SAFARI_SIGALGS_LEGACY: &str = "\
+// Safari 15.x–18.3: includes ecdsa_sha1, duplicate rsa_pss_rsae_sha384.
+// Verified against real Safari 18.2 capture (curl_cffi#460) and wreq-util.
+// Real Safari (Apple SecureTransport) sends rsa_pss_rsae_sha384 twice — boring2's
+// patched BoringSSL allows this (uniqueness check removed).
+const SAFARI_SIGALGS: &str = "\
 ecdsa_secp256r1_sha256:\
 rsa_pss_rsae_sha256:\
 rsa_pkcs1_sha256:\
 ecdsa_secp384r1_sha384:\
 ecdsa_sha1:\
 rsa_pss_rsae_sha384:\
-rsa_pkcs1_sha384:\
-rsa_pss_rsae_sha512:\
-rsa_pkcs1_sha512:\
-rsa_pkcs1_sha1";
-
-// Safari 18.3+: ecdsa_sha1 removed, ecdsa_secp521r1_sha512 added
-const SAFARI_SIGALGS_V18_3: &str = "\
-ecdsa_secp256r1_sha256:\
-rsa_pss_rsae_sha256:\
-rsa_pkcs1_sha256:\
-ecdsa_secp384r1_sha384:\
 rsa_pss_rsae_sha384:\
-ecdsa_secp521r1_sha512:\
-rsa_pss_rsae_sha512:\
 rsa_pkcs1_sha384:\
+rsa_pss_rsae_sha512:\
 rsa_pkcs1_sha512:\
 rsa_pkcs1_sha1";
 
 // ========== TLS configs ==========
 
-// Safari 15.x through 18.0 — includes ecdsa_sha1
-fn safari_tls_legacy() -> TlsConfig {
+// Safari 15.x through 18.3 — all versions share the same TLS config.
+// Verified against real Safari 18.2 capture (curl_cffi#460).
+fn safari_tls() -> TlsConfig {
     TlsConfig {
         cipher_list: Cow::Borrowed(SAFARI_CIPHER_LIST),
         curves: Cow::Borrowed(SAFARI_CURVES),
-        sigalgs: Cow::Borrowed(SAFARI_SIGALGS_LEGACY),
+        sigalgs: Cow::Borrowed(SAFARI_SIGALGS),
         alpn: vec![AlpnProtocol::Http2, AlpnProtocol::Http11],
         alps: None,
         alps_use_new_codepoint: false,
@@ -177,14 +169,6 @@ fn safari_tls_legacy() -> TlsConfig {
         record_size_limit: None,
         preserve_tls13_cipher_order: false,
         danger_accept_invalid_certs: false,
-    }
-}
-
-// Safari 18.3+ — ecdsa_sha1 removed, ecdsa_secp521r1_sha512 added
-fn safari_tls_v18_3() -> TlsConfig {
-    TlsConfig {
-        sigalgs: Cow::Borrowed(SAFARI_SIGALGS_V18_3),
-        ..safari_tls_legacy()
     }
 }
 

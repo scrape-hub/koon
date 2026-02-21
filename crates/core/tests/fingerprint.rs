@@ -149,32 +149,23 @@ async fn test_firefox_147_fingerprint() {
 }
 
 // ========== Safari Tests ==========
-// Safari akamai_hash verified against real Safari 18.2 capture (curl_cffi#460).
-// JA4 sigalg hash (3rd segment) differs from real Safari due to BoringSSL internals,
-// so we only assert the JA4 prefix+cipher hash, plus the exact akamai fingerprint.
+// All Safari versions now produce JA4 matching real Safari 18.2 capture (curl_cffi#460).
+// Key fix: duplicate rsa_pss_rsae_sha384 in sigalgs (real Safari quirk).
 
-// Safari 15.6–16.0, 18.0: same TLS (legacy sigalgs), same H2 (4MB window)
-const SAFARI_LEGACY_4MB: Expected = Expected {
-    ja4: "t13d2014h2_a09f3c656075_2a6581477f52",
+// Safari 15.6–16.0, 18.0, 18.3: same TLS, 4MB H2 window
+const SAFARI_4MB: Expected = Expected {
+    ja4: "t13d2014h2_a09f3c656075_14788d8d241b",
     akamai_hash: "959a7e813b79b909a1a0b00a38e8bba3",
     akamai_text: "2:0;4:4194304;3:100|10485760|0|m,s,p,a",
-    ja3n_hash: None,
+    ja3n_hash: Some("44f7ed5185d22c92b96da72dbe68d307"),
 };
 
 // Safari 17.0: same TLS, 2MB window
-const SAFARI_LEGACY_2MB: Expected = Expected {
-    ja4: "t13d2014h2_a09f3c656075_2a6581477f52",
+const SAFARI_2MB: Expected = Expected {
+    ja4: "t13d2014h2_a09f3c656075_14788d8d241b",
     akamai_hash: "ad8424af1cc590e09f7b0c499bf7fcdb",
     akamai_text: "2:0;4:2097152;3:100|10485760|0|m,s,p,a",
-    ja3n_hash: None,
-};
-
-// Safari 18.3: new sigalgs (ecdsa_sha1 removed), 4MB window
-const SAFARI_V18_3: Expected = Expected {
-    ja4: "t13d2014h2_a09f3c656075_cfb9b458de2a",
-    akamai_hash: "959a7e813b79b909a1a0b00a38e8bba3",
-    akamai_text: "2:0;4:4194304;3:100|10485760|0|m,s,p,a",
-    ja3n_hash: None,
+    ja3n_hash: Some("44f7ed5185d22c92b96da72dbe68d307"),
 };
 
 // ========== Edge Tests ==========
@@ -195,7 +186,7 @@ async fn test_edge_145_fingerprint() {
 async fn test_safari_15_6_fingerprint() {
     let client = Client::new(Safari::v15_6_macos()).expect("client creation failed");
     let fp = fetch_fingerprint(&client).await;
-    assert_fingerprint(&fp, &SAFARI_LEGACY_4MB, "Safari 15.6");
+    assert_fingerprint(&fp, &SAFARI_4MB, "Safari 15.6");
 }
 
 #[tokio::test]
@@ -203,7 +194,7 @@ async fn test_safari_15_6_fingerprint() {
 async fn test_safari_17_0_fingerprint() {
     let client = Client::new(Safari::v17_0_macos()).expect("client creation failed");
     let fp = fetch_fingerprint(&client).await;
-    assert_fingerprint(&fp, &SAFARI_LEGACY_2MB, "Safari 17.0");
+    assert_fingerprint(&fp, &SAFARI_2MB, "Safari 17.0");
 }
 
 #[tokio::test]
@@ -211,7 +202,7 @@ async fn test_safari_17_0_fingerprint() {
 async fn test_safari_18_0_fingerprint() {
     let client = Client::new(Safari::v18_0_macos()).expect("client creation failed");
     let fp = fetch_fingerprint(&client).await;
-    assert_fingerprint(&fp, &SAFARI_LEGACY_4MB, "Safari 18.0");
+    assert_fingerprint(&fp, &SAFARI_4MB, "Safari 18.0");
 }
 
 #[tokio::test]
@@ -219,5 +210,5 @@ async fn test_safari_18_0_fingerprint() {
 async fn test_safari_18_3_fingerprint() {
     let client = Client::new(Safari::v18_3_macos()).expect("client creation failed");
     let fp = fetch_fingerprint(&client).await;
-    assert_fingerprint(&fp, &SAFARI_V18_3, "Safari 18.3");
+    assert_fingerprint(&fp, &SAFARI_4MB, "Safari 18.3");
 }
