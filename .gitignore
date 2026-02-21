@@ -1,4 +1,6 @@
 /target
+
+# Native binaries
 *.exe
 *.dll
 *.so
@@ -7,12 +9,16 @@
 
 # Build artifacts
 *.pdb
+build.log
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+
+# Claude Code
+.claude/
 
 # OS
 .DS_Store
