@@ -2,6 +2,32 @@
 
 All notable changes to koon will be documented in this file.
 
+## [0.3.5] - 2026-02-21
+
+### Added
+- **Local MITM Proxy Server**: Intercepts HTTPS traffic and re-sends it with koon's fingerprinted TLS/HTTP2 stack
+  - `ProxyServer::start(config)` — bind TCP listener, spawn accept loop, return server handle
+  - `ProxyServerConfig` — listen address, browser profile, header mode, CA dir, timeout
+  - `HeaderMode::Impersonate` (default) — replace client headers with profile headers
+  - `HeaderMode::Passthrough` — pass client headers through, only TLS/H2 fingerprinted
+  - HTTPS CONNECT tunnel with per-domain leaf certificate signing
+  - Plain HTTP request forwarding (absolute URL)
+  - `ProxyServer::port()`, `url()`, `local_addr()`, `ca_cert_path()`, `ca_cert_pem()`, `shutdown()`
+- **Certificate Authority**: Auto-generate and persist MITM CA certificate
+  - `CertAuthority::load_or_generate(dir)` — load from disk or generate RSA 2048 CA + save
+  - Per-domain leaf certificates with SAN, cached in memory
+  - CA stored as `koon-ca.pem` + `koon-ca-key.pem` in configurable directory (default: `~/.koon/ca/`)
+- **Client Passthrough Mode**: `Client::request_with_raw_headers()` for proxy passthrough
+  - Uses fingerprinted TLS + H2 settings but with caller-supplied HTTP headers
+  - Supports H2 and H1.1 connections with connection pooling
+- **Node.js**: `KoonProxy` class with `start(options)`, `port`, `url`, `caCertPath`, `caCertPem()`, `shutdown()`
+  - `KoonProxyOptions` — browser, profile_json, listen_addr, header_mode, ca_dir, timeout, randomize
+- **Python**: `KoonProxy` class with `start(...)`, `port`, `url`, `ca_cert_path`, `ca_cert_pem()`, `shutdown()`
+
+### Changed
+- `proxy` module refactored from single file to directory (`proxy/config.rs`, `proxy/ca.rs`, `proxy/server.rs`)
+- Existing `ProxyConfig`/`ProxyKind`/`ProxyAuth` imports unchanged (re-exported from `proxy::config`)
+
 ## [0.3.4] - 2026-02-21
 
 ### Added

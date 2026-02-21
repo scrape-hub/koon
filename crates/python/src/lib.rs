@@ -7,7 +7,7 @@ use std::time::Duration;
 use koon_core::dns::DohResolver;
 use koon_core::multipart::Multipart;
 use koon_core::profile::{BrowserProfile, Chrome, Edge, Firefox, Opera, Safari};
-use koon_core::{Client, WsMessage};
+use koon_core::{Client, HeaderMode, ProxyServer, ProxyServerConfig, WsMessage};
 
 /// Convert any Display error to a Python RuntimeError.
 fn to_py_err(e: impl std::fmt::Display) -> PyErr {
@@ -742,6 +742,98 @@ impl KoonWebSocket {
     }
 }
 
+/// A local MITM proxy server with browser fingerprinting.
+#[pyclass]
+struct KoonProxy {
+    inner: Arc<tokio::sync::Mutex<Option<ProxyServer>>>,
+    #[pyo3(get)]
+    port: u16,
+    #[pyo3(get)]
+    url: String,
+    #[pyo3(get)]
+    ca_cert_path: String,
+}
+
+#[pymethods]
+impl KoonProxy {
+    /// Start a new MITM proxy server.
+    #[staticmethod]
+    #[pyo3(signature = (*, browser="chrome", profile_json=None, listen_addr=None, header_mode=None, ca_dir=None, timeout=30000, randomize=false))]
+    fn start<'py>(
+        py: Python<'py>,
+        browser: &str,
+        profile_json: Option<&str>,
+        listen_addr: Option<String>,
+        header_mode: Option<&str>,
+        ca_dir: Option<String>,
+        timeout: u32,
+        randomize: bool,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let mut profile = if let Some(json) = profile_json {
+            BrowserProfile::from_json(json).map_err(to_py_err)?
+        } else {
+            resolve_profile(browser)?
+        };
+
+        if randomize {
+            profile.randomize();
+        }
+
+        let hm = match header_mode {
+            Some("passthrough") => HeaderMode::Passthrough,
+            _ => HeaderMode::Impersonate,
+        };
+
+        let config = ProxyServerConfig {
+            listen_addr: listen_addr.unwrap_or_else(|| "127.0.0.1:0".to_string()),
+            profile,
+            header_mode: hm,
+            ca_dir,
+            timeout_secs: (timeout / 1000) as u64,
+        };
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let server = ProxyServer::start(config).await.map_err(to_py_err)?;
+            let port = server.port();
+            let url = server.url();
+            let ca_cert_path = server.ca_cert_path().to_string_lossy().to_string();
+
+            Ok(KoonProxy {
+                inner: Arc::new(tokio::sync::Mutex::new(Some(server))),
+                port,
+                url,
+                ca_cert_path,
+            })
+        })
+    }
+
+    /// CA certificate as PEM bytes.
+    fn ca_cert_pem<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
+        let guard = self.inner.blocking_lock();
+        let server = guard.as_ref().ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Proxy is shut down")
+        })?;
+        let pem = server.ca_cert_pem().map_err(to_py_err)?;
+        Ok(PyBytes::new(py, &pem))
+    }
+
+    /// Shut down the proxy server.
+    fn shutdown<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let mut guard = inner.lock().await;
+            if let Some(server) = guard.take() {
+                server.shutdown();
+            }
+            Ok(())
+        })
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<KoonProxy url='{}'>", self.url)
+    }
+}
+
 /// Python module registration.
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -749,5 +841,6 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<KoonResponse>()?;
     m.add_class::<KoonStreamingResponse>()?;
     m.add_class::<KoonWebSocket>()?;
+    m.add_class::<KoonProxy>()?;
     Ok(())
 }

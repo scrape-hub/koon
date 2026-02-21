@@ -662,6 +662,234 @@ impl Client {
         websocket::connect(tls_stream, &uri, &headers, self.timeout).await
     }
 
+    /// Perform an HTTP request using the client's fingerprinted TLS/H2 connection,
+    /// but with raw caller-supplied headers instead of profile headers.
+    ///
+    /// Used by the MITM proxy in passthrough mode: TLS + H2 settings are fingerprinted,
+    /// but the actual HTTP headers come from the proxy client.
+    pub(crate) async fn request_with_raw_headers(
+        &self,
+        method: Method,
+        url: &str,
+        raw_headers: Vec<(String, String)>,
+        body: Option<Vec<u8>>,
+    ) -> Result<HttpResponse, Error> {
+        let uri: Uri = url
+            .parse()
+            .map_err(|_| Error::Url(url::ParseError::EmptyHost))?;
+
+        let host = uri
+            .host()
+            .ok_or(Error::ConnectionFailed("No host in URL".into()))?;
+        let port = uri
+            .port_u16()
+            .unwrap_or(if uri.scheme_str() == Some("https") { 443 } else { 80 });
+        let is_https = uri.scheme_str() == Some("https");
+
+        if !is_https {
+            return Err(Error::ConnectionFailed(
+                "Only HTTPS is supported (HTTP would leak fingerprint)".into(),
+            ));
+        }
+
+        // Try pooled H2 connection first
+        if let Some(mut sender) = self.pool.try_get_h2(host, port) {
+            match self
+                .send_on_h2_raw(&mut sender, method.clone(), &uri, body.clone(), &raw_headers)
+                .await
+            {
+                Ok(response) => {
+                    self.pool.insert_h2(host, port, sender);
+                    return Ok(response);
+                }
+                Err(e) => {
+                    self.pool.remove(host, port);
+                    if !e.is_h2_goaway() {
+                        return Err(e);
+                    }
+                }
+            }
+        }
+
+        // New connection
+        let tcp = self.connect_tcp(host, port).await?;
+        let tls_stream = self.tls_connect(tcp, host, port).await?;
+
+        let alpn = tls_stream.ssl().selected_alpn_protocol();
+        let is_h2 = matches!(alpn, Some(b"h2"));
+
+        if is_h2 {
+            let mut sender = self.h2_handshake(tls_stream).await?;
+            let response = self
+                .send_on_h2_raw(&mut sender, method, &uri, body, &raw_headers)
+                .await?;
+            self.pool.insert_h2(host, port, sender);
+            Ok(response)
+        } else {
+            let mut stream = tls_stream;
+            let (response, keep_alive) = self
+                .send_on_h1_raw(&mut stream, method, &uri, body, &raw_headers)
+                .await?;
+            if keep_alive {
+                self.pool.insert_h1(host, port, stream);
+            }
+            Ok(response)
+        }
+    }
+
+    /// Send an H2 request with raw (passthrough) headers.
+    async fn send_on_h2_raw(
+        &self,
+        sender: &mut http2::client::SendRequest<bytes::Bytes>,
+        method: Method,
+        uri: &Uri,
+        body: Option<Vec<u8>>,
+        raw_headers: &[(String, String)],
+    ) -> Result<HttpResponse, Error> {
+        sender.clone().ready().await.map_err(Error::Http2)?;
+
+        let authority = uri.authority().map(|a| a.as_str()).unwrap_or("");
+        let scheme = uri.scheme_str().unwrap_or("https");
+        let path = uri.path_and_query().map(|pq| pq.as_str()).unwrap_or("/");
+        let h2_uri: Uri = format!("{scheme}://{authority}{path}")
+            .parse()
+            .map_err(|_| Error::InvalidHeader("Failed to build H2 URI".into()))?;
+
+        let mut req = Request::builder()
+            .method(method.clone())
+            .uri(h2_uri)
+            .version(Version::HTTP_2)
+            .body(())
+            .map_err(|e| Error::InvalidHeader(format!("Failed to build request: {e}")))?;
+
+        let headers = req.headers_mut();
+        for (name, value) in raw_headers {
+            let lower = name.to_lowercase();
+            if lower == "host" || lower == "connection" || lower == "transfer-encoding" {
+                continue; // H2 pseudo-headers handle these
+            }
+            if let (Ok(hn), Ok(hv)) = (
+                HeaderName::from_bytes(name.as_bytes()),
+                HeaderValue::from_str(value),
+            ) {
+                headers.insert(hn, hv);
+            }
+        }
+
+        let has_body = body.is_some();
+        let (response_future, mut send_stream) = sender
+            .send_request(req, !has_body)
+            .map_err(Error::Http2)?;
+
+        if let Some(body_bytes) = body {
+            send_stream
+                .send_data(body_bytes.into(), true)
+                .map_err(Error::Http2)?;
+        }
+
+        let response = tokio::time::timeout(self.timeout, response_future)
+            .await
+            .map_err(|_| Error::Timeout)?
+            .map_err(Error::Http2)?;
+
+        let status = response.status().as_u16();
+        let resp_headers: Vec<(String, String)> = response
+            .headers()
+            .iter()
+            .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
+            .collect();
+
+        let mut body_data = Vec::new();
+        let mut recv_stream = response.into_body();
+        while let Some(chunk) = recv_stream.data().await {
+            let chunk = chunk.map_err(Error::Http2)?;
+            body_data.extend_from_slice(&chunk);
+            let _ = recv_stream.flow_control().release_capacity(chunk.len());
+        }
+
+        let content_encoding = resp_headers
+            .iter()
+            .find(|(k, _)| k == "content-encoding")
+            .map(|(_, v)| v.as_str());
+        let body = decompress_body(body_data, content_encoding)?;
+
+        Ok(HttpResponse {
+            status,
+            headers: resp_headers,
+            body,
+            version: "h2".to_string(),
+            url: uri.to_string(),
+        })
+    }
+
+    /// Send an H1 request with raw (passthrough) headers.
+    async fn send_on_h1_raw(
+        &self,
+        stream: &mut SslStream<TcpStream>,
+        method: Method,
+        uri: &Uri,
+        body: Option<Vec<u8>>,
+        raw_headers: &[(String, String)],
+    ) -> Result<(HttpResponse, bool), Error> {
+        let authority = uri.authority().map(|a| a.as_str()).unwrap_or("");
+
+        let mut headers = http::HeaderMap::new();
+
+        // Host header
+        if let Ok(hv) = HeaderValue::from_str(authority) {
+            headers.insert(http::header::HOST, hv);
+        }
+
+        // Raw headers from proxy client
+        for (name, value) in raw_headers {
+            let lower = name.to_lowercase();
+            if lower == "host" {
+                continue; // Already set above
+            }
+            if let (Ok(hn), Ok(hv)) = (
+                HeaderName::from_bytes(name.as_bytes()),
+                HeaderValue::from_str(value),
+            ) {
+                headers.insert(hn, hv);
+            }
+        }
+
+        // Ensure connection: keep-alive
+        headers.insert(
+            http::header::CONNECTION,
+            HeaderValue::from_static("keep-alive"),
+        );
+
+        let body_ref = body.as_deref();
+        http1::write_request(stream, &method, uri, &headers, body_ref).await?;
+
+        let raw = tokio::time::timeout(self.timeout, http1::read_response(stream))
+            .await
+            .map_err(|_| Error::Timeout)??;
+
+        let keep_alive = !raw
+            .headers
+            .iter()
+            .any(|(k, v)| k == "connection" && v.eq_ignore_ascii_case("close"));
+
+        let content_encoding = raw
+            .headers
+            .iter()
+            .find(|(k, _)| k == "content-encoding")
+            .map(|(_, v)| v.as_str());
+        let body = decompress_body(raw.body, content_encoding)?;
+
+        let response = HttpResponse {
+            status: raw.status,
+            headers: raw.headers,
+            body,
+            version: "HTTP/1.1".to_string(),
+            url: uri.to_string(),
+        };
+
+        Ok((response, keep_alive))
+    }
+
     /// Perform an HTTP request with the given method.
     /// Automatically follows redirects and manages cookies if enabled.
     pub async fn request(

@@ -3,7 +3,7 @@ use napi_derive::napi;
 use koon_core::dns::DohResolver;
 use koon_core::multipart::Multipart;
 use koon_core::profile::{BrowserProfile, Chrome, Edge, Firefox, Opera, Safari};
-use koon_core::Client;
+use koon_core::{Client, HeaderMode, ProxyServer, ProxyServerConfig};
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -855,6 +855,161 @@ impl KoonWebSocket {
 
         // Consume the WebSocket so it can't be used again
         *guard = None;
+        Ok(())
+    }
+}
+
+/// Options for creating a MITM proxy server.
+#[napi(object)]
+#[derive(Default)]
+pub struct KoonProxyOptions {
+    /// Browser to impersonate for outgoing connections.
+    /// @default 'chrome'
+    pub browser: Option<Browser>,
+
+    /// Custom browser profile as JSON string. Overrides `browser`.
+    pub profile_json: Option<String>,
+
+    /// Address to listen on.
+    /// @default '127.0.0.1:0' (random port)
+    pub listen_addr: Option<String>,
+
+    /// Header handling mode: 'impersonate' or 'passthrough'.
+    /// - impersonate: Replace client headers with profile headers (default).
+    /// - passthrough: Pass client headers through, only TLS/H2 fingerprinted.
+    /// @default 'impersonate'
+    pub header_mode: Option<String>,
+
+    /// Directory for CA certificate storage.
+    /// @default '~/.koon/ca/'
+    pub ca_dir: Option<String>,
+
+    /// Request timeout in milliseconds.
+    /// @default 30000
+    pub timeout: Option<u32>,
+
+    /// Randomize the browser fingerprint slightly.
+    /// @default false
+    pub randomize: Option<bool>,
+}
+
+/// A local MITM proxy server that intercepts HTTPS traffic and forwards it
+/// using koon's fingerprinted TLS/HTTP2 stack.
+///
+/// @example
+/// ```ts
+/// import { KoonProxy } from 'koon';
+///
+/// const proxy = await KoonProxy.start({ browser: 'chrome' });
+/// console.log(`Proxy listening on ${proxy.url}`);
+/// console.log(`Install CA cert from: ${proxy.caCertPath}`);
+///
+/// // Use with Playwright:
+/// // const browser = await chromium.launch({
+/// //   args: [`--proxy-server=${proxy.url}`, '--ignore-certificate-errors']
+/// // });
+///
+/// // When done:
+/// proxy.shutdown();
+/// ```
+#[napi]
+pub struct KoonProxy {
+    inner: tokio::sync::Mutex<Option<ProxyServer>>,
+    port_val: u16,
+    url_val: String,
+    ca_cert_path_val: String,
+}
+
+#[napi]
+impl KoonProxy {
+    /// Start a new MITM proxy server.
+    #[napi(factory)]
+    pub async fn start(options: Option<KoonProxyOptions>) -> Result<Self> {
+        let opts = options.unwrap_or_default();
+
+        let mut profile = if let Some(ref json) = opts.profile_json {
+            BrowserProfile::from_json(json).map_err(|e| {
+                napi::Error::from_reason(format!("Invalid profile JSON: {e}"))
+            })?
+        } else {
+            match opts.browser {
+                Some(ref b) => resolve_browser(b),
+                None => Chrome::latest(),
+            }
+        };
+
+        if opts.randomize.unwrap_or(false) {
+            profile.randomize();
+        }
+
+        let header_mode = match opts.header_mode.as_deref() {
+            Some("passthrough") => HeaderMode::Passthrough,
+            _ => HeaderMode::Impersonate,
+        };
+
+        let config = ProxyServerConfig {
+            listen_addr: opts.listen_addr.unwrap_or_else(|| "127.0.0.1:0".to_string()),
+            profile,
+            header_mode,
+            ca_dir: opts.ca_dir,
+            timeout_secs: (opts.timeout.unwrap_or(30000) / 1000) as u64,
+        };
+
+        let server = ProxyServer::start(config)
+            .await
+            .map_err(|e| napi::Error::from_reason(format!("Failed to start proxy: {e}")))?;
+
+        let port_val = server.port();
+        let url_val = server.url();
+        let ca_cert_path_val = server.ca_cert_path().to_string_lossy().to_string();
+
+        Ok(KoonProxy {
+            inner: tokio::sync::Mutex::new(Some(server)),
+            port_val,
+            url_val,
+            ca_cert_path_val,
+        })
+    }
+
+    /// The port the proxy is listening on.
+    #[napi(getter)]
+    pub fn port(&self) -> u32 {
+        self.port_val as u32
+    }
+
+    /// The proxy URL (e.g. 'http://127.0.0.1:12345').
+    #[napi(getter)]
+    pub fn url(&self) -> String {
+        self.url_val.clone()
+    }
+
+    /// Path to the CA certificate PEM file.
+    /// Install this in your browser/system to trust the proxy.
+    #[napi(getter)]
+    pub fn ca_cert_path(&self) -> String {
+        self.ca_cert_path_val.clone()
+    }
+
+    /// CA certificate as PEM bytes.
+    #[napi]
+    pub fn ca_cert_pem(&self) -> Result<Buffer> {
+        let guard = self.inner.blocking_lock();
+        let server = guard
+            .as_ref()
+            .ok_or_else(|| napi::Error::from_reason("Proxy is shut down"))?;
+        let pem = server
+            .ca_cert_pem()
+            .map_err(|e| napi::Error::from_reason(format!("Failed to get CA cert: {e}")))?;
+        Ok(pem.into())
+    }
+
+    /// Shut down the proxy server.
+    #[napi]
+    pub async fn shutdown(&self) -> Result<()> {
+        let mut guard = self.inner.lock().await;
+        if let Some(server) = guard.take() {
+            server.shutdown();
+        }
         Ok(())
     }
 }
