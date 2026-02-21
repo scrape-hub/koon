@@ -29,7 +29,7 @@ impl Safari {
             tls: safari_tls_legacy(),
             http2: safari_http2_4mb(),
             quic: None,
-            headers: safari_headers("15.6"),
+            headers: safari_headers_pre_sec_fetch("15.6"),
         }
     }
 
@@ -39,7 +39,7 @@ impl Safari {
             tls: safari_tls_legacy(),
             http2: safari_http2_4mb(),
             quic: None,
-            headers: safari_headers("16.0"),
+            headers: safari_headers_pre_sec_fetch("16.0"),
         }
     }
 
@@ -49,7 +49,7 @@ impl Safari {
             tls: safari_tls_legacy(),
             http2: safari_http2_2mb(),
             quic: None,
-            headers: safari_headers("17.0"),
+            headers: safari_headers_v17("17.0"),
         }
     }
 
@@ -59,7 +59,7 @@ impl Safari {
             tls: safari_tls_legacy(),
             http2: safari_http2_4mb(),
             quic: None,
-            headers: safari_headers("18.0"),
+            headers: safari_headers_v18("18.0"),
         }
     }
 
@@ -69,7 +69,7 @@ impl Safari {
             tls: safari_tls_v18_3(),
             http2: safari_http2_4mb(),
             quic: None,
-            headers: safari_headers("18.3"),
+            headers: safari_headers_v18("18.3"),
         }
     }
 
@@ -230,13 +230,44 @@ fn safari_http2_2mb() -> Http2Config {
 
 // ========== Headers ==========
 
-fn safari_headers(version: &str) -> Vec<(String, String)> {
-    let ua = format!(
+fn safari_ua(version: &str) -> String {
+    format!(
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/{version} Safari/605.1.15"
-    );
+    )
+}
+
+/// Safari 15.6–16.0: No Sec-Fetch headers (added in Safari 16.4), no Priority header.
+fn safari_headers_pre_sec_fetch(version: &str) -> Vec<(String, String)> {
+    vec![
+        ("user-agent".into(), safari_ua(version)),
+        ("accept".into(), "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8".into()),
+        ("upgrade-insecure-requests".into(), "1".into()),
+        ("accept-language".into(), "en-US,en;q=0.9".into()),
+        ("accept-encoding".into(), "gzip, deflate, br".into()),
+    ]
+}
+
+/// Safari 17.0: Has Sec-Fetch headers (16.4+), but no Priority header yet.
+fn safari_headers_v17(version: &str) -> Vec<(String, String)> {
     vec![
         ("sec-fetch-dest".into(), "document".into()),
-        ("user-agent".into(), ua),
+        ("user-agent".into(), safari_ua(version)),
+        ("upgrade-insecure-requests".into(), "1".into()),
+        ("accept".into(), "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8".into()),
+        ("sec-fetch-site".into(), "none".into()),
+        ("sec-fetch-mode".into(), "navigate".into()),
+        ("accept-language".into(), "en-US,en;q=0.9".into()),
+        ("accept-encoding".into(), "gzip, deflate, br".into()),
+    ]
+}
+
+/// Safari 18.0+: Sec-Fetch + Priority + Upgrade-Insecure-Requests.
+/// Order verified against real Safari 18.2 capture (Apple DTS Engineer, macOS 15.2).
+fn safari_headers_v18(version: &str) -> Vec<(String, String)> {
+    vec![
+        ("sec-fetch-dest".into(), "document".into()),
+        ("user-agent".into(), safari_ua(version)),
+        ("upgrade-insecure-requests".into(), "1".into()),
         ("accept".into(), "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8".into()),
         ("sec-fetch-site".into(), "none".into()),
         ("sec-fetch-mode".into(), "navigate".into()),

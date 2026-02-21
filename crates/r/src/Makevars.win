@@ -17,12 +17,15 @@ all: C_clean
 
 $(SHLIB): $(STATLIB)
 
+KOON_CORE_DIR = D:/Projekte/browser-clone/crates/core
+
 $(STATLIB):
 	mkdir -p $(TARGET_DIR)/libgcc_mock
 	cd $(TARGET_DIR)/libgcc_mock && \
 		touch gcc_mock.c && \
 		gcc -c gcc_mock.c -o gcc_mock.o && \
 		ar -r libgcc_eh.a gcc_mock.o
+	sed -i 's|path = "../../../core"|path = "$(KOON_CORE_DIR)"|' ./rust/Cargo.toml
 	PATH="$(CARGO_BIN):/c/PROGRA~1/Git/cmd:$(PATH)" \
 	BINDGEN_EXTRA_CLANG_ARGS="$(BINDGEN_ARGS)" \
 		cargo build --lib --release --manifest-path=./rust/Cargo.toml --target $(TARGET) --target-dir $(TARGET_DIR)

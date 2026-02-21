@@ -2,6 +2,18 @@
 
 All notable changes to koon will be documented in this file.
 
+## [0.4.2] - 2026-02-21
+
+### Fixed
+- **Firefox headers**: Added missing `upgrade-insecure-requests: 1` and `sec-fetch-user: ?1` headers
+  (real Firefox sends both; missing headers were detectable by anti-bot systems like Datadome)
+- **Safari headers**: Version-specific header sets matching real browser behavior:
+  - Safari 15.6–16.0: No `sec-fetch-*` headers (added in WebKit 16.4), no `priority` header
+  - Safari 17.0: Added `sec-fetch-*` headers, no `priority` header
+  - Safari 18.0+: Added `upgrade-insecure-requests: 1`, `priority: u=0, i`
+  - Header order verified against real Safari 18.2 capture (Apple DTS Engineer, macOS 15.2)
+- **R build**: Fixed `koon-core` path resolution when `R CMD INSTALL` copies to temp directory
+
 ## [0.4.1] - 2026-02-21
 
 ### Added

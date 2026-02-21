@@ -275,9 +275,11 @@ fn firefox_headers(major: u32, os: Os) -> Vec<(String, String)> {
         ("accept".into(), "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8".into()),
         ("accept-language".into(), "en-US,en;q=0.5".into()),
         ("accept-encoding".into(), "gzip, deflate, br, zstd".into()),
+        ("upgrade-insecure-requests".into(), "1".into()),
         ("sec-fetch-dest".into(), "document".into()),
         ("sec-fetch-mode".into(), "navigate".into()),
         ("sec-fetch-site".into(), "none".into()),
+        ("sec-fetch-user".into(), "?1".into()),
         ("priority".into(), "u=0, i".into()),
     ]
 }
