@@ -2,6 +2,19 @@
 
 All notable changes to koon will be documented in this file.
 
+## [0.4.1] - 2026-02-21
+
+### Added
+- **R Bindings** (`koon-r`): R package via extendr for browser-impersonating HTTP requests
+  - `Koon$new(browser, proxy, timeout, randomize, headers)` — create client with browser profile
+  - `$get(url)`, `$post(url, body)`, `$put(url, body)`, `$delete(url)`, `$patch(url, body)`, `$head(url)` — synchronous HTTP methods
+  - Response as R list: `$status` (integer), `$version`, `$url`, `$body` (raw), `$text` (character), `$headers` (data.frame)
+  - `$save_session()` / `$load_session(json)` — session persistence (cookies + TLS)
+  - `$export_profile()` — export browser profile as JSON
+  - `koon_browsers()` — list all available browser profiles
+  - All requests synchronous via `tokio::Runtime::block_on()` (R is single-threaded)
+  - Build via `rextendr::document()` or `R CMD INSTALL`
+
 ## [0.4.0] - 2026-02-21
 
 ### Refactored

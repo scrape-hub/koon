@@ -1,0 +1,16 @@
+Package: koon
+Title: Browser-Impersonating HTTP Client
+Version: 0.4.0
+Authors@R: person("hrylx", email = "hrylx@users.noreply.github.com", role = c("aut", "cre"))
+Description: HTTP client that impersonates real browser TLS, HTTP/2 and HTTP/3
+    fingerprints. Supports Chrome, Firefox, Safari, Edge, and Opera profiles.
+    Passes Akamai, Cloudflare, and other bot detection systems by reproducing
+    exact browser fingerprints verified against real browser captures.
+License: MIT + file LICENSE
+SystemRequirements: Cargo (Rust's package manager), rustc >= 1.85
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Suggests: jsonlite, testthat (>= 3.0.0)
+Config/testthat/edition: 3
+Config/rextendr/version: 0.4.2

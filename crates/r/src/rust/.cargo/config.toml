@@ -1,0 +1,2 @@
+[env]
+BINDGEN_EXTRA_CLANG_ARGS = { value = "--target=x86_64-pc-windows-gnu -isystem C:/Program Files/LLVM/lib/clang/21/include -isystem C:/rtools44/x86_64-w64-mingw32.static.posix/include", force = true }

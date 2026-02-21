@@ -1,0 +1,17 @@
+TARGET_DIR = ./rust/target
+LIBDIR = $(TARGET_DIR)/release
+STATLIB = $(LIBDIR)/libkoon_r.a
+PKG_LIBS = -L$(LIBDIR) -lkoon_r -lssl -lcrypto -lpthread -ldl -lm
+
+all: C_clean
+
+$(SHLIB): $(STATLIB)
+
+$(STATLIB):
+	cargo build --lib --release --manifest-path=./rust/Cargo.toml --target-dir $(TARGET_DIR)
+
+C_clean:
+	rm -Rf $(SHLIB) $(STATLIB) $(OBJECTS)
+
+clean:
+	rm -Rf $(SHLIB) $(OBJECTS) $(TARGET_DIR)

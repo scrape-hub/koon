@@ -1,0 +1,34 @@
+TARGET = $(subst 64,x86_64,$(subst 32,i686,$(WIN)))-pc-windows-gnu
+TARGET_DIR = ./rust/target
+LIBDIR = $(TARGET_DIR)/$(TARGET)/release
+STATLIB = $(LIBDIR)/koon_r.lib
+PKG_LIBS = -L$(LIBDIR) -lkoon_r -lws2_32 -lbcrypt -luserenv -lntdll -lcrypt32 -lsecur32
+
+# Tools paths (forward slashes for MSYS2 shell)
+CARGO_BIN = $(subst \,/,$(USERPROFILE))/.cargo/bin
+
+# bindgen include paths (no spaces — use 8.3 names)
+CLANG_INC = C:/PROGRA~1/LLVM/lib/clang/21/include
+GCC_INC = C:/rtools44/x86_64-w64-mingw32.static.posix/lib/gcc/x86_64-w64-mingw32.static.posix/13.2.0/include
+MINGW_INC = C:/rtools44/x86_64-w64-mingw32.static.posix/include
+BINDGEN_ARGS = --target=x86_64-pc-windows-gnu -isystem $(CLANG_INC) -isystem $(GCC_INC) -isystem $(MINGW_INC)
+
+all: C_clean
+
+$(SHLIB): $(STATLIB)
+
+$(STATLIB):
+	mkdir -p $(TARGET_DIR)/libgcc_mock
+	cd $(TARGET_DIR)/libgcc_mock && \
+		touch gcc_mock.c && \
+		gcc -c gcc_mock.c -o gcc_mock.o && \
+		ar -r libgcc_eh.a gcc_mock.o
+	PATH="$(CARGO_BIN):/c/PROGRA~1/Git/cmd:$(PATH)" \
+	BINDGEN_EXTRA_CLANG_ARGS="$(BINDGEN_ARGS)" \
+		cargo build --lib --release --manifest-path=./rust/Cargo.toml --target $(TARGET) --target-dir $(TARGET_DIR)
+
+C_clean:
+	rm -Rf $(SHLIB) $(STATLIB) $(OBJECTS)
+
+clean:
+	rm -Rf $(SHLIB) $(OBJECTS) $(TARGET_DIR)

@@ -6,6 +6,9 @@ members = [
     "crates/node",
     "crates/python",
 ]
+exclude = [
+    "crates/r/src/rust",
+]
 
 # Exclude koon-node from `cargo test` — it's a cdylib that requires Node.js
 # runtime for napi symbol resolution. Running it without Node produces hundreds

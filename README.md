@@ -2,7 +2,7 @@
 
 An HTTP client that impersonates real browsers at the TLS, HTTP/2, and HTTP/3 fingerprint level.
 
-Built in Rust on top of BoringSSL with native bindings for **Node.js**, **Python**, and a **CLI**. Passes Akamai, Cloudflare, and other bot detection systems by reproducing exact browser fingerprints — verified against real browser captures.
+Built in Rust on top of BoringSSL with native bindings for **Node.js**, **Python**, **R**, and a **CLI**. Passes Akamai, Cloudflare, and other bot detection systems by reproducing exact browser fingerprints — verified against real browser captures.
 
 ## Install
 
@@ -14,6 +14,12 @@ npm install koon
 **Python**
 ```bash
 pip install koon
+```
+
+**R**
+```r
+# Install from source (requires Rust toolchain)
+remotes::install_github("hrylx/koon", subdir = "crates/r")
 ```
 
 **CLI** — download from [Releases](https://github.com/hrylx/koon/releases), or:
@@ -39,6 +45,16 @@ from koon import Koon
 client = Koon("chrome145")
 r = await client.get("https://example.com")
 print(r.status, r.text())
+```
+
+**R**
+```r
+library(koon)
+
+client <- Koon$new("chrome145")
+resp <- client$get("https://example.com")
+resp$status  # 200
+resp$text    # body as string
 ```
 
 **CLI**
@@ -220,6 +236,48 @@ async def main():
 asyncio.run(main())
 ```
 
+### R
+
+```r
+library(koon)
+
+# Browser profile + options
+client <- Koon$new("chrome145", proxy = "socks5://127.0.0.1:1080", randomize = TRUE)
+
+# HTTP methods (synchronous)
+resp <- client$get("https://httpbin.org/get")
+resp <- client$post("https://httpbin.org/post", charToRaw("data"))
+resp <- client$put("https://httpbin.org/put", charToRaw("data"))
+resp <- client$delete("https://httpbin.org/delete")
+resp <- client$patch("https://httpbin.org/patch", charToRaw("data"))
+resp <- client$head("https://httpbin.org/get")
+
+# Response
+resp$status     # 200
+resp$version    # "HTTP/2.0"
+resp$text       # body as string
+resp$body       # raw vector
+resp$headers    # data.frame with name + value columns
+
+# Parse JSON (via jsonlite)
+data <- jsonlite::fromJSON(resp$text)
+
+# Cookies persist automatically
+client$get("https://httpbin.org/cookies/set/name/value")
+resp <- client$get("https://httpbin.org/cookies")
+
+# Session save/load
+json <- client$save_session()
+client2 <- Koon$new("chrome145")
+client2$load_session(json)
+
+# Export profile as JSON
+client$export_profile()
+
+# List all browsers
+koon_browsers()
+```
+
 ### CLI
 
 ```bash
@@ -300,6 +358,7 @@ async fn main() -> Result<(), koon_core::Error> {
 koon-core         Rust library — TLS, HTTP/2, HTTP/3, profiles, proxy
 koon-node         Node.js native addon via napi-rs
 koon-python       Python extension via PyO3 + maturin
+koon-r            R package via extendr
 koon-cli          Command-line interface via clap
 ```
 
@@ -309,6 +368,7 @@ Key dependencies:
 - [quinn](https://github.com/quinn-rs/quinn) + [h3](https://github.com/hyperium/h3) — QUIC / HTTP/3
 - [napi-rs](https://napi.rs) — Rust to Node.js bridge
 - [PyO3](https://pyo3.rs) + [maturin](https://github.com/PyO3/maturin) — Rust to Python bridge
+- [extendr](https://extendr.rs) — Rust to R bridge
 
 ## Building from source
 
@@ -329,6 +389,9 @@ cargo build --release -p koon-node
 
 # Python package
 cd crates/python && pip install -e .
+
+# R package
+cd crates/r && Rscript -e "rextendr::document(); devtools::install()"
 
 # CLI binary
 cargo build --release -p koon-cli
