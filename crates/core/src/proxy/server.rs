@@ -403,11 +403,16 @@ async fn handle_plain_http(
         Ok(resp) => {
             let mut buf = format!("HTTP/1.1 {} OK\r\n", resp.status);
             for (name, value) in &resp.headers {
+                let lower = name.to_lowercase();
+                if matches!(
+                    lower.as_str(),
+                    "transfer-encoding" | "content-encoding" | "content-length"
+                ) {
+                    continue;
+                }
                 buf.push_str(&format!("{name}: {value}\r\n"));
             }
-            if !resp.headers.iter().any(|(k, _)| k == "content-length") {
-                buf.push_str(&format!("content-length: {}\r\n", resp.body.len()));
-            }
+            buf.push_str(&format!("content-length: {}\r\n", resp.body.len()));
             buf.push_str("\r\n");
             stream.write_all(buf.as_bytes()).await.map_err(Error::Io)?;
             stream.write_all(&resp.body).await.map_err(Error::Io)?;
@@ -536,23 +541,20 @@ async fn write_proxy_response<S: tokio::io::AsyncWrite + Unpin>(
     let reason = status_reason(resp.status);
     let mut buf = format!("HTTP/1.1 {} {reason}\r\n", resp.status);
 
-    // Write response headers, skipping transfer-encoding (we send content-length)
-    let mut has_content_length = false;
+    // Write response headers, replacing content-length with actual body size.
+    // Skip transfer-encoding and content-encoding because koon already decompresses
+    // the body — the original content-length/encoding refer to the compressed payload.
     for (name, value) in &resp.headers {
         let lower = name.to_lowercase();
-        if lower == "transfer-encoding" {
-            continue; // We'll use content-length instead
-        }
-        if lower == "content-length" {
-            has_content_length = true;
+        if matches!(
+            lower.as_str(),
+            "transfer-encoding" | "content-encoding" | "content-length"
+        ) {
+            continue;
         }
         buf.push_str(&format!("{name}: {value}\r\n"));
     }
-
-    // Add content-length if missing
-    if !has_content_length {
-        buf.push_str(&format!("content-length: {}\r\n", resp.body.len()));
-    }
+    buf.push_str(&format!("content-length: {}\r\n", resp.body.len()));
 
     buf.push_str("\r\n");
     stream.write_all(buf.as_bytes()).await.map_err(Error::Io)?;

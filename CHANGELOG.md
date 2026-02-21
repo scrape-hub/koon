@@ -28,6 +28,8 @@ All notable changes to koon will be documented in this file.
 ### Fixed
 - **Python**: `KoonStreamingResponse` and `KoonProxy` now exported from `koon.__init__`
 - **Core**: `Opera` profile module now re-exported from `koon_core`
+- **Proxy**: Fix truncated response bodies — content-length and content-encoding headers now
+  replaced with actual decompressed body size (koon auto-decompresses gzip/brotli/zstd)
 
 ## [0.3.5] - 2026-02-21
 
