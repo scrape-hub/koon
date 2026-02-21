@@ -1,177 +1,217 @@
 # koon
 
-Browser-impersonating HTTP client. Matches real browser TLS, HTTP/2, and HTTP/3 fingerprints to bypass bot detection (Akamai, Cloudflare, etc.).
+An HTTP client that impersonates real browsers at the TLS, HTTP/2, and HTTP/3 fingerprint level.
 
-Built in Rust with BoringSSL. Bindings for Node.js (napi-rs) and Python (PyO3).
+Built in Rust on top of BoringSSL with native bindings for **Node.js**, **Python**, and a **CLI**. Passes Akamai, Cloudflare, and other bot detection systems by reproducing exact browser fingerprints — verified against real browser captures.
+
+## Quick start
+
+**Node.js**
+```javascript
+const { Koon } = require('koon');
+
+const client = new Koon({ browser: 'chrome145' });
+const response = await client.get('https://example.com');
+console.log(response.status); // 200
+```
+
+**Python**
+```python
+from koon import Koon
+
+client = Koon("chrome145")
+r = await client.get("https://example.com")
+print(r.status, r.text())
+```
+
+**CLI**
+```bash
+koon -b chrome145 https://example.com
+```
+
+**Rust**
+```rust
+use koon_core::{Client, profile::Chrome};
+
+let client = Client::new(Chrome::v145_windows());
+let r = client.get("https://example.com").await?;
+```
+
+## What it does
+
+koon reproduces three fingerprint layers that bot detection systems check:
+
+| Layer | What's fingerprinted | How koon matches it |
+|-------|---------------------|-------------------|
+| **TLS** | Cipher suites, curves, extensions, ALPN, GREASE, ALPS | BoringSSL with per-browser config (JA3/JA4 verified) |
+| **HTTP/2** | SETTINGS order, pseudo-header order, WINDOW_UPDATE, PRIORITY frames | Forked h2 crate with header ordering API (Akamai hash verified) |
+| **HTTP/3** | QUIC transport params, H3 settings | Quinn + h3 with browser-matching config |
+
+All fingerprints are tested against hashes captured from real browsers. 10 integration tests verify JA3N, JA4, and Akamai hashes for Chrome, Firefox, Safari, Edge, and Opera.
+
+## Supported browsers
+
+| Browser | Versions | Profiles |
+|---------|----------|----------|
+| Chrome | 131 - 145 | 15 |
+| Firefox | 135 - 147 | 13 |
+| Safari | 15.6 - 18.3 | 11 |
+| Edge | 131 - 145 | 15 |
+| Opera | 124 - 127 | 4 |
+
+Each profile includes Windows, macOS, and Linux user-agent variants (`chrome145-macos`, `firefox147-linux`, etc.). **134 profiles** total.
 
 ## Features
 
-- **134 browser profiles** — Chrome 131-145, Firefox 135-147, Safari 15.6-18.3, Edge 131-145, Opera 124-127
-- **TLS fingerprint** — JA3/JA4 match via cipher list, curves, sigalgs, extensions, GREASE, ALPS, ECH
-- **HTTP/2 fingerprint** — Akamai hash match via settings order, pseudo-header order, priority frames, window sizes
-- **HTTP/3 (QUIC)** — Alt-Svc discovery, QUIC transport fingerprinting, connection pooling
-- **Header order** — Preserved in both HTTP/2 (forked h2 crate) and HTTP/1.1
-- **Cookie jar** — Automatic cookie persistence with domain/path/expiry matching
-- **Proxy** — HTTP CONNECT and SOCKS5
-- **MITM proxy server** — Local proxy that re-sends traffic with fingerprinted TLS/H2
-- **WebSocket** — `wss://` with browser-matching TLS handshake
-- **Streaming** — Chunked response body streaming
-- **Multipart** — Form-data file uploads
-- **Session persistence** — Save/load cookies and TLS session tickets
-- **DNS-over-HTTPS** — Cloudflare/Google DoH with ECH support
-- **Fingerprint randomization** — Slight jitter on UA build, accept-language q-values, H2 windows
-- **OS variants** — Windows, macOS, Linux user-agents per profile
+- **TLS fingerprint** — cipher list, curves, sigalgs, extension order, GREASE, ALPS, cert compression, delegated credentials
+- **HTTP/2 fingerprint** — SETTINGS order, pseudo-header order, stream dependencies, priority frames, window sizes
+- **HTTP/3 (QUIC)** — Alt-Svc discovery, QUIC transport parameter fingerprinting, H3 connection pooling
+- **Header order preservation** — HTTP/2 (via forked h2) and HTTP/1.1
+- **Encrypted Client Hello** — real ECH from DNS HTTPS records, with GREASE fallback
+- **DNS-over-HTTPS** — Cloudflare and Google resolvers with ECH config discovery
+- **TLS session resumption** — session ticket caching across requests
+- **Cookie jar** — automatic persistence with domain/path/expiry/Secure/HttpOnly/SameSite
+- **Proxy** — HTTP CONNECT and SOCKS5, with H3 fallback to H2 through proxies
+- **MITM proxy server** — local proxy that re-sends all traffic through koon's fingerprinted stack
+- **WebSocket** — `wss://` connections with browser-matching TLS handshake
+- **Streaming responses** — chunked body streaming with async iterator support
+- **Multipart form-data** — file uploads with custom content types
+- **Session persistence** — save/load cookies and TLS session tickets to JSON
+- **Fingerprint randomization** — slight jitter on UA build number, accept-language q-values, H2 window sizes
+- **Response decompression** — gzip, brotli, deflate, zstd (automatic)
+- **Connection pooling** — H3 multiplexed + H2 multiplexed + H1.1 keep-alive
 
-## CLI
+## Installation
 
-```bash
-# Build
-cargo build --release -p koon-cli
-
-# Simple GET
-koon https://example.com
-
-# Browser profile + verbose
-koon -b firefox147 -v https://httpbin.org/get
-
-# POST with body
-koon -b chrome145 -X POST -d '{"key":"value"}' https://httpbin.org/post
-
-# Custom headers
-koon -b safari18.3 -H "Authorization: Bearer token" https://api.example.com
-
-# JSON output (status, headers, body)
-koon -b chrome145 --json https://httpbin.org/get
-
-# Save to file
-koon -b chrome145 -o response.html https://example.com
-
-# With proxy
-koon -b chrome145 --proxy socks5://127.0.0.1:1080 https://example.com
-
-# Session persistence
-koon -b chrome145 --save-session session.json https://example.com/login
-koon -b chrome145 --load-session session.json https://example.com/dashboard
-
-# Fingerprint randomization
-koon -b chrome145 --randomize https://example.com
-
-# DNS-over-HTTPS
-koon -b chrome145 --doh cloudflare https://example.com
-
-# OS-specific profile
-koon -b chrome145-macos https://example.com
-
-# List all profiles
-koon --list-browsers
-
-# Export profile as JSON
-koon --export-profile chrome145
-
-# MITM proxy server
-koon proxy --browser chrome145 --listen 127.0.0.1:8080
-```
-
-## Node.js
+### Node.js
 
 ```bash
-# Build native addon
 cargo build --release -p koon-node
-# Copy: target/release/koon_node.dll -> ./koon.win32-x64-msvc.node (Windows)
-# Copy: target/release/libkoon_node.so -> ./koon.linux-x64-gnu.node (Linux)
-# Copy: target/release/libkoon_node.dylib -> ./koon.darwin-x64.node (macOS)
 ```
+Copy the built binary to your project:
+```
+# Windows
+cp target/release/koon_node.dll node_modules/koon/koon.win32-x64-msvc.node
+
+# Linux
+cp target/release/libkoon_node.so node_modules/koon/koon.linux-x64-gnu.node
+
+# macOS
+cp target/release/libkoon_node.dylib node_modules/koon/koon.darwin-x64.node
+```
+
+### Python
+
+```bash
+cd crates/python
+pip install -e .
+```
+
+### CLI
+
+```bash
+cargo build --release -p koon-cli
+# Binary at target/release/koon (or koon.exe on Windows)
+```
+
+### Rust
+
+```toml
+[dependencies]
+koon-core = { git = "https://github.com/hrylx/koon.git" }
+```
+
+## Usage
+
+### Node.js
 
 ```javascript
-const { Koon } = require('./koon.win32-x64-msvc.node');
+const { Koon } = require('koon');
 
-// GET request
-const client = new Koon({ browser: 'chrome145' });
-const response = await client.get('https://example.com');
-console.log(response.status);                          // 200
-console.log(response.version);                         // "HTTP/2.0"
-console.log(Buffer.from(response.body).toString());    // HTML
+// Browser profile + custom headers
+const client = new Koon({
+  browser: 'chrome145',
+  headers: { 'X-Custom': 'value' },
+  proxy: 'socks5://127.0.0.1:1080',  // optional
+  randomize: true,                     // optional: slight fingerprint jitter
+});
 
-// POST
-const r = await client.post('https://httpbin.org/post', Buffer.from('data'));
+// HTTP methods
+const r1 = await client.get('https://httpbin.org/get');
+const r2 = await client.post('https://httpbin.org/post', Buffer.from('data'));
+const r3 = await client.put('https://httpbin.org/put', Buffer.from('data'));
+const r4 = await client.delete('https://httpbin.org/delete');
+const r5 = await client.patch('https://httpbin.org/patch', Buffer.from('data'));
+const r6 = await client.head('https://httpbin.org/get');
 
-// Custom headers
-const custom = new Koon({ browser: 'firefox147', headers: { 'X-Custom': 'value' } });
+// Response
+console.log(r1.status);                        // 200
+console.log(r1.version);                        // "HTTP/2.0"
+console.log(Buffer.from(r1.body).toString());   // response body
 
-// With proxy
-const proxied = new Koon({ browser: 'chrome145', proxy: 'socks5://127.0.0.1:1080' });
-
-// Randomized fingerprint
-const rand = new Koon({ browser: 'chrome145', randomize: true });
-
-// Cookie persistence
+// Cookies persist automatically
 await client.get('https://httpbin.org/cookies/set/name/value');
-const cookies = await client.get('https://httpbin.org/cookies');
-// cookies.body contains {"cookies": {"name": "value"}}
+const r = await client.get('https://httpbin.org/cookies');
 
 // Session save/load
-const session = client.saveSession();
+const session = client.saveSession();           // JSON string
 const client2 = new Koon({ browser: 'chrome145' });
 client2.loadSession(session);
+
+// File: save/load to disk
+client.saveSessionToFile('session.json');
+client2.loadSessionFromFile('session.json');
 
 // WebSocket
 const ws = await client.websocket('wss://echo.websocket.org');
 await ws.send('hello');
-const msg = await ws.receive();
+const msg = await ws.receive();  // { isText: true, data: Buffer }
 await ws.close();
 
 // Streaming
 const stream = await client.requestStreaming('GET', 'https://example.com/large');
 console.log(stream.status);
-const body = await stream.collect();
+const body = await stream.collect();  // or iterate with nextChunk()
 
 // Multipart upload
-const r = await client.postMultipart('https://httpbin.org/post', [
+await client.postMultipart('https://httpbin.org/post', [
   { name: 'field', value: 'text' },
-  { name: 'file', fileData: Buffer.from('content'), filename: 'test.txt', contentType: 'text/plain' },
+  { name: 'file', fileData: Buffer.from('...'), filename: 'upload.txt', contentType: 'text/plain' },
 ]);
 
-// Profile export
-console.log(client.exportProfile()); // Full JSON profile
+// MITM proxy
+const { KoonProxy } = require('koon');
+const proxy = await KoonProxy.start({ browser: 'chrome145', listenAddr: '127.0.0.1:8080' });
+console.log(proxy.url);         // http://127.0.0.1:8080
+console.log(proxy.caCertPath);  // path to CA cert for trust
+await proxy.shutdown();
 ```
 
-## Python
-
-```bash
-# Build and install
-cd crates/python
-pip install -e .
-```
+### Python
 
 ```python
 import asyncio
 from koon import Koon
 
 async def main():
-    # GET request
-    client = Koon("chrome145")
-    r = await client.get("https://example.com")
-    print(r.status)         # 200
-    print(r.version)        # "HTTP/2.0"
-    print(r.text())         # HTML
+    client = Koon("chrome145", headers={"X-Custom": "value"})
 
-    # POST
+    # HTTP methods
+    r = await client.get("https://httpbin.org/get")
     r = await client.post("https://httpbin.org/post", b"data")
-    print(r.json())
+    r = await client.put("https://httpbin.org/put", b"data")
+    r = await client.delete("https://httpbin.org/delete")
+    r = await client.patch("https://httpbin.org/patch", b"data")
+    r = await client.head("https://httpbin.org/get")
 
-    # Custom headers
-    custom = Koon("firefox147", headers={"X-Custom": "value"})
+    # Response
+    print(r.status)    # 200
+    print(r.text())    # body as string
+    print(r.json())    # parsed JSON
 
-    # With proxy
-    proxied = Koon("chrome145", proxy="socks5://127.0.0.1:1080")
-
-    # Randomized fingerprint
-    rand = Koon("chrome145", randomize=True)
-
-    # Cookie persistence
+    # Cookies persist automatically
     await client.get("https://httpbin.org/cookies/set/name/value")
     r = await client.get("https://httpbin.org/cookies")
-    print(r.json()["cookies"])  # {"name": "value"}
 
     # Session save/load
     session = client.save_session()
@@ -189,44 +229,113 @@ async def main():
     body = await stream.collect()
 
     # Multipart upload
-    r = await client.post_multipart("https://httpbin.org/post", [
+    await client.post_multipart("https://httpbin.org/post", [
         {"name": "field", "value": "text"},
-        {"name": "file", "file_data": b"content", "filename": "test.txt", "content_type": "text/plain"},
+        {"name": "file", "file_data": b"...", "filename": "upload.txt", "content_type": "text/plain"},
     ])
+
+    # MITM proxy
+    from koon import KoonProxy
+    proxy = await KoonProxy.start(browser="chrome145", listen_addr="127.0.0.1:8080")
+    print(proxy.url)
+    await proxy.shutdown()
 
 asyncio.run(main())
 ```
 
-## Rust (as library)
+### CLI
 
-```toml
-[dependencies]
-koon-core = { git = "https://github.com/hrylx/koon.git" }
+```bash
+# GET with browser profile
+koon -b chrome145 https://example.com
+
+# POST with body
+koon -b firefox147 -X POST -d '{"key":"value"}' https://httpbin.org/post
+
+# Custom headers
+koon -b safari18.3 -H "Authorization: Bearer token" https://api.example.com
+
+# Verbose output (request/response headers)
+koon -b chrome145 -v https://httpbin.org/get
+
+# JSON output
+koon -b chrome145 --json https://httpbin.org/get
+
+# Save response to file
+koon -b chrome145 -o page.html https://example.com
+
+# Proxy
+koon -b chrome145 --proxy socks5://127.0.0.1:1080 https://example.com
+
+# Session persistence
+koon -b chrome145 --save-session session.json https://example.com/login
+koon -b chrome145 --load-session session.json https://example.com/dashboard
+
+# DNS-over-HTTPS
+koon -b chrome145 --doh cloudflare https://example.com
+
+# OS-specific user-agent
+koon -b chrome145-macos https://example.com
+
+# Fingerprint randomization
+koon -b chrome145 --randomize https://example.com
+
+# List all browser profiles
+koon --list-browsers
+
+# Export profile as JSON
+koon --export-profile chrome145
+
+# Start MITM proxy
+koon proxy --browser chrome145 --listen 127.0.0.1:8080
 ```
+
+### Rust
 
 ```rust
 use koon_core::{BrowserProfile, Client};
 use koon_core::profile::Chrome;
 
 #[tokio::main]
-async fn main() {
-    let profile = Chrome::v145_windows();
+async fn main() -> Result<(), koon_core::Error> {
+    // From a specific profile constructor
+    let client = Client::new(Chrome::v145_windows());
+
+    // Or resolve by name (supports "chrome145", "firefox147-linux", etc.)
+    let profile = BrowserProfile::resolve("chrome145")?;
     let client = Client::new(profile);
 
-    let response = client.get("https://example.com").await.unwrap();
-    println!("{} {}", response.status, response.version);
-    println!("{}", String::from_utf8_lossy(&response.body));
+    let r = client.get("https://example.com").await?;
+    println!("{} {} ({} bytes)", r.status, r.version, r.body.len());
+
+    Ok(())
 }
 ```
 
 ## Build requirements
 
-- Rust 1.85+
-- CMake (for BoringSSL)
-- NASM (for BoringSSL asm on Windows)
-- Visual Studio Build Tools (Windows) or GCC/Clang (Linux/macOS)
-- Python 3.9+ and maturin (for Python bindings)
+- **Rust** 1.85+
+- **CMake** (BoringSSL build)
+- **NASM** (BoringSSL assembly optimizations, Windows)
+- **C compiler** — Visual Studio Build Tools (Windows) or GCC/Clang (Linux/macOS)
+- **Python 3.9+** and **maturin** (only for Python bindings)
+
+## Architecture
+
+```
+koon-core         Rust library — TLS, HTTP/2, HTTP/3, profiles, proxy
+koon-node         Node.js native addon via napi-rs
+koon-python       Python extension via PyO3 + maturin
+koon-cli          Command-line interface via clap
+```
+
+Key dependencies:
+- [boring2](https://github.com/0x676e67/boring2) — BoringSSL Rust bindings
+- [http2](https://github.com/hrylx/http2) (fork) — HTTP/2 with header field ordering
+- [quinn](https://github.com/quinn-rs/quinn) + [h3](https://github.com/hyperium/h3) — QUIC / HTTP/3
+- [napi-rs](https://napi.rs) — Rust to Node.js bridge
+- [PyO3](https://pyo3.rs) + [maturin](https://github.com/PyO3/maturin) — Rust to Python bridge
 
 ## License
 
-MIT
+[MIT](LICENSE)
