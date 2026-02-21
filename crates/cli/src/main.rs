@@ -1,8 +1,8 @@
 use clap::{Parser, Subcommand};
 use http::Method;
 use koon_core::{
-    dns::DohResolver, BrowserProfile, Chrome, Client, Edge, Firefox, HeaderMode, Opera,
-    ProxyServer, ProxyServerConfig, Safari,
+    dns::DohResolver, BrowserProfile, Client, HeaderMode,
+    ProxyServer, ProxyServerConfig,
 };
 use serde_json::json;
 use std::collections::HashMap;
@@ -138,121 +138,9 @@ enum Command {
 }
 
 /// Resolve a browser name string to a BrowserProfile.
-///
-/// Supports: chrome, chrome145, chrome145-macos, firefox, firefox147-linux, safari, edge, opera, etc.
-/// Case-insensitive. Without OS suffix, defaults to Windows (or macOS for Safari).
+/// Delegates to `BrowserProfile::resolve()` in koon-core.
 fn resolve_profile(name: &str) -> Result<BrowserProfile, String> {
-    let name = name.to_lowercase();
-    let (browser, os) = if let Some(pos) = name.rfind('-') {
-        let suffix = &name[pos + 1..];
-        if matches!(suffix, "windows" | "macos" | "linux") {
-            (&name[..pos], Some(suffix.to_string()))
-        } else {
-            (name.as_str(), None)
-        }
-    } else {
-        (name.as_str(), None)
-    };
-
-    // Helper to pick os-specific variant
-    macro_rules! pick_os {
-        ($win:expr, $mac:expr, $lin:expr) => {
-            match os.as_deref() {
-                Some("macos") => $mac,
-                Some("linux") => $lin,
-                _ => $win, // default to windows
-            }
-        };
-    }
-
-    macro_rules! pick_os_no_linux {
-        ($win:expr, $mac:expr) => {
-            match os.as_deref() {
-                Some("macos") => $mac,
-                Some("linux") => return Err(format!("No Linux variant for '{name}'")),
-                _ => $win,
-            }
-        };
-    }
-
-    let profile = match browser {
-        // Chrome generic
-        "chrome" => pick_os!(Chrome::latest(), Chrome::v145_macos(), Chrome::v145_linux()),
-
-        // Chrome versioned
-        "chrome131" => pick_os!(Chrome::v131_windows(), Chrome::v131_macos(), Chrome::v131_linux()),
-        "chrome132" => pick_os!(Chrome::v132_windows(), Chrome::v132_macos(), Chrome::v132_linux()),
-        "chrome133" => pick_os!(Chrome::v133_windows(), Chrome::v133_macos(), Chrome::v133_linux()),
-        "chrome134" => pick_os!(Chrome::v134_windows(), Chrome::v134_macos(), Chrome::v134_linux()),
-        "chrome135" => pick_os!(Chrome::v135_windows(), Chrome::v135_macos(), Chrome::v135_linux()),
-        "chrome136" => pick_os!(Chrome::v136_windows(), Chrome::v136_macos(), Chrome::v136_linux()),
-        "chrome137" => pick_os!(Chrome::v137_windows(), Chrome::v137_macos(), Chrome::v137_linux()),
-        "chrome138" => pick_os!(Chrome::v138_windows(), Chrome::v138_macos(), Chrome::v138_linux()),
-        "chrome139" => pick_os!(Chrome::v139_windows(), Chrome::v139_macos(), Chrome::v139_linux()),
-        "chrome140" => pick_os!(Chrome::v140_windows(), Chrome::v140_macos(), Chrome::v140_linux()),
-        "chrome141" => pick_os!(Chrome::v141_windows(), Chrome::v141_macos(), Chrome::v141_linux()),
-        "chrome142" => pick_os!(Chrome::v142_windows(), Chrome::v142_macos(), Chrome::v142_linux()),
-        "chrome143" => pick_os!(Chrome::v143_windows(), Chrome::v143_macos(), Chrome::v143_linux()),
-        "chrome144" => pick_os!(Chrome::v144_windows(), Chrome::v144_macos(), Chrome::v144_linux()),
-        "chrome145" => pick_os!(Chrome::v145_windows(), Chrome::v145_macos(), Chrome::v145_linux()),
-
-        // Firefox generic
-        "firefox" => pick_os!(Firefox::latest(), Firefox::v147_macos(), Firefox::v147_linux()),
-
-        // Firefox versioned
-        "firefox135" => pick_os!(Firefox::v135_windows(), Firefox::v135_macos(), Firefox::v135_linux()),
-        "firefox136" => pick_os!(Firefox::v136_windows(), Firefox::v136_macos(), Firefox::v136_linux()),
-        "firefox137" => pick_os!(Firefox::v137_windows(), Firefox::v137_macos(), Firefox::v137_linux()),
-        "firefox138" => pick_os!(Firefox::v138_windows(), Firefox::v138_macos(), Firefox::v138_linux()),
-        "firefox139" => pick_os!(Firefox::v139_windows(), Firefox::v139_macos(), Firefox::v139_linux()),
-        "firefox140" => pick_os!(Firefox::v140_windows(), Firefox::v140_macos(), Firefox::v140_linux()),
-        "firefox141" => pick_os!(Firefox::v141_windows(), Firefox::v141_macos(), Firefox::v141_linux()),
-        "firefox142" => pick_os!(Firefox::v142_windows(), Firefox::v142_macos(), Firefox::v142_linux()),
-        "firefox143" => pick_os!(Firefox::v143_windows(), Firefox::v143_macos(), Firefox::v143_linux()),
-        "firefox144" => pick_os!(Firefox::v144_windows(), Firefox::v144_macos(), Firefox::v144_linux()),
-        "firefox145" => pick_os!(Firefox::v145_windows(), Firefox::v145_macos(), Firefox::v145_linux()),
-        "firefox146" => pick_os!(Firefox::v146_windows(), Firefox::v146_macos(), Firefox::v146_linux()),
-        "firefox147" => pick_os!(Firefox::v147_windows(), Firefox::v147_macos(), Firefox::v147_linux()),
-
-        // Safari (macOS only)
-        "safari" => Safari::latest(),
-        "safari156" | "safari15.6" => Safari::v15_6_macos(),
-        "safari160" | "safari16.0" => Safari::v16_0_macos(),
-        "safari170" | "safari17.0" => Safari::v17_0_macos(),
-        "safari180" | "safari18.0" => Safari::v18_0_macos(),
-        "safari183" | "safari18.3" => Safari::v18_3_macos(),
-
-        // Edge (Windows + macOS only)
-        "edge" => pick_os_no_linux!(Edge::latest(), Edge::v145_macos()),
-
-        "edge131" => pick_os_no_linux!(Edge::v131_windows(), Edge::v131_macos()),
-        "edge132" => pick_os_no_linux!(Edge::v132_windows(), Edge::v132_macos()),
-        "edge133" => pick_os_no_linux!(Edge::v133_windows(), Edge::v133_macos()),
-        "edge134" => pick_os_no_linux!(Edge::v134_windows(), Edge::v134_macos()),
-        "edge135" => pick_os_no_linux!(Edge::v135_windows(), Edge::v135_macos()),
-        "edge136" => pick_os_no_linux!(Edge::v136_windows(), Edge::v136_macos()),
-        "edge137" => pick_os_no_linux!(Edge::v137_windows(), Edge::v137_macos()),
-        "edge138" => pick_os_no_linux!(Edge::v138_windows(), Edge::v138_macos()),
-        "edge139" => pick_os_no_linux!(Edge::v139_windows(), Edge::v139_macos()),
-        "edge140" => pick_os_no_linux!(Edge::v140_windows(), Edge::v140_macos()),
-        "edge141" => pick_os_no_linux!(Edge::v141_windows(), Edge::v141_macos()),
-        "edge142" => pick_os_no_linux!(Edge::v142_windows(), Edge::v142_macos()),
-        "edge143" => pick_os_no_linux!(Edge::v143_windows(), Edge::v143_macos()),
-        "edge144" => pick_os_no_linux!(Edge::v144_windows(), Edge::v144_macos()),
-        "edge145" => pick_os_no_linux!(Edge::v145_windows(), Edge::v145_macos()),
-
-        // Opera
-        "opera" => pick_os!(Opera::latest(), Opera::v127_macos(), Opera::v127_linux()),
-
-        "opera124" => pick_os!(Opera::v124_windows(), Opera::v124_macos(), Opera::v124_linux()),
-        "opera125" => pick_os!(Opera::v125_windows(), Opera::v125_macos(), Opera::v125_linux()),
-        "opera126" => pick_os!(Opera::v126_windows(), Opera::v126_macos(), Opera::v126_linux()),
-        "opera127" => pick_os!(Opera::v127_windows(), Opera::v127_macos(), Opera::v127_linux()),
-
-        _ => return Err(format!("Unknown browser profile: '{name}'")),
-    };
-
-    Ok(profile)
+    BrowserProfile::resolve(name)
 }
 
 fn list_browsers() {
@@ -300,18 +188,7 @@ fn parse_headers(raw: &[String]) -> Vec<(String, String)> {
         .collect()
 }
 
-fn load_profile(cli: &Cli) -> Result<BrowserProfile, String> {
-    if let Some(ref path) = cli.profile_json {
-        BrowserProfile::from_file(path).map_err(|e| format!("Failed to load profile: {e}"))
-    } else {
-        resolve_profile(&cli.browser)
-    }
-}
-
-fn load_profile_proxy(
-    browser: &str,
-    profile_json: &Option<String>,
-) -> Result<BrowserProfile, String> {
+fn load_profile(browser: &str, profile_json: &Option<String>) -> Result<BrowserProfile, String> {
     if let Some(path) = profile_json {
         BrowserProfile::from_file(path).map_err(|e| format!("Failed to load profile: {e}"))
     } else {
@@ -322,7 +199,7 @@ fn load_profile_proxy(
 async fn run_request(cli: Cli) -> Result<(), String> {
     let url = cli.url.as_deref().ok_or("No URL provided. Use --help for usage.")?;
 
-    let mut profile = load_profile(&cli)?;
+    let mut profile = load_profile(&cli.browser, &cli.profile_json)?;
     if cli.randomize {
         profile.randomize();
     }
@@ -459,7 +336,7 @@ async fn run_proxy(
     timeout: u32,
     randomize: bool,
 ) -> Result<(), String> {
-    let mut profile = load_profile_proxy(&browser, &profile_json)?;
+    let mut profile = load_profile(&browser, &profile_json)?;
     if randomize {
         profile.randomize();
     }

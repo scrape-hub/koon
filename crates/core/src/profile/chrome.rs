@@ -97,6 +97,23 @@ impl Chrome {
     pub fn latest() -> BrowserProfile {
         Self::v145_windows()
     }
+
+    /// Resolve a Chrome profile by version number and optional OS.
+    pub(super) fn resolve(major: u32, os: Option<&str>) -> Result<BrowserProfile, String> {
+        if !(131..=145).contains(&major) {
+            return Err(format!(
+                "Unsupported Chrome version: {major}. Supported: 131-145"
+            ));
+        }
+        let os = match os {
+            Some("macos") => Os::MacOS,
+            Some("linux") => Os::Linux,
+            _ => Os::Windows,
+        };
+        Ok(chrome_profile(major, os))
+    }
+
+    pub(super) const LATEST_VERSION: u32 = 145;
 }
 
 // ========== Internal: OS enum ==========
@@ -247,12 +264,8 @@ pub(super) fn chrome_quic() -> QuicConfig {
 // ========== Headers ==========
 
 /// sec-ch-ua "Not A Brand" string per Chrome version.
-/// Verified from real browser captures against tls.browserleaks.com.
 fn chrome_brand(major: u32) -> &'static str {
-    match major {
-        136 | 145 => "Not/A)Brand",
-        _ => "Not_A Brand",
-    }
+    chromium_brand(major)
 }
 
 fn chrome_headers(major: u32, os: Os) -> Vec<(String, String)> {
@@ -263,21 +276,23 @@ fn chrome_headers(major: u32, os: Os) -> Vec<(String, String)> {
         "\"Chromium\";v=\"{ver}\", \"{brand}\";v=\"24\", \"Google Chrome\";v=\"{ver}\""
     );
 
-    let (platform, user_agent) = match os {
-        Os::Windows => (
-            "\"Windows\"",
-            format!("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{ver}.0.0.0 Safari/537.36"),
-        ),
-        Os::MacOS => (
-            "\"macOS\"",
-            format!("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{ver}.0.0.0 Safari/537.36"),
-        ),
-        Os::Linux => (
-            "\"Linux\"",
-            format!("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{ver}.0.0.0 Safari/537.36"),
-        ),
+    let (platform, ua_suffix) = match os {
+        Os::Windows => ("\"Windows\"", format!("Chrome/{ver}.0.0.0 Safari/537.36")),
+        Os::MacOS => ("\"macOS\"", format!("Chrome/{ver}.0.0.0 Safari/537.36")),
+        Os::Linux => ("\"Linux\"", format!("Chrome/{ver}.0.0.0 Safari/537.36")),
     };
 
+    let user_agent = chromium_ua(platform, &ua_suffix);
+    chromium_headers(sec_ch_ua, platform, user_agent)
+}
+
+/// Build the standard Chromium-based header list.
+/// Used by Chrome, Edge, and Opera with different sec-ch-ua and user-agent values.
+pub(super) fn chromium_headers(
+    sec_ch_ua: String,
+    platform: &str,
+    user_agent: String,
+) -> Vec<(String, String)> {
     vec![
         ("sec-ch-ua".into(), sec_ch_ua),
         ("sec-ch-ua-mobile".into(), "?0".into()),
@@ -293,4 +308,23 @@ fn chrome_headers(major: u32, os: Os) -> Vec<(String, String)> {
         ("accept-language".into(), "en-US,en;q=0.9".into()),
         ("priority".into(), "u=0, i".into()),
     ]
+}
+
+/// Build the standard Chromium user-agent string for a given platform.
+pub(super) fn chromium_ua(platform: &str, suffix: &str) -> String {
+    let os_part = match platform {
+        "\"Windows\"" => "Windows NT 10.0; Win64; x64",
+        "\"macOS\"" => "Macintosh; Intel Mac OS X 10_15_7",
+        "\"Linux\"" => "X11; Linux x86_64",
+        _ => "Windows NT 10.0; Win64; x64",
+    };
+    format!("Mozilla/5.0 ({os_part}) AppleWebKit/537.36 (KHTML, like Gecko) {suffix}")
+}
+
+/// "Not A Brand" string per Chromium version. Shared by Chrome, Edge, Opera.
+pub(super) fn chromium_brand(major: u32) -> &'static str {
+    match major {
+        136 | 145 => "Not/A)Brand",
+        _ => "Not_A Brand",
+    }
 }

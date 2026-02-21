@@ -1,4 +1,4 @@
-use super::chrome::{chrome_http2, chrome_quic, chromium_tls};
+use super::chrome::{chrome_http2, chrome_quic, chromium_brand, chromium_headers, chromium_tls, chromium_ua};
 use super::BrowserProfile;
 
 /// Edge browser profile factory.
@@ -73,6 +73,26 @@ impl Edge {
     pub fn latest() -> BrowserProfile {
         Self::v145_windows()
     }
+
+    /// Resolve an Edge profile by version number and optional OS.
+    /// Edge is available on Windows and macOS only.
+    pub(super) fn resolve(major: u32, os: Option<&str>) -> Result<BrowserProfile, String> {
+        if !(131..=145).contains(&major) {
+            return Err(format!(
+                "Unsupported Edge version: {major}. Supported: 131-145"
+            ));
+        }
+        if os == Some("linux") {
+            return Err("Edge is not available on Linux".to_string());
+        }
+        let os = match os {
+            Some("macos") => Os::MacOS,
+            _ => Os::Windows,
+        };
+        Ok(edge_profile(major, os))
+    }
+
+    pub(super) const LATEST_VERSION: u32 = 145;
 }
 
 #[derive(Clone, Copy)]
@@ -90,46 +110,20 @@ fn edge_profile(major: u32, os: Os) -> BrowserProfile {
     }
 }
 
-/// Edge uses the same "Not A Brand" rotation as Chrome.
-fn edge_brand(major: u32) -> &'static str {
-    match major {
-        136 | 145 => "Not/A)Brand",
-        _ => "Not_A Brand",
-    }
-}
-
 fn edge_headers(major: u32, os: Os) -> Vec<(String, String)> {
-    let brand = edge_brand(major);
+    let brand = chromium_brand(major);
     let ver = major.to_string();
 
     let sec_ch_ua = format!(
         "\"Microsoft Edge\";v=\"{ver}\", \"Chromium\";v=\"{ver}\", \"{brand}\";v=\"24\""
     );
 
-    let (platform, user_agent) = match os {
-        Os::Windows => (
-            "\"Windows\"",
-            format!("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{ver}.0.0.0 Safari/537.36 Edg/{ver}.0.0.0"),
-        ),
-        Os::MacOS => (
-            "\"macOS\"",
-            format!("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{ver}.0.0.0 Safari/537.36 Edg/{ver}.0.0.0"),
-        ),
+    let platform = match os {
+        Os::Windows => "\"Windows\"",
+        Os::MacOS => "\"macOS\"",
     };
 
-    vec![
-        ("sec-ch-ua".into(), sec_ch_ua),
-        ("sec-ch-ua-mobile".into(), "?0".into()),
-        ("sec-ch-ua-platform".into(), platform.into()),
-        ("upgrade-insecure-requests".into(), "1".into()),
-        ("user-agent".into(), user_agent),
-        ("accept".into(), "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7".into()),
-        ("sec-fetch-site".into(), "none".into()),
-        ("sec-fetch-mode".into(), "navigate".into()),
-        ("sec-fetch-user".into(), "?1".into()),
-        ("sec-fetch-dest".into(), "document".into()),
-        ("accept-encoding".into(), "gzip, deflate, br, zstd".into()),
-        ("accept-language".into(), "en-US,en;q=0.9".into()),
-        ("priority".into(), "u=0, i".into()),
-    ]
+    let ua_suffix = format!("Chrome/{ver}.0.0.0 Safari/537.36 Edg/{ver}.0.0.0");
+    let user_agent = chromium_ua(platform, &ua_suffix);
+    chromium_headers(sec_ch_ua, platform, user_agent)
 }

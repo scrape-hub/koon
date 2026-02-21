@@ -67,17 +67,16 @@ pub(crate) async fn write_request<S: AsyncWrite + Unpin>(
     Ok(())
 }
 
-/// Read an HTTP/1.1 response from the stream.
+/// Internal: Read and parse HTTP/1.1 response headers from a stream.
+/// Returns (status, headers, leftover bytes after `\r\n\r\n`).
 ///
-/// Phase 1: Read headers (up to `\r\n\r\n`).
-/// Phase 2: Read body based on Transfer-Encoding or Content-Length.
-pub(crate) async fn read_response<S: AsyncRead + Unpin>(
+/// Shared by `read_response`, `read_response_headers`, and `read_response_for_streaming`.
+async fn read_raw_headers<S: AsyncRead + Unpin>(
     stream: &mut S,
-) -> Result<RawResponse, Error> {
+) -> Result<(u16, Vec<(String, String)>, Vec<u8>), Error> {
     let mut buf = Vec::with_capacity(INITIAL_BUF_SIZE);
     let mut tmp = [0u8; 4096];
 
-    // Phase 1: Read until we find \r\n\r\n (end of headers)
     let header_end;
     loop {
         let n = stream.read(&mut tmp).await?;
@@ -100,7 +99,6 @@ pub(crate) async fn read_response<S: AsyncRead + Unpin>(
         }
     }
 
-    // Parse headers with httparse
     let mut parsed_headers = [httparse::EMPTY_HEADER; MAX_HEADERS];
     let mut response = httparse::Response::new(&mut parsed_headers);
 
@@ -126,9 +124,20 @@ pub(crate) async fn read_response<S: AsyncRead + Unpin>(
         })
         .collect();
 
-    // Remaining bytes after header (already read into buffer)
-    let body_start = header_end + 4; // skip \r\n\r\n
-    let remaining = &buf[body_start..];
+    let body_start = header_end + 4;
+    let remaining = buf[body_start..].to_vec();
+
+    Ok((status, headers, remaining))
+}
+
+/// Read an HTTP/1.1 response from the stream.
+///
+/// Phase 1: Read headers (up to `\r\n\r\n`).
+/// Phase 2: Read body based on Transfer-Encoding or Content-Length.
+pub(crate) async fn read_response<S: AsyncRead + Unpin>(
+    stream: &mut S,
+) -> Result<RawResponse, Error> {
+    let (status, headers, remaining) = read_raw_headers(stream).await?;
 
     // Phase 2: Read body
     let is_chunked = headers
@@ -141,13 +150,11 @@ pub(crate) async fn read_response<S: AsyncRead + Unpin>(
         .and_then(|(_, v)| v.trim().parse().ok());
 
     let body = if is_chunked {
-        read_chunked_body(stream, remaining).await?
+        read_chunked_body(stream, &remaining).await?
     } else if let Some(len) = content_length {
-        read_content_length_body(stream, remaining, len).await?
+        read_content_length_body(stream, &remaining, len).await?
     } else {
-        // No content-length, no chunked — read until close
-        // (for HTTP/1.0 compat, but also handles edge cases)
-        read_until_close(stream, remaining).await?
+        read_until_close(stream, &remaining).await?
     };
 
     Ok(RawResponse {
@@ -297,61 +304,7 @@ pub(crate) struct UpgradeResponse {
 pub(crate) async fn read_response_headers<S: AsyncRead + Unpin>(
     stream: &mut S,
 ) -> Result<UpgradeResponse, Error> {
-    let mut buf = Vec::with_capacity(INITIAL_BUF_SIZE);
-    let mut tmp = [0u8; 4096];
-
-    let header_end;
-    loop {
-        let n = stream.read(&mut tmp).await?;
-        if n == 0 {
-            return Err(Error::ConnectionFailed(
-                "Connection closed before headers complete".into(),
-            ));
-        }
-        buf.extend_from_slice(&tmp[..n]);
-
-        if let Some(pos) = find_header_end(&buf) {
-            header_end = pos;
-            break;
-        }
-
-        if buf.len() > MAX_HEADER_SIZE {
-            return Err(Error::ConnectionFailed(
-                "Response headers exceed 64KB limit".into(),
-            ));
-        }
-    }
-
-    // Parse headers with httparse
-    let mut parsed_headers = [httparse::EMPTY_HEADER; MAX_HEADERS];
-    let mut response = httparse::Response::new(&mut parsed_headers);
-
-    let parse_result = response
-        .parse(&buf[..header_end + 4])
-        .map_err(|e| Error::ConnectionFailed(format!("HTTP/1.1 parse error: {e}")))?;
-
-    if parse_result.is_partial() {
-        return Err(Error::ConnectionFailed(
-            "Incomplete HTTP/1.1 response headers".into(),
-        ));
-    }
-
-    let status = response.code.unwrap_or(0);
-    let headers: Vec<(String, String)> = response
-        .headers
-        .iter()
-        .map(|h| {
-            (
-                h.name.to_lowercase(),
-                String::from_utf8_lossy(h.value).to_string(),
-            )
-        })
-        .collect();
-
-    // Everything after \r\n\r\n is leftover (possibly WebSocket frames)
-    let body_start = header_end + 4;
-    let leftover = buf[body_start..].to_vec();
-
+    let (status, headers, leftover) = read_raw_headers(stream).await?;
     Ok(UpgradeResponse {
         status,
         headers,
@@ -535,61 +488,8 @@ pub(crate) async fn stream_until_close<S: AsyncRead + Unpin>(
 /// This is like `read_response` but stops after headers — for streaming.
 pub(crate) async fn read_response_for_streaming<S: AsyncRead + Unpin>(
     stream: &mut S,
-) -> Result<(u16, Vec<(String, String)>, Vec<u8>), crate::error::Error> {
-    let mut buf = Vec::with_capacity(INITIAL_BUF_SIZE);
-    let mut tmp = [0u8; 4096];
-
-    let header_end;
-    loop {
-        let n = stream.read(&mut tmp).await?;
-        if n == 0 {
-            return Err(crate::error::Error::ConnectionFailed(
-                "Connection closed before headers complete".into(),
-            ));
-        }
-        buf.extend_from_slice(&tmp[..n]);
-
-        if let Some(pos) = find_header_end(&buf) {
-            header_end = pos;
-            break;
-        }
-
-        if buf.len() > MAX_HEADER_SIZE {
-            return Err(crate::error::Error::ConnectionFailed(
-                "Response headers exceed 64KB limit".into(),
-            ));
-        }
-    }
-
-    let mut parsed_headers = [httparse::EMPTY_HEADER; MAX_HEADERS];
-    let mut response = httparse::Response::new(&mut parsed_headers);
-
-    let parse_result = response
-        .parse(&buf[..header_end + 4])
-        .map_err(|e| crate::error::Error::ConnectionFailed(format!("HTTP/1.1 parse error: {e}")))?;
-
-    if parse_result.is_partial() {
-        return Err(crate::error::Error::ConnectionFailed(
-            "Incomplete HTTP/1.1 response headers".into(),
-        ));
-    }
-
-    let status = response.code.unwrap_or(0);
-    let headers: Vec<(String, String)> = response
-        .headers
-        .iter()
-        .map(|h| {
-            (
-                h.name.to_lowercase(),
-                String::from_utf8_lossy(h.value).to_string(),
-            )
-        })
-        .collect();
-
-    let body_start = header_end + 4;
-    let remaining = buf[body_start..].to_vec();
-
-    Ok((status, headers, remaining))
+) -> Result<(u16, Vec<(String, String)>, Vec<u8>), Error> {
+    read_raw_headers(stream).await
 }
 
 #[cfg(test)]

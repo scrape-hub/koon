@@ -10,89 +10,40 @@ use std::time::Duration;
 // Profile JSON Roundtrip (unit test, no network)
 // ============================================================
 
-#[test]
-fn test_profile_json_roundtrip_chrome() {
-    let profile = Chrome::v145_windows();
-    let json = profile.to_json_pretty().unwrap();
-    let restored = BrowserProfile::from_json(&json).unwrap();
+/// Verify a BrowserProfile survives JSON serialization → deserialization.
+fn assert_profile_roundtrips(name: &str, profile: &BrowserProfile) {
+    let json = profile
+        .to_json_pretty()
+        .unwrap_or_else(|e| panic!("{name}: serialize failed: {e}"));
+    let restored = BrowserProfile::from_json(&json)
+        .unwrap_or_else(|e| panic!("{name}: deserialize failed: {e}"));
 
-    assert_eq!(profile.tls.cipher_list, restored.tls.cipher_list);
-    assert_eq!(profile.tls.curves, restored.tls.curves);
-    assert_eq!(profile.tls.sigalgs, restored.tls.sigalgs);
-    assert_eq!(profile.tls.grease, restored.tls.grease);
-    assert_eq!(profile.tls.alpn, restored.tls.alpn);
-    assert_eq!(
-        profile.http2.settings_order, restored.http2.settings_order
-    );
-    assert_eq!(
-        profile.http2.pseudo_header_order,
-        restored.http2.pseudo_header_order
-    );
-    assert_eq!(
-        profile.http2.initial_window_size,
-        restored.http2.initial_window_size
-    );
-    assert_eq!(profile.headers.len(), restored.headers.len());
-    for (i, ((k1, v1), (k2, v2))) in profile
-        .headers
-        .iter()
-        .zip(restored.headers.iter())
-        .enumerate()
-    {
-        assert_eq!(k1, k2, "Header key mismatch at index {i}");
-        assert_eq!(v1, v2, "Header value mismatch at index {i}");
+    assert_eq!(profile.tls.cipher_list, restored.tls.cipher_list, "{name}: cipher_list");
+    assert_eq!(profile.tls.curves, restored.tls.curves, "{name}: curves");
+    assert_eq!(profile.tls.sigalgs, restored.tls.sigalgs, "{name}: sigalgs");
+    assert_eq!(profile.tls.grease, restored.tls.grease, "{name}: grease");
+    assert_eq!(profile.tls.alpn, restored.tls.alpn, "{name}: alpn");
+    assert_eq!(profile.tls.preserve_tls13_cipher_order, restored.tls.preserve_tls13_cipher_order, "{name}: preserve_tls13_cipher_order");
+    assert_eq!(profile.tls.record_size_limit, restored.tls.record_size_limit, "{name}: record_size_limit");
+    assert_eq!(profile.tls.pre_shared_key, restored.tls.pre_shared_key, "{name}: pre_shared_key");
+    assert_eq!(profile.http2.settings_order, restored.http2.settings_order, "{name}: settings_order");
+    assert_eq!(profile.http2.pseudo_header_order, restored.http2.pseudo_header_order, "{name}: pseudo_header_order");
+    assert_eq!(profile.http2.initial_window_size, restored.http2.initial_window_size, "{name}: initial_window_size");
+    assert_eq!(profile.quic.is_some(), restored.quic.is_some(), "{name}: quic presence");
+    assert_eq!(profile.headers.len(), restored.headers.len(), "{name}: headers count");
+    for (i, ((k1, v1), (k2, v2))) in profile.headers.iter().zip(restored.headers.iter()).enumerate() {
+        assert_eq!(k1, k2, "{name}: header key mismatch at index {i}");
+        assert_eq!(v1, v2, "{name}: header value mismatch at index {i}");
     }
 }
 
 #[test]
-fn test_profile_json_roundtrip_firefox() {
-    let profile = Firefox::v147_windows();
-    let json = profile.to_json_pretty().unwrap();
-    let restored = BrowserProfile::from_json(&json).unwrap();
-
-    assert_eq!(profile.tls.cipher_list, restored.tls.cipher_list);
-    assert_eq!(profile.tls.curves, restored.tls.curves);
-    assert_eq!(
-        profile.tls.preserve_tls13_cipher_order,
-        restored.tls.preserve_tls13_cipher_order
-    );
-    assert_eq!(
-        profile.tls.record_size_limit,
-        restored.tls.record_size_limit
-    );
-    assert_eq!(profile.headers.len(), restored.headers.len());
-}
-
-#[test]
-fn test_profile_json_roundtrip_safari() {
-    let profile = Safari::v18_3_macos();
-    let json = profile.to_json_pretty().unwrap();
-    let restored = BrowserProfile::from_json(&json).unwrap();
-
-    assert_eq!(profile.tls.cipher_list, restored.tls.cipher_list);
-    assert_eq!(profile.tls.pre_shared_key, restored.tls.pre_shared_key);
-    assert_eq!(profile.quic.is_none(), restored.quic.is_none()); // Safari has no QUIC
-    assert_eq!(profile.headers.len(), restored.headers.len());
-}
-
-#[test]
-fn test_profile_json_roundtrip_edge() {
-    let profile = Edge::v145_windows();
-    let json = profile.to_json_pretty().unwrap();
-    let restored = BrowserProfile::from_json(&json).unwrap();
-
-    assert_eq!(profile.tls.cipher_list, restored.tls.cipher_list);
-    assert_eq!(profile.headers.len(), restored.headers.len());
-}
-
-#[test]
-fn test_profile_json_roundtrip_opera() {
-    let profile = Opera::v127_windows();
-    let json = profile.to_json_pretty().unwrap();
-    let restored = BrowserProfile::from_json(&json).unwrap();
-
-    assert_eq!(profile.tls.cipher_list, restored.tls.cipher_list);
-    assert_eq!(profile.headers.len(), restored.headers.len());
+fn test_profile_json_roundtrip_per_browser() {
+    assert_profile_roundtrips("chrome145", &Chrome::v145_windows());
+    assert_profile_roundtrips("firefox147", &Firefox::v147_windows());
+    assert_profile_roundtrips("safari18.3", &Safari::v18_3_macos());
+    assert_profile_roundtrips("edge145", &Edge::v145_windows());
+    assert_profile_roundtrips("opera127", &Opera::v127_windows());
 }
 
 #[test]
@@ -130,21 +81,8 @@ fn test_profile_json_roundtrip_all_browsers() {
         ("opera127l", Opera::v127_linux()),
     ];
 
-    for (name, profile) in profiles {
-        let json = profile
-            .to_json_pretty()
-            .unwrap_or_else(|e| panic!("{name}: serialize failed: {e}"));
-        let restored = BrowserProfile::from_json(&json)
-            .unwrap_or_else(|e| panic!("{name}: deserialize failed: {e}"));
-        assert_eq!(
-            profile.tls.cipher_list, restored.tls.cipher_list,
-            "{name}: cipher_list"
-        );
-        assert_eq!(
-            profile.headers.len(),
-            restored.headers.len(),
-            "{name}: headers count"
-        );
+    for (name, profile) in &profiles {
+        assert_profile_roundtrips(name, profile);
     }
 }
 
@@ -471,44 +409,33 @@ fn test_cookie_jar_json_roundtrip() {
 // Response Decompression (integration, network required)
 // ============================================================
 
-#[tokio::test]
-#[ignore]
-async fn test_decompression_gzip() {
+async fn assert_decompression(encoding: &str, key: &str) {
     let client = Client::new(Chrome::latest()).unwrap();
-    let resp = client.get("https://httpbin.org/gzip").await.unwrap();
-    assert_eq!(resp.status, 200);
+    let resp = client
+        .get(&format!("https://httpbin.org/{encoding}"))
+        .await
+        .unwrap();
+    assert_eq!(resp.status, 200, "{encoding}: expected 200");
     let body = String::from_utf8_lossy(&resp.body);
+    let spaced = format!("\"{key}\": true");
+    let compact = format!("\"{key}\":true");
     assert!(
-        body.contains("\"gzipped\": true") || body.contains("\"gzipped\":true"),
-        "Expected gzipped response, got: {body}"
+        body.contains(&spaced) || body.contains(&compact),
+        "{encoding}: expected {key}=true, got: {body}"
     );
 }
 
 #[tokio::test]
 #[ignore]
-async fn test_decompression_deflate() {
-    let client = Client::new(Chrome::latest()).unwrap();
-    let resp = client.get("https://httpbin.org/deflate").await.unwrap();
-    assert_eq!(resp.status, 200);
-    let body = String::from_utf8_lossy(&resp.body);
-    assert!(
-        body.contains("\"deflated\": true") || body.contains("\"deflated\":true"),
-        "Expected deflated response, got: {body}"
-    );
-}
+async fn test_decompression_gzip() { assert_decompression("gzip", "gzipped").await; }
 
 #[tokio::test]
 #[ignore]
-async fn test_decompression_brotli() {
-    let client = Client::new(Chrome::latest()).unwrap();
-    let resp = client.get("https://httpbin.org/brotli").await.unwrap();
-    assert_eq!(resp.status, 200);
-    let body = String::from_utf8_lossy(&resp.body);
-    assert!(
-        body.contains("\"brotli\": true") || body.contains("\"brotli\":true"),
-        "Expected brotli response, got: {body}"
-    );
-}
+async fn test_decompression_deflate() { assert_decompression("deflate", "deflated").await; }
+
+#[tokio::test]
+#[ignore]
+async fn test_decompression_brotli() { assert_decompression("brotli", "brotli").await; }
 
 // ============================================================
 // Redirect Following (integration, network required)
@@ -1044,15 +971,25 @@ async fn test_timeout() {
 // Multiple Browser Profiles (integration, network required)
 // ============================================================
 
+async fn assert_browser_ua(profile: BrowserProfile, name: &str, ua_marker: &str) {
+    let client = Client::new(profile).unwrap();
+    let resp = client.get("https://httpbin.org/headers").await.unwrap();
+    assert_eq!(resp.status, 200, "{name}: expected 200");
+    let body = String::from_utf8_lossy(&resp.body);
+    assert!(body.contains(ua_marker), "{name}: UA should contain '{ua_marker}', got: {body}");
+}
+
 #[tokio::test]
 #[ignore]
-async fn test_firefox_profile_request() {
-    let client = Client::new(Firefox::latest()).unwrap();
-    let resp = client.get("https://httpbin.org/headers").await.unwrap();
-    assert_eq!(resp.status, 200);
-    let body = String::from_utf8_lossy(&resp.body);
-    assert!(body.contains("Firefox"), "Firefox UA should be present");
-}
+async fn test_firefox_profile_request() { assert_browser_ua(Firefox::latest(), "Firefox", "Firefox").await; }
+
+#[tokio::test]
+#[ignore]
+async fn test_edge_profile_request() { assert_browser_ua(Edge::latest(), "Edge", "Edg/").await; }
+
+#[tokio::test]
+#[ignore]
+async fn test_opera_profile_request() { assert_browser_ua(Opera::latest(), "Opera", "OPR/").await; }
 
 #[tokio::test]
 #[ignore]
@@ -1065,26 +1002,6 @@ async fn test_safari_profile_request() {
         body.contains("Safari") && !body.contains("Chrome"),
         "Safari UA should be present without Chrome"
     );
-}
-
-#[tokio::test]
-#[ignore]
-async fn test_edge_profile_request() {
-    let client = Client::new(Edge::latest()).unwrap();
-    let resp = client.get("https://httpbin.org/headers").await.unwrap();
-    assert_eq!(resp.status, 200);
-    let body = String::from_utf8_lossy(&resp.body);
-    assert!(body.contains("Edg/"), "Edge UA should be present");
-}
-
-#[tokio::test]
-#[ignore]
-async fn test_opera_profile_request() {
-    let client = Client::new(Opera::latest()).unwrap();
-    let resp = client.get("https://httpbin.org/headers").await.unwrap();
-    assert_eq!(resp.status, 200);
-    let body = String::from_utf8_lossy(&resp.body);
-    assert!(body.contains("OPR/"), "Opera UA should be present");
 }
 
 // ============================================================

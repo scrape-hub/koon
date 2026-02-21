@@ -47,6 +47,97 @@ pub struct BrowserProfile {
 }
 
 impl BrowserProfile {
+    /// Resolve a browser profile by name string.
+    ///
+    /// Accepts formats like:
+    /// - `"chrome"`, `"firefox"`, `"safari"`, `"edge"`, `"opera"` — latest version, default OS
+    /// - `"chrome145"`, `"firefox147"` — specific version, default OS (Windows; Safari: macOS)
+    /// - `"chrome145-windows"`, `"chrome145-macos"`, `"chrome145-linux"` — specific version + OS (dash-separated)
+    /// - `"chrome145windows"`, `"chrome145macos"` — specific version + OS (no dash, for Node.js/Python compat)
+    /// - `"safari183"`, `"safari18.3"` — Safari version formats
+    ///
+    /// Case-insensitive.
+    pub fn resolve(name: &str) -> Result<Self, String> {
+        let name_lower = name.to_lowercase();
+        let (browser, os) = Self::parse_browser_os(&name_lower);
+
+        if let Some(rest) = browser.strip_prefix("chrome") {
+            return if rest.is_empty() {
+                Chrome::resolve(Chrome::LATEST_VERSION, os)
+            } else {
+                let major: u32 = rest.parse().map_err(|_| {
+                    format!("Invalid Chrome version: '{rest}'. Expected a number (131-145)")
+                })?;
+                Chrome::resolve(major, os)
+            };
+        }
+
+        if let Some(rest) = browser.strip_prefix("firefox") {
+            return if rest.is_empty() {
+                Firefox::resolve(Firefox::LATEST_VERSION, os)
+            } else {
+                let major: u32 = rest.parse().map_err(|_| {
+                    format!("Invalid Firefox version: '{rest}'. Expected a number (135-147)")
+                })?;
+                Firefox::resolve(major, os)
+            };
+        }
+
+        if let Some(rest) = browser.strip_prefix("safari") {
+            return Safari::resolve(rest, os);
+        }
+
+        if let Some(rest) = browser.strip_prefix("edge") {
+            return if rest.is_empty() {
+                Edge::resolve(Edge::LATEST_VERSION, os)
+            } else {
+                let major: u32 = rest.parse().map_err(|_| {
+                    format!("Invalid Edge version: '{rest}'. Expected a number (131-145)")
+                })?;
+                Edge::resolve(major, os)
+            };
+        }
+
+        if let Some(rest) = browser.strip_prefix("opera") {
+            return if rest.is_empty() {
+                Opera::resolve(Opera::LATEST_VERSION, os)
+            } else {
+                let major: u32 = rest.parse().map_err(|_| {
+                    format!("Invalid Opera version: '{rest}'. Expected a number (124-127)")
+                })?;
+                Opera::resolve(major, os)
+            };
+        }
+
+        Err(format!(
+            "Unknown browser: '{name}'. Supported: chrome, firefox, safari, edge, opera"
+        ))
+    }
+
+    /// Parse a browser name into (browser_with_version, optional_os).
+    ///
+    /// Handles both dash-separated ("chrome145-windows") and
+    /// concatenated ("chrome145windows") OS suffixes.
+    fn parse_browser_os(input: &str) -> (&str, Option<&str>) {
+        // Try dash-separated first (CLI format: "chrome145-windows")
+        if let Some(pos) = input.rfind('-') {
+            let suffix = &input[pos + 1..];
+            if matches!(suffix, "windows" | "macos" | "linux") {
+                return (&input[..pos], Some(suffix));
+            }
+        }
+        // Try suffix without dash (Node/Python format: "chrome145windows")
+        for os in &["windows", "macos", "linux"] {
+            if input.ends_with(os) {
+                let prefix = &input[..input.len() - os.len()];
+                if !prefix.is_empty() {
+                    return (prefix, Some(os));
+                }
+            }
+        }
+        (input, None)
+    }
+
     /// Deserialize a profile from a JSON string.
     pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(json)

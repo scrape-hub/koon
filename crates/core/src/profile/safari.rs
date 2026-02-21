@@ -77,6 +77,25 @@ impl Safari {
     pub fn latest() -> BrowserProfile {
         Self::v18_3_macos()
     }
+
+    /// Resolve a Safari profile by version string and optional OS.
+    /// Safari is macOS-only. Version can be "156", "15.6", "183", "18.3", etc.
+    pub(super) fn resolve(version: &str, os: Option<&str>) -> Result<BrowserProfile, String> {
+        if matches!(os, Some("windows") | Some("linux")) {
+            return Err("Safari is only available on macOS".to_string());
+        }
+        match version {
+            "" => Ok(Self::latest()),
+            "156" | "15.6" => Ok(Self::v15_6_macos()),
+            "160" | "16.0" => Ok(Self::v16_0_macos()),
+            "170" | "17.0" => Ok(Self::v17_0_macos()),
+            "180" | "18.0" => Ok(Self::v18_0_macos()),
+            "183" | "18.3" => Ok(Self::v18_3_macos()),
+            _ => Err(format!(
+                "Unsupported Safari version: '{version}'. Supported: 15.6, 16.0, 17.0, 18.0, 18.3"
+            )),
+        }
+    }
 }
 
 // ========== Cipher list ==========

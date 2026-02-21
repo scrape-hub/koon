@@ -86,6 +86,23 @@ impl Firefox {
     pub fn latest() -> BrowserProfile {
         Self::v147_windows()
     }
+
+    /// Resolve a Firefox profile by version number and optional OS.
+    pub(super) fn resolve(major: u32, os: Option<&str>) -> Result<BrowserProfile, String> {
+        if !(135..=147).contains(&major) {
+            return Err(format!(
+                "Unsupported Firefox version: {major}. Supported: 135-147"
+            ));
+        }
+        let os = match os {
+            Some("macos") => Os::MacOS,
+            Some("linux") => Os::Linux,
+            _ => Os::Windows,
+        };
+        Ok(firefox_profile(major, os))
+    }
+
+    pub(super) const LATEST_VERSION: u32 = 147;
 }
 
 // ========== Internal: OS enum ==========
