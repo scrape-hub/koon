@@ -30,6 +30,18 @@ All notable changes to koon will be documented in this file.
 - **Core**: `Opera` profile module now re-exported from `koon_core`
 - **Proxy**: Fix truncated response bodies — content-length and content-encoding headers now
   replaced with actual decompressed body size (koon auto-decompresses gzip/brotli/zstd)
+- **Deflate decompression**: Try zlib-wrapped (RFC 1950) first, fall back to raw deflate (RFC 1951)
+- **DoH Cloudflare**: Add content-length header to DoH H2 POST requests (Cloudflare requires it)
+
+### Added
+- **Comprehensive feature test suite** (`tests/features.rs`): 65 tests covering all features
+  - 25 unit tests (no network): profile JSON roundtrip, randomization invariants, builder options,
+    cookie jar serialization, Safari/Firefox/Chrome profile properties
+  - 40 integration tests (`--ignored`): decompression (gzip/brotli/deflate), redirects (301-308,
+    body preservation), session save/load, TLS session resumption, streaming responses, custom
+    headers, all HTTP methods, multipart POST, cookie persistence, connection pool reuse,
+    WebSocket echo, MITM proxy start/shutdown/traffic, DoH (Cloudflare + Google), timeout,
+    large response, status codes, all 5 browser profiles (Chrome/Firefox/Safari/Edge/Opera)
 
 ## [0.3.5] - 2026-02-21
 

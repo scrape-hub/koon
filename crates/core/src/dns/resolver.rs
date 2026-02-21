@@ -314,6 +314,7 @@ impl DohResolver {
             .uri(format!("https://{}/dns-query", self.config.server_hostname))
             .header("content-type", "application/dns-message")
             .header("accept", "application/dns-message")
+            .header("content-length", dns_wire.len().to_string())
             .body(())
             .map_err(|e| Error::Dns(format!("DoH request build failed: {e}")))?;
 

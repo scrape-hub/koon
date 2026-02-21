@@ -1942,11 +1942,20 @@ fn decompress_body(data: Vec<u8>, encoding: Option<&str>) -> Result<Vec<u8>, Err
             Ok(out)
         }
         Some("deflate") => {
+            // HTTP "deflate" is zlib-wrapped (RFC 1950), but some servers send raw deflate.
+            // Try zlib first, fall back to raw deflate.
             use std::io::Read;
-            let mut decoder = flate2::read::DeflateDecoder::new(&data[..]);
+            let mut decoder = flate2::read::ZlibDecoder::new(&data[..]);
             let mut out = Vec::new();
-            decoder.read_to_end(&mut out).map_err(Error::Io)?;
-            Ok(out)
+            match decoder.read_to_end(&mut out) {
+                Ok(_) => Ok(out),
+                Err(_) => {
+                    let mut decoder = flate2::read::DeflateDecoder::new(&data[..]);
+                    let mut out = Vec::new();
+                    decoder.read_to_end(&mut out).map_err(Error::Io)?;
+                    Ok(out)
+                }
+            }
         }
         Some("br") => {
             let mut out = Vec::new();
