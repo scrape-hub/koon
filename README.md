@@ -4,6 +4,23 @@ An HTTP client that impersonates real browsers at the TLS, HTTP/2, and HTTP/3 fi
 
 Built in Rust on top of BoringSSL with native bindings for **Node.js**, **Python**, and a **CLI**. Passes Akamai, Cloudflare, and other bot detection systems by reproducing exact browser fingerprints — verified against real browser captures.
 
+## Install
+
+**Node.js**
+```bash
+npm install koon
+```
+
+**Python**
+```bash
+pip install koon
+```
+
+**CLI** — download from [Releases](https://github.com/hrylx/koon/releases), or:
+```bash
+cargo install koon-cli
+```
+
 ## Quick start
 
 **Node.js**
@@ -81,46 +98,6 @@ Each profile includes Windows, macOS, and Linux user-agent variants (`chrome145-
 - **Response decompression** — gzip, brotli, deflate, zstd (automatic)
 - **Connection pooling** — H3 multiplexed + H2 multiplexed + H1.1 keep-alive
 
-## Installation
-
-### Node.js
-
-```bash
-cargo build --release -p koon-node
-```
-Copy the built binary to your project:
-```
-# Windows
-cp target/release/koon_node.dll node_modules/koon/koon.win32-x64-msvc.node
-
-# Linux
-cp target/release/libkoon_node.so node_modules/koon/koon.linux-x64-gnu.node
-
-# macOS
-cp target/release/libkoon_node.dylib node_modules/koon/koon.darwin-x64.node
-```
-
-### Python
-
-```bash
-cd crates/python
-pip install -e .
-```
-
-### CLI
-
-```bash
-cargo build --release -p koon-cli
-# Binary at target/release/koon (or koon.exe on Windows)
-```
-
-### Rust
-
-```toml
-[dependencies]
-koon-core = { git = "https://github.com/hrylx/koon.git" }
-```
-
 ## Usage
 
 ### Node.js
@@ -128,7 +105,7 @@ koon-core = { git = "https://github.com/hrylx/koon.git" }
 ```javascript
 const { Koon } = require('koon');
 
-// Browser profile + custom headers
+// Browser profile + options
 const client = new Koon({
   browser: 'chrome145',
   headers: { 'X-Custom': 'value' },
@@ -292,6 +269,11 @@ koon proxy --browser chrome145 --listen 127.0.0.1:8080
 
 ### Rust
 
+```toml
+[dependencies]
+koon-core = { git = "https://github.com/hrylx/koon.git" }
+```
+
 ```rust
 use koon_core::{BrowserProfile, Client};
 use koon_core::profile::Chrome;
@@ -312,14 +294,6 @@ async fn main() -> Result<(), koon_core::Error> {
 }
 ```
 
-## Build requirements
-
-- **Rust** 1.85+
-- **CMake** (BoringSSL build)
-- **NASM** (BoringSSL assembly optimizations, Windows)
-- **C compiler** — Visual Studio Build Tools (Windows) or GCC/Clang (Linux/macOS)
-- **Python 3.9+** and **maturin** (only for Python bindings)
-
 ## Architecture
 
 ```
@@ -335,6 +309,30 @@ Key dependencies:
 - [quinn](https://github.com/quinn-rs/quinn) + [h3](https://github.com/hyperium/h3) — QUIC / HTTP/3
 - [napi-rs](https://napi.rs) — Rust to Node.js bridge
 - [PyO3](https://pyo3.rs) + [maturin](https://github.com/PyO3/maturin) — Rust to Python bridge
+
+## Building from source
+
+Only needed if you want to build koon yourself instead of using the published packages.
+
+**Requirements:**
+- Rust 1.85+
+- CMake
+- NASM (Windows only, for BoringSSL assembly)
+- C compiler — MSVC (Windows), GCC or Clang (Linux/macOS)
+
+```bash
+# Core library
+cargo build --release -p koon-core
+
+# Node.js addon
+cargo build --release -p koon-node
+
+# Python package
+cd crates/python && pip install -e .
+
+# CLI binary
+cargo build --release -p koon-cli
+```
 
 ## License
 
