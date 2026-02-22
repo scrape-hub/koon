@@ -41,17 +41,26 @@ export interface KoonOptions {
   doh?: string;
 }
 
-export interface KoonResponse {
+export class KoonResponse {
   /** HTTP status code. */
-  status: number;
+  readonly status: number;
   /** Response headers as [name, value] pairs. */
-  headers: Array<{ name: string; value: string }>;
+  readonly headers: Array<{ name: string; value: string }>;
   /** Response body as Buffer. */
-  body: Buffer;
+  readonly body: Buffer;
   /** HTTP version string (e.g., "HTTP/2.0"). */
-  version: string;
+  readonly version: string;
   /** Final URL after redirects. */
-  url: string;
+  readonly url: string;
+  /** Whether the status code is 2xx (success). */
+  readonly ok: boolean;
+
+  /** Decode response body as UTF-8 string. */
+  text(): string;
+  /** Parse response body as JSON (via JSON.parse()). */
+  json(): any;
+  /** Look up a response header by name (case-insensitive). */
+  header(name: string): string | null;
 }
 
 export interface KoonWsMessage {
@@ -64,6 +73,8 @@ export interface KoonWsMessage {
 export interface KoonRequestOptions {
   /** Additional headers for this request. Override constructor-level headers. */
   headers?: Record<string, string>;
+  /** Per-request timeout in milliseconds. Overrides constructor-level timeout. */
+  timeout?: number;
 }
 
 export interface KoonMultipartField {

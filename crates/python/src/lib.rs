@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -12,6 +13,21 @@ use koon_core::{Client, HeaderMode, ProxyServer, ProxyServerConfig, WsMessage};
 /// Convert any Display error to a Python RuntimeError.
 fn to_py_err(e: impl std::fmt::Display) -> PyErr {
     PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string())
+}
+
+/// Run a future with an optional per-request timeout.
+async fn run_with_timeout<F>(future: F, timeout_ms: Option<u32>) -> PyResult<koon_core::HttpResponse>
+where
+    F: Future<Output = Result<koon_core::HttpResponse, koon_core::Error>>,
+{
+    if let Some(ms) = timeout_ms {
+        tokio::time::timeout(Duration::from_millis(ms as u64), future)
+            .await
+            .map_err(|_| PyErr::new::<pyo3::exceptions::PyTimeoutError, _>("Request timed out"))?
+            .map_err(to_py_err)
+    } else {
+        future.await.map_err(to_py_err)
+    }
 }
 
 /// Resolve a browser name string to a BrowserProfile.
@@ -143,94 +159,159 @@ impl Koon {
     }
 
     /// Perform an HTTP GET request.
-    fn get<'py>(&self, py: Python<'py>, url: String) -> PyResult<Bound<'py, PyAny>> {
+    ///
+    /// Args:
+    ///     url: The URL to request.
+    ///     headers: Optional dict of per-request headers.
+    ///     timeout: Optional per-request timeout in milliseconds.
+    #[pyo3(signature = (url, *, headers=None, timeout=None))]
+    fn get<'py>(&self, py: Python<'py>, url: String, headers: Option<HashMap<String, String>>, timeout: Option<u32>) -> PyResult<Bound<'py, PyAny>> {
         let client = self.client.clone();
+        let extra: Vec<(String, String)> = headers.unwrap_or_default().into_iter().collect();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let resp = client.get(&url).await.map_err(to_py_err)?;
+            let future = client.request_with_headers("GET".parse().unwrap(), &url, None, extra);
+            let resp = run_with_timeout(future, timeout).await?;
             Ok(KoonResponse::from_core(resp))
         })
     }
 
     /// Perform an HTTP POST request.
-    #[pyo3(signature = (url, body=None))]
+    ///
+    /// Args:
+    ///     url: The URL to request.
+    ///     body: Optional request body as bytes.
+    ///     headers: Optional dict of per-request headers.
+    ///     timeout: Optional per-request timeout in milliseconds.
+    #[pyo3(signature = (url, body=None, *, headers=None, timeout=None))]
     fn post<'py>(
         &self,
         py: Python<'py>,
         url: String,
         body: Option<Vec<u8>>,
+        headers: Option<HashMap<String, String>>,
+        timeout: Option<u32>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let client = self.client.clone();
+        let extra: Vec<(String, String)> = headers.unwrap_or_default().into_iter().collect();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let resp = client.post(&url, body).await.map_err(to_py_err)?;
+            let future = client.request_with_headers("POST".parse().unwrap(), &url, body, extra);
+            let resp = run_with_timeout(future, timeout).await?;
             Ok(KoonResponse::from_core(resp))
         })
     }
 
     /// Perform an HTTP PUT request.
-    #[pyo3(signature = (url, body=None))]
+    ///
+    /// Args:
+    ///     url: The URL to request.
+    ///     body: Optional request body as bytes.
+    ///     headers: Optional dict of per-request headers.
+    ///     timeout: Optional per-request timeout in milliseconds.
+    #[pyo3(signature = (url, body=None, *, headers=None, timeout=None))]
     fn put<'py>(
         &self,
         py: Python<'py>,
         url: String,
         body: Option<Vec<u8>>,
+        headers: Option<HashMap<String, String>>,
+        timeout: Option<u32>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let client = self.client.clone();
+        let extra: Vec<(String, String)> = headers.unwrap_or_default().into_iter().collect();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let resp = client.put(&url, body).await.map_err(to_py_err)?;
+            let future = client.request_with_headers("PUT".parse().unwrap(), &url, body, extra);
+            let resp = run_with_timeout(future, timeout).await?;
             Ok(KoonResponse::from_core(resp))
         })
     }
 
     /// Perform an HTTP DELETE request.
-    fn delete<'py>(&self, py: Python<'py>, url: String) -> PyResult<Bound<'py, PyAny>> {
+    ///
+    /// Args:
+    ///     url: The URL to request.
+    ///     headers: Optional dict of per-request headers.
+    ///     timeout: Optional per-request timeout in milliseconds.
+    #[pyo3(signature = (url, *, headers=None, timeout=None))]
+    fn delete<'py>(&self, py: Python<'py>, url: String, headers: Option<HashMap<String, String>>, timeout: Option<u32>) -> PyResult<Bound<'py, PyAny>> {
         let client = self.client.clone();
+        let extra: Vec<(String, String)> = headers.unwrap_or_default().into_iter().collect();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let resp = client.delete(&url).await.map_err(to_py_err)?;
+            let future = client.request_with_headers("DELETE".parse().unwrap(), &url, None, extra);
+            let resp = run_with_timeout(future, timeout).await?;
             Ok(KoonResponse::from_core(resp))
         })
     }
 
     /// Perform an HTTP PATCH request.
-    #[pyo3(signature = (url, body=None))]
+    ///
+    /// Args:
+    ///     url: The URL to request.
+    ///     body: Optional request body as bytes.
+    ///     headers: Optional dict of per-request headers.
+    ///     timeout: Optional per-request timeout in milliseconds.
+    #[pyo3(signature = (url, body=None, *, headers=None, timeout=None))]
     fn patch<'py>(
         &self,
         py: Python<'py>,
         url: String,
         body: Option<Vec<u8>>,
+        headers: Option<HashMap<String, String>>,
+        timeout: Option<u32>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let client = self.client.clone();
+        let extra: Vec<(String, String)> = headers.unwrap_or_default().into_iter().collect();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let resp = client.patch(&url, body).await.map_err(to_py_err)?;
+            let future = client.request_with_headers("PATCH".parse().unwrap(), &url, body, extra);
+            let resp = run_with_timeout(future, timeout).await?;
             Ok(KoonResponse::from_core(resp))
         })
     }
 
     /// Perform an HTTP HEAD request.
-    fn head<'py>(&self, py: Python<'py>, url: String) -> PyResult<Bound<'py, PyAny>> {
+    ///
+    /// Args:
+    ///     url: The URL to request.
+    ///     headers: Optional dict of per-request headers.
+    ///     timeout: Optional per-request timeout in milliseconds.
+    #[pyo3(signature = (url, *, headers=None, timeout=None))]
+    fn head<'py>(&self, py: Python<'py>, url: String, headers: Option<HashMap<String, String>>, timeout: Option<u32>) -> PyResult<Bound<'py, PyAny>> {
         let client = self.client.clone();
+        let extra: Vec<(String, String)> = headers.unwrap_or_default().into_iter().collect();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let resp = client.head(&url).await.map_err(to_py_err)?;
+            let future = client.request_with_headers("HEAD".parse().unwrap(), &url, None, extra);
+            let resp = run_with_timeout(future, timeout).await?;
             Ok(KoonResponse::from_core(resp))
         })
     }
 
     /// Perform an HTTP request with a custom method.
-    #[pyo3(signature = (method, url, body=None))]
+    ///
+    /// Args:
+    ///     method: HTTP method string (e.g. "GET", "POST").
+    ///     url: The URL to request.
+    ///     body: Optional request body as bytes.
+    ///     headers: Optional dict of per-request headers.
+    ///     timeout: Optional per-request timeout in milliseconds.
+    #[pyo3(signature = (method, url, body=None, *, headers=None, timeout=None))]
     fn request<'py>(
         &self,
         py: Python<'py>,
         method: String,
         url: String,
         body: Option<Vec<u8>>,
+        headers: Option<HashMap<String, String>>,
+        timeout: Option<u32>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let client = self.client.clone();
+        let extra: Vec<(String, String)> = headers.unwrap_or_default().into_iter().collect();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let method: http::Method = method.parse().map_err(|_| {
                 PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
                     "Invalid HTTP method: {method}"
                 ))
             })?;
-            let resp = client.request(method, &url, body).await.map_err(to_py_err)?;
+            let future = client.request_with_headers(method, &url, body, extra);
+            let resp = run_with_timeout(future, timeout).await?;
             Ok(KoonResponse::from_core(resp))
         })
     }
@@ -378,6 +459,12 @@ impl KoonResponse {
 
 #[pymethods]
 impl KoonResponse {
+    /// Whether the response status is 2xx (success).
+    #[getter]
+    fn ok(&self) -> bool {
+        self.status >= 200 && self.status < 300
+    }
+
     /// Response headers as a list of (name, value) tuples.
     #[getter]
     fn headers(&self) -> Vec<(String, String)> {
@@ -405,6 +492,17 @@ impl KoonResponse {
         let json_mod = py.import("json")?;
         let text = self.text()?;
         json_mod.call_method1("loads", (text,))
+    }
+
+    /// Look up a response header by name (case-insensitive).
+    /// Returns the first matching header value, or None if not found.
+    #[pyo3(signature = (name,))]
+    fn header(&self, name: &str) -> Option<String> {
+        let name_lower = name.to_lowercase();
+        self.headers_vec
+            .iter()
+            .find(|(n, _)| n.to_lowercase() == name_lower)
+            .map(|(_, v)| v.clone())
     }
 
     fn __repr__(&self) -> String {

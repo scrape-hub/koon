@@ -8,6 +8,19 @@ use super::config::{AlpnProtocol, CertCompression, TlsConfig, TlsVersion};
 use super::session_cache::SessionCache;
 use crate::Error;
 
+// BoringSSL FFI: boring2's safe `add_application_settings()` wrapper hardcodes
+// NULL/0 for the settings payload. Real Chrome sends SETTINGS_NO_RFC7540_PRIORITIES
+// (6 bytes) as ALPS client data. We declare the C function directly to pass actual data.
+unsafe extern "C" {
+    fn SSL_add_application_settings(
+        ssl: *mut std::ffi::c_void,
+        proto: *const u8,
+        proto_len: usize,
+        settings: *const u8,
+        settings_len: usize,
+    ) -> std::ffi::c_int;
+}
+
 /// Two-phase TLS connector for browser fingerprint impersonation.
 ///
 /// Phase 1 (`build_connector`): Creates a reusable `SslConnector` with all
@@ -165,7 +178,30 @@ impl TlsConnector {
         // ALPS (h2-specific, skip when forcing h1)
         if !force_h1_only && config.alps.is_some() {
             cfg.set_alps_use_new_codepoint(config.alps_use_new_codepoint);
-            cfg.add_application_settings(b"h2")?;
+
+            // Chrome sends SETTINGS_NO_RFC7540_PRIORITIES (id=9, value=1) as ALPS
+            // client data. boring2's safe wrapper hardcodes NULL/0 for settings,
+            // so we call the C FFI directly to pass the actual 6-byte payload.
+            // H2 SETTINGS frame payload: 2-byte id + 4-byte value.
+            let alps_settings: [u8; 6] = [0x00, 0x09, 0x00, 0x00, 0x00, 0x01];
+            let proto = b"h2";
+            // In the foreign-types pattern, &SslRef has the same memory
+            // representation as *mut SSL. ConnectConfiguration derefs to SslRef.
+            let ssl_ptr = &*cfg as *const boring2::ssl::SslRef as *mut std::ffi::c_void;
+            let ret = unsafe {
+                SSL_add_application_settings(
+                    ssl_ptr,
+                    proto.as_ptr(),
+                    proto.len(),
+                    alps_settings.as_ptr(),
+                    alps_settings.len(),
+                )
+            };
+            if ret != 1 {
+                return Err(Error::ConnectionFailed(
+                    "Failed to set ALPS application settings".into(),
+                ));
+            }
         }
 
         // Disable hostname verification for testing

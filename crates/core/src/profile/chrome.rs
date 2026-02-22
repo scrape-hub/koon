@@ -227,7 +227,7 @@ pub(super) fn chrome_http2() -> Http2Config {
         ],
         headers_stream_dependency: Some(StreamDep {
             stream_id: 0,
-            weight: 219,
+            weight: 255,
             exclusive: true,
         }),
         priorities: Vec::new(),

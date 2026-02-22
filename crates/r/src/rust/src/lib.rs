@@ -5,8 +5,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Runtime;
 
-/// Convert an HttpResponse to an R list with status, headers, body, version, url, text.
+/// Convert an HttpResponse to an R list with status, ok, headers, body, version, url, text.
 fn response_to_list(resp: koon_core::HttpResponse) -> List {
+    let ok = resp.status >= 200 && resp.status < 300;
     let text = String::from_utf8_lossy(&resp.body).into_owned();
 
     let header_names: Vec<String> = resp.headers.iter().map(|(n, _)| n.clone()).collect();
@@ -15,6 +16,7 @@ fn response_to_list(resp: koon_core::HttpResponse) -> List {
 
     list!(
         status = resp.status as i32,
+        ok = ok,
         version = resp.version,
         url = resp.url,
         body = Raw::from_bytes(&resp.body),

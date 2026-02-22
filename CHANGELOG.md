@@ -2,6 +2,23 @@
 
 All notable changes to koon will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Ergonomic Response API**: `KoonResponse` is now a class with convenience methods
+  - `ok` (getter): `true` when status is 2xx
+  - `text()`: Decode body as UTF-8 string
+  - `json()`: Parse body as JSON (Node.js: `JSON.parse()`, Python: `json.loads()`)
+  - `header(name)`: Case-insensitive header lookup, returns first match or null/None
+  - Available in Node.js, Python, and R (`ok` added to R response list)
+- **Per-Request Timeout**: `timeout` option in `KoonRequestOptions` overrides constructor timeout
+  - Node.js: `client.get(url, { timeout: 5000 })`
+  - Python: `await client.get(url, timeout=5000)`
+  - Wraps the entire request (including redirects) in a single deadline
+- **Python Per-Request Headers**: All Python HTTP methods now accept `headers` and `timeout` kwargs
+  - `await client.get(url, headers={"Authorization": "Bearer ..."})`
+  - Previously only available in Node.js and R
+
 ## [0.4.5] - 2026-02-22
 
 ### Added

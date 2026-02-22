@@ -6,6 +6,7 @@ use koon_core::profile::BrowserProfile;
 use koon_core::{Client, HeaderMode, ProxyServer, ProxyServerConfig};
 use std::collections::HashMap;
 use std::time::Duration;
+use tokio::time::timeout as tokio_timeout;
 
 /// Supported browser profiles for impersonation.
 ///
@@ -237,7 +238,7 @@ pub struct KoonOptions {
     pub doh: Option<String>,
 }
 
-/// Per-request options (headers, etc.).
+/// Per-request options (headers, timeout).
 /// These override constructor-level defaults for a single request.
 #[napi(object)]
 #[derive(Default)]
@@ -246,6 +247,10 @@ pub struct KoonRequestOptions {
     /// These override constructor-level headers (case-insensitive).
     #[napi(ts_type = "Record<string, string>")]
     pub headers: Option<HashMap<String, String>>,
+
+    /// Per-request timeout in milliseconds.
+    /// Overrides the constructor-level timeout for this request only.
+    pub timeout: Option<u32>,
 }
 
 /// A single HTTP header (name-value pair).
@@ -260,23 +265,90 @@ pub struct KoonHeader {
 }
 
 /// Response from an HTTP request.
-#[napi(object)]
+///
+/// @example
+/// ```ts
+/// const resp = await client.get('https://httpbin.org/json');
+/// console.log(resp.ok);           // true
+/// console.log(resp.text());       // '{"key": "value"}'
+/// console.log(resp.json());       // { key: 'value' }
+/// console.log(resp.header('content-type')); // 'application/json'
+/// ```
+#[napi]
 pub struct KoonResponse {
+    status_val: u32,
+    headers_val: Vec<KoonHeader>,
+    body_val: Vec<u8>,
+    version_val: String,
+    url_val: String,
+}
+
+#[napi]
+impl KoonResponse {
     /// HTTP status code.
-    pub status: u32,
+    #[napi(getter)]
+    pub fn status(&self) -> u32 {
+        self.status_val
+    }
 
     /// Response headers as an array of name-value pairs.
     /// Preserves duplicate headers (e.g. multiple Set-Cookie).
-    pub headers: Vec<KoonHeader>,
+    #[napi(getter)]
+    pub fn headers(&self) -> Vec<KoonHeader> {
+        self.headers_val.clone()
+    }
 
     /// Response body as a Buffer.
-    pub body: Buffer,
+    #[napi(getter)]
+    pub fn body(&self) -> Buffer {
+        Buffer::from(self.body_val.clone())
+    }
 
     /// HTTP version used (e.g. "h2").
-    pub version: String,
+    #[napi(getter)]
+    pub fn version(&self) -> String {
+        self.version_val.clone()
+    }
 
     /// Final URL after redirects.
-    pub url: String,
+    #[napi(getter)]
+    pub fn url(&self) -> String {
+        self.url_val.clone()
+    }
+
+    /// Whether the response status is 2xx (success).
+    #[napi(getter)]
+    pub fn ok(&self) -> bool {
+        self.status_val >= 200 && self.status_val < 300
+    }
+
+    /// Decode the response body as a UTF-8 string.
+    #[napi]
+    pub fn text(&self) -> String {
+        String::from_utf8_lossy(&self.body_val).into_owned()
+    }
+
+    /// Parse the response body as JSON (via `JSON.parse()`).
+    #[napi(ts_return_type = "any")]
+    pub fn json(&self, env: Env) -> Result<napi::JsUnknown> {
+        let text = String::from_utf8_lossy(&self.body_val);
+        let json_str = env.create_string(text.as_ref())?;
+        let global = env.get_global()?;
+        let json_obj: napi::JsObject = global.get_named_property("JSON")?;
+        let parse_fn: napi::JsFunction = json_obj.get_named_property("parse")?;
+        parse_fn.call(None, &[json_str])
+    }
+
+    /// Look up a response header by name (case-insensitive).
+    /// Returns the first matching header value, or null if not found.
+    #[napi]
+    pub fn header(&self, name: String) -> Option<String> {
+        let name_lower = name.to_lowercase();
+        self.headers_val
+            .iter()
+            .find(|h| h.name.to_lowercase() == name_lower)
+            .map(|h| h.value.clone())
+    }
 }
 
 /// A field in a multipart/form-data request.
@@ -294,6 +366,22 @@ pub struct KoonMultipartField {
     /// Content-Type for file uploads.
     /// @default "application/octet-stream"
     pub content_type: Option<String>,
+}
+
+/// Convert a core HttpResponse to a napi KoonResponse.
+fn response_to_napi(response: koon_core::HttpResponse) -> KoonResponse {
+    let headers: Vec<KoonHeader> = response
+        .headers
+        .into_iter()
+        .map(|(name, value)| KoonHeader { name, value })
+        .collect();
+    KoonResponse {
+        status_val: response.status as u32,
+        headers_val: headers,
+        body_val: response.body,
+        version_val: response.version,
+        url_val: response.url,
+    }
 }
 
 /// The main Koon HTTP client with browser fingerprint impersonation.
@@ -443,31 +531,25 @@ impl Koon {
         })?;
 
         let body_bytes = body.map(|b| b.to_vec());
-        let extra_headers: Vec<(String, String)> = options
-            .and_then(|o| o.headers)
+        let opts = options.unwrap_or_default();
+        let extra_headers: Vec<(String, String)> = opts.headers
             .unwrap_or_default()
             .into_iter()
             .collect();
 
-        let response = self
-            .client
-            .request_with_headers(method, &url, body_bytes, extra_headers)
-            .await
-            .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?;
+        let future = self.client.request_with_headers(method, &url, body_bytes, extra_headers);
 
-        let headers: Vec<KoonHeader> = response
-            .headers
-            .into_iter()
-            .map(|(name, value)| KoonHeader { name, value })
-            .collect();
+        let response = if let Some(timeout_ms) = opts.timeout {
+            tokio_timeout(Duration::from_millis(timeout_ms as u64), future)
+                .await
+                .map_err(|_| napi::Error::from_reason("Request timed out"))?
+                .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?
+        } else {
+            future.await
+                .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?
+        };
 
-        Ok(KoonResponse {
-            status: response.status as u32,
-            headers,
-            body: response.body.into(),
-            version: response.version,
-            url: response.url,
-        })
+        Ok(response_to_napi(response))
     }
 
     /// Perform an HTTP POST request with multipart/form-data body.
@@ -501,32 +583,27 @@ impl Koon {
         }
 
         let (body, content_type) = mp.build();
-        let mut extra_headers: Vec<(String, String)> = options
-            .and_then(|o| o.headers)
+        let opts = options.unwrap_or_default();
+        let mut extra_headers: Vec<(String, String)> = opts.headers
             .unwrap_or_default()
             .into_iter()
             .collect();
         extra_headers.push(("content-type".into(), content_type));
 
-        let response = self
-            .client
-            .request_with_headers("POST".parse().unwrap(), &url, Some(body), extra_headers)
-            .await
-            .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?;
+        let future = self.client
+            .request_with_headers("POST".parse().unwrap(), &url, Some(body), extra_headers);
 
-        let headers: Vec<KoonHeader> = response
-            .headers
-            .into_iter()
-            .map(|(name, value)| KoonHeader { name, value })
-            .collect();
+        let response = if let Some(timeout_ms) = opts.timeout {
+            tokio_timeout(Duration::from_millis(timeout_ms as u64), future)
+                .await
+                .map_err(|_| napi::Error::from_reason("Request timed out"))?
+                .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?
+        } else {
+            future.await
+                .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?
+        };
 
-        Ok(KoonResponse {
-            status: response.status as u32,
-            headers,
-            body: response.body.into(),
-            version: response.version,
-            url: response.url,
-        })
+        Ok(response_to_napi(response))
     }
 
     /// Perform a streaming HTTP request.
@@ -553,17 +630,24 @@ impl Koon {
             napi::Error::from_reason(format!("Invalid HTTP method: {method}"))
         })?;
         let body_bytes = body.map(|b| b.to_vec());
-        let extra_headers: Vec<(String, String)> = options
-            .and_then(|o| o.headers)
+        let opts = options.unwrap_or_default();
+        let extra_headers: Vec<(String, String)> = opts.headers
             .unwrap_or_default()
             .into_iter()
             .collect();
 
-        let resp = self
-            .client
-            .request_streaming_with_headers(method, &url, body_bytes, extra_headers)
-            .await
-            .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?;
+        let future = self.client
+            .request_streaming_with_headers(method, &url, body_bytes, extra_headers);
+
+        let resp = if let Some(timeout_ms) = opts.timeout {
+            tokio_timeout(Duration::from_millis(timeout_ms as u64), future)
+                .await
+                .map_err(|_| napi::Error::from_reason("Request timed out"))?
+                .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?
+        } else {
+            future.await
+                .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?
+        };
 
         let headers: Vec<KoonHeader> = resp
             .headers
