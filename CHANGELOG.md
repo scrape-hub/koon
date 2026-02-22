@@ -2,7 +2,7 @@
 
 All notable changes to koon will be documented in this file.
 
-## [Unreleased]
+## [0.4.5] - 2026-02-22
 
 ### Added
 - **Per-Request Headers**: All HTTP methods now accept optional per-request headers

@@ -1,6 +1,6 @@
 Package: koon
 Title: Browser-Impersonating HTTP Client
-Version: 0.4.4
+Version: 0.4.5
 Authors@R: person("scrape-hub", email = "scrape-hub@users.noreply.github.com", role = c("aut", "cre"))
 Description: HTTP client that impersonates real browser TLS, HTTP/2 and HTTP/3
     fingerprints. Supports Chrome, Firefox, Safari, Edge, and Opera profiles.
