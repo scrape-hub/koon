@@ -9,6 +9,7 @@
 #' The response is an R list with components:
 #' \describe{
 #'   \item{status}{Integer HTTP status code (e.g. 200)}
+#'   \item{ok}{Logical, TRUE when status is 2xx (success)}
 #'   \item{version}{Character HTTP version (e.g. "HTTP/2.0")}
 #'   \item{url}{Character final URL after redirects}
 #'   \item{body}{Raw vector with response body bytes}
@@ -26,7 +27,12 @@
 #' # GET request
 #' resp <- client$get("https://httpbin.org/get")
 #' resp$status   # 200
+#' resp$ok       # TRUE
 #' resp$text     # response body as string
+#'
+#' # Per-request headers
+#' resp <- client$get("https://httpbin.org/get",
+#'   headers = c(Authorization = "Bearer token"))
 #'
 #' # POST request with body
 #' resp <- client$post("https://httpbin.org/post", charToRaw("hello"))

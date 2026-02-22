@@ -34,8 +34,10 @@ cargo install koon-cli
 const { Koon } = require('koonjs');
 
 const client = new Koon({ browser: 'chrome145' });
-const response = await client.get('https://example.com');
-console.log(response.status); // 200
+const resp = await client.get('https://httpbin.org/json');
+console.log(resp.ok);      // true
+console.log(resp.text());  // body as string
+console.log(resp.json());  // parsed JSON
 ```
 
 **Python**
@@ -43,8 +45,9 @@ console.log(response.status); // 200
 from koon import Koon
 
 client = Koon("chrome145")
-r = await client.get("https://example.com")
-print(r.status, r.text())
+resp = await client.get("https://httpbin.org/json")
+print(resp.ok)      # True
+print(resp.json())  # parsed JSON
 ```
 
 **R**
@@ -52,8 +55,8 @@ print(r.status, r.text())
 library(koon)
 
 client <- Koon$new("chrome145")
-resp <- client$get("https://example.com")
-resp$status  # 200
+resp <- client$get("https://httpbin.org/json")
+resp$ok      # TRUE
 resp$text    # body as string
 ```
 
@@ -109,6 +112,8 @@ Each profile includes Windows, macOS, and Linux user-agent variants (`chrome145-
 - **WebSocket** — `wss://` connections with browser-matching TLS handshake
 - **Streaming responses** — chunked body streaming with async iterator support
 - **Multipart form-data** — file uploads with custom content types
+- **Per-request headers and timeout** — override defaults per request without affecting the client
+- **Ergonomic response API** — `ok`, `text()`, `json()`, `header()` on every response
 - **Session persistence** — save/load cookies and TLS session tickets to JSON
 - **Fingerprint randomization** — slight jitter on UA build number, accept-language q-values, H2 window sizes
 - **Response decompression** — gzip, brotli, deflate, zstd (automatic)
@@ -138,9 +143,18 @@ const r5 = await client.patch('https://httpbin.org/patch', Buffer.from('data'));
 const r6 = await client.head('https://httpbin.org/get');
 
 // Response
-console.log(r1.status);                        // 200
-console.log(r1.version);                        // "HTTP/2.0"
-console.log(Buffer.from(r1.body).toString());   // response body
+console.log(r1.ok);                             // true (status 2xx)
+console.log(r1.status);                         // 200
+console.log(r1.text());                         // body as UTF-8 string
+console.log(r1.json());                         // parsed JSON
+console.log(r1.header('content-type'));          // case-insensitive header lookup
+console.log(r1.body);                           // raw Buffer
+
+// Per-request headers and timeout
+const r7 = await client.get('https://httpbin.org/get', {
+  headers: { 'Authorization': 'Bearer token' },
+  timeout: 5000,  // 5s timeout for this request only
+});
 
 // Cookies persist automatically
 await client.get('https://httpbin.org/cookies/set/name/value');
@@ -198,9 +212,17 @@ async def main():
     r = await client.head("https://httpbin.org/get")
 
     # Response
+    print(r.ok)        # True (status 2xx)
     print(r.status)    # 200
-    print(r.text())    # body as string
+    print(r.text)      # body as string (property)
     print(r.json())    # parsed JSON
+    print(r.header("content-type"))  # case-insensitive header lookup
+
+    # Per-request headers and timeout
+    r = await client.get("https://httpbin.org/get",
+        headers={"Authorization": "Bearer token"},
+        timeout=5000,  # 5s timeout for this request only
+    )
 
     # Cookies persist automatically
     await client.get("https://httpbin.org/cookies/set/name/value")
@@ -253,6 +275,7 @@ resp <- client$patch("https://httpbin.org/patch", charToRaw("data"))
 resp <- client$head("https://httpbin.org/get")
 
 # Response
+resp$ok         # TRUE (status 2xx)
 resp$status     # 200
 resp$version    # "HTTP/2.0"
 resp$text       # body as string
@@ -261,6 +284,11 @@ resp$headers    # data.frame with name + value columns
 
 # Parse JSON (via jsonlite)
 data <- jsonlite::fromJSON(resp$text)
+
+# Per-request headers
+resp <- client$get("https://httpbin.org/get",
+  headers = c(Authorization = "Bearer token")
+)
 
 # Cookies persist automatically
 client$get("https://httpbin.org/cookies/set/name/value")

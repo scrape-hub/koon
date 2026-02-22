@@ -13,7 +13,7 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
 
 ## Custom Headers
 
-Pass a named character vector to set custom HTTP headers:
+Pass a named character vector to set custom HTTP headers on the client (applied to every request):
 
 ```{r}
 library(koon)
@@ -28,6 +28,21 @@ client <- Koon$new(
 
 resp <- client$get("https://httpbin.org/headers")
 cat(resp$text)
+```
+
+### Per-Request Headers
+
+You can also set headers for a single request via the `headers` parameter.
+Per-request headers override constructor-level headers (case-insensitive):
+
+```{r}
+# These headers apply only to this request
+resp <- client$get("https://httpbin.org/headers",
+  headers = c(Authorization = "Bearer my-token"))
+
+# POST with per-request headers
+resp <- client$post("https://httpbin.org/post", charToRaw("data"),
+  headers = c("Content-Type" = "text/plain"))
 ```
 
 ## Fingerprint Randomization
@@ -84,7 +99,7 @@ result <- tryCatch(
   }
 )
 
-if (!is.null(result)) {
+if (!is.null(result) && result$ok) {
   cat("Status:", result$status, "\n")
 }
 ```
@@ -95,7 +110,7 @@ A helper function for retries:
 request_with_retry <- function(client, url, max_retries = 3) {
   for (i in seq_len(max_retries)) {
     result <- tryCatch(client$get(url), error = function(e) NULL)
-    if (!is.null(result) && result$status == 200) return(result)
+    if (!is.null(result) && result$ok) return(result)
     Sys.sleep(2^i)  # exponential backoff
   }
   stop("Request failed after ", max_retries, " retries")

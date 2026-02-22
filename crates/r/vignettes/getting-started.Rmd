@@ -42,6 +42,7 @@ Every response is an R list with these components:
 | Field     | Type       | Description                            |
 |-----------|------------|----------------------------------------|
 | `status`  | integer    | HTTP status code (e.g. 200, 404)       |
+| `ok`      | logical    | TRUE when status is 2xx (success)      |
 | `version` | character  | HTTP version (e.g. "HTTP/2.0")         |
 | `url`     | character  | Final URL after redirects              |
 | `body`    | raw        | Response body as raw bytes             |
@@ -67,7 +68,7 @@ resp <- client$post("https://httpbin.org/post", charToRaw("hello world"))
 cat(resp$text)
 
 # POST JSON
-json_body <- '{"name": "koon", "version": "0.4.4"}'
+json_body <- '{"name": "koon", "version": "0.4.5"}'
 resp <- client$post("https://httpbin.org/post", charToRaw(json_body))
 ```
 
@@ -81,6 +82,16 @@ library(jsonlite)
 resp <- client$get("https://httpbin.org/get")
 data <- fromJSON(resp$text)
 data$headers$`User-Agent`
+```
+
+## Per-Request Headers
+
+Override or add headers for a single request without changing the client:
+
+```{r}
+resp <- client$get("https://httpbin.org/headers",
+  headers = c(Authorization = "Bearer my-token", "X-Custom" = "value"))
+cat(resp$text)
 ```
 
 ## Other HTTP Methods
