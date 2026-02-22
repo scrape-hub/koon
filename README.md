@@ -8,7 +8,7 @@ Built in Rust on top of BoringSSL with native bindings for **Node.js**, **Python
 
 **Node.js**
 ```bash
-npm install koon
+npm install koonjs
 ```
 
 **Python**
@@ -31,7 +31,7 @@ cargo install koon-cli
 
 **Node.js**
 ```javascript
-const { Koon } = require('koon');
+const { Koon } = require('koonjs');
 
 const client = new Koon({ browser: 'chrome145' });
 const response = await client.get('https://example.com');
@@ -119,7 +119,7 @@ Each profile includes Windows, macOS, and Linux user-agent variants (`chrome145-
 ### Node.js
 
 ```javascript
-const { Koon } = require('koon');
+const { Koon } = require('koonjs');
 
 // Browser profile + options
 const client = new Koon({
@@ -173,7 +173,7 @@ await client.postMultipart('https://httpbin.org/post', [
 ]);
 
 // MITM proxy
-const { KoonProxy } = require('koon');
+const { KoonProxy } = require('koonjs');
 const proxy = await KoonProxy.start({ browser: 'chrome145', listenAddr: '127.0.0.1:8080' });
 console.log(proxy.url);         // http://127.0.0.1:8080
 console.log(proxy.caCertPath);  // path to CA cert for trust
