@@ -2,7 +2,21 @@
 
 All notable changes to koon will be documented in this file.
 
-## [0.4.6] - 2026-02-22
+## [Unreleased]
+
+### Added
+- **FetchMetadata Auto-Detection**: sec-fetch-* headers are now automatically corrected based on request context
+  - Chrome/Edge/Opera profiles defaulted to `sec-fetch-mode: navigate` which conflicts with `Origin` headers on API requests — Akamai detected this inconsistency and returned 403
+  - When `Origin` or API content-type (`application/json`, `application/x-www-form-urlencoded`, `multipart/form-data`) is detected, sec-fetch-* headers are corrected to `cors`/`empty`
+  - `sec-fetch-site` computed from request URL vs Origin (`same-origin`, `same-site`, `cross-site`)
+  - `sec-fetch-user: ?1` removed for non-navigate requests (only valid for navigate)
+  - User-set `sec-fetch-mode` in custom/extra headers skips auto-detection (full control preserved)
+  - Firefox/Safari profiles unaffected (no sec-fetch-mode in profile → no auto-detection)
+  - 10 unit tests covering all detection paths
+- **R Vignettes**: 3 practical vignettes for the R package
+  - `getting-started.Rmd` — installation, GET/POST requests, response structure, JSON parsing, browser profiles
+  - `sessions-and-cookies.Rmd` — cookie persistence, save/load sessions, login workflows, profile export
+  - `advanced-usage.Rmd` — custom headers, fingerprint randomization, proxy, timeout, error handling
 
 ### Improved
 - **Rustdoc**: Comprehensive doc comments for all public API types in koon-core
@@ -14,27 +28,9 @@ All notable changes to koon will be documented in this file.
 - **Python IDE support**: Docstrings for all classes, methods, and properties in `.pyi` stub file
   - `Koon.__init__()` with full Args description, all `KoonResponse`/`KoonStreamingResponse`/`KoonWebSocket`/`KoonProxy` members
 - **Python `lib.rs`**: `///` doc comments for `Koon::new()` parameters and all `#[pyo3(get)]` properties
-- **`.gitignore`**: R build artifacts, Playwright MCP directory, local investigation notes
-
-## [0.4.5] - 2026-02-22
-
-### Added
-- **R Vignettes**: 3 practical vignettes for the R package
-  - `getting-started.Rmd` — installation, GET/POST requests, response structure, JSON parsing, browser profiles
-  - `sessions-and-cookies.Rmd` — cookie persistence, save/load sessions, login workflows, profile export
-  - `advanced-usage.Rmd` — custom headers, fingerprint randomization, proxy, timeout, error handling
-- **FetchMetadata Auto-Detection**: sec-fetch-* headers are now automatically corrected based on request context
-  - Chrome/Edge/Opera profiles defaulted to `sec-fetch-mode: navigate` which conflicts with `Origin` headers on API requests — Akamai detected this inconsistency and returned 403
-  - When `Origin` or API content-type (`application/json`, `application/x-www-form-urlencoded`, `multipart/form-data`) is detected, sec-fetch-* headers are corrected to `cors`/`empty`
-  - `sec-fetch-site` computed from request URL vs Origin (`same-origin`, `same-site`, `cross-site`)
-  - `sec-fetch-user: ?1` removed for non-navigate requests (only valid for navigate)
-  - User-set `sec-fetch-mode` in custom/extra headers skips auto-detection (full control preserved)
-  - Firefox/Safari profiles unaffected (no sec-fetch-mode in profile → no auto-detection)
-  - 10 unit tests covering all detection paths
-
-### Improved
 - **CLI `--help`**: Added `long_about` with project description and `after_help` with 13 usage examples
 - **CLI cleanup**: Removed unimplemented `--insecure` / `-k` placeholder flag
+- **`.gitignore`**: R build artifacts, Playwright MCP directory, local investigation notes
 
 ## [0.4.4] - 2026-02-22
 
