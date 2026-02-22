@@ -179,6 +179,7 @@ impl super::Client {
             &["host", "cookie"],
             None,
             false,
+            Some(uri),
         );
 
         // Send the request
@@ -263,6 +264,7 @@ impl super::Client {
             &["host", "cookie"],
             None,
             false,
+            Some(uri),
         );
 
         let has_body = body.is_some();

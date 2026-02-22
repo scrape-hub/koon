@@ -339,6 +339,7 @@ impl Client {
             &["host", "cookie", "accept-encoding", "content-type", "content-length"],
             Some(authority),
             false,
+            None, // WebSocket doesn't need sec-fetch-* correction
         );
 
         // 4. WebSocket handshake

@@ -32,6 +32,7 @@ impl super::Client {
             &["host", "cookie"],
             Some(authority),
             true,
+            Some(uri),
         );
 
         // Write request
@@ -88,6 +89,7 @@ impl super::Client {
             &["host", "cookie"],
             Some(authority),
             true,
+            Some(uri),
         );
 
         let body_ref = body.as_deref();
