@@ -2,6 +2,18 @@
 
 All notable changes to koon will be documented in this file.
 
+## [0.4.5] - 2026-02-22
+
+### Added
+- **FetchMetadata Auto-Detection**: sec-fetch-* headers are now automatically corrected based on request context
+  - Chrome/Edge/Opera profiles defaulted to `sec-fetch-mode: navigate` which conflicts with `Origin` headers on API requests — Akamai detected this inconsistency and returned 403
+  - When `Origin` or API content-type (`application/json`, `application/x-www-form-urlencoded`, `multipart/form-data`) is detected, sec-fetch-* headers are corrected to `cors`/`empty`
+  - `sec-fetch-site` computed from request URL vs Origin (`same-origin`, `same-site`, `cross-site`)
+  - `sec-fetch-user: ?1` removed for non-navigate requests (only valid for navigate)
+  - User-set `sec-fetch-mode` in custom/extra headers skips auto-detection (full control preserved)
+  - Firefox/Safari profiles unaffected (no sec-fetch-mode in profile → no auto-detection)
+  - 10 unit tests covering all detection paths
+
 ## [0.4.4] - 2026-02-22
 
 ### Added
