@@ -6,18 +6,26 @@ All notable changes to koon will be documented in this file.
 
 ### Added
 - **CI/CD Pipelines** (GitHub Actions):
-  - `ci.yml`: `cargo test` + `cargo clippy` on push/PR to master (Ubuntu, Go for BoringSSL)
+  - `ci.yml`: `cargo test` + `cargo clippy` on push/PR to master
   - `release.yml`: Automated build + publish on `v*` tag push
     - 5 platform matrix: Windows x64, Linux x64/ARM64, macOS x64/ARM64
-    - Node.js native addons → npm (`koon`)
-    - Python wheels → PyPI (`koon`)
+    - Node.js native addons → npm (`koonjs`)
+    - Python wheels → PyPI (`koon`) with manylinux_2_28 via zig cross-compilation
     - CLI binaries → GitHub Releases
     - Python source distribution (sdist)
+- **Published on all platforms**:
+  - npm: `npm install koonjs`
+  - PyPI: `pip install koon`
+  - GitHub Releases: CLI binaries for 5 platforms
+  - R: `remotes::install_github("scrape-hub/koon", subdir="crates/r")`
 
 ### Fixed
 - Resolved all clippy warnings (boxed large error variant, collapsed ifs, redundant closures)
+- Windows CI: Fixed MSVC linker discovery (broken BuildTools shadowing Enterprise)
+- Linux Python wheels: manylinux_2_28 compliance via maturin+zig (PyPI rejects raw linux_* tags)
 
 ### Changed
+- npm package renamed to `koonjs` (npm name collision with existing packages)
 - Migrated repository to `scrape-hub/koon` (including h2 fork to `scrape-hub/http2`)
 
 ## [0.4.2] - 2026-02-21
