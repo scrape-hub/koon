@@ -18,7 +18,7 @@ jobs:
       matrix:
         include:
           - target: x86_64-pc-windows-msvc
-            runner: windows-2022
+            runner: windows-latest
             node-file: koon.win32-x64-msvc.node
             cli-file: koon-x86_64-pc-windows-msvc.exe
             lib-prefix: ""
@@ -62,6 +62,10 @@ jobs:
         with:
           go-version: stable
 
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Install NASM (Windows)
         if: runner.os == 'Windows'
         uses: ilammy/setup-nasm@v1
@@ -79,7 +83,13 @@ jobs:
           echo "CXX=aarch64-linux-gnu-g++" >> $GITHUB_ENV
           echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
 
-      - name: Build
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: cargo build --release -p koon-node -p koon-cli --target ${{ matrix.target }}
+
+      - name: Build (Unix)
+        if: runner.os != 'Windows'
         run: cargo build --release -p koon-node -p koon-cli --target ${{ matrix.target }}
 
       - name: Rename node binary
@@ -113,7 +123,7 @@ jobs:
       matrix:
         include:
           - target: x86_64-pc-windows-msvc
-            runner: windows-2022
+            runner: windows-latest
           - target: x86_64-unknown-linux-gnu
             runner: ubuntu-latest
           - target: aarch64-unknown-linux-gnu
@@ -127,14 +137,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fix MSVC discovery (Windows)
+      - name: Setup MSVC (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Remove-Item -Recurse -Force "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools" -ErrorAction SilentlyContinue
-          $vsEnterprise = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -products 'Microsoft.VisualStudio.Product.Enterprise' -latest -property installationPath
-          Write-Host "VS Enterprise: $vsEnterprise"
-          echo "VCINSTALLDIR=$vsEnterprise\VC\" >> $env:GITHUB_ENV
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install Go
         uses: actions/setup-go@v5
