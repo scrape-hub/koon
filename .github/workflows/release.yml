@@ -54,8 +54,12 @@ jobs:
 
       - name: Fix MSVC discovery (Windows)
         if: runner.os == 'Windows'
-        shell: bash
-        run: rm -rf "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools" || true
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools" -ErrorAction SilentlyContinue
+          $vsEnterprise = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -products 'Microsoft.VisualStudio.Product.Enterprise' -latest -property installationPath
+          Write-Host "VS Enterprise: $vsEnterprise"
+          echo "VCINSTALLDIR=$vsEnterprise\VC\" >> $env:GITHUB_ENV
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -134,8 +138,12 @@ jobs:
 
       - name: Fix MSVC discovery (Windows)
         if: runner.os == 'Windows'
-        shell: bash
-        run: rm -rf "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools" || true
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools" -ErrorAction SilentlyContinue
+          $vsEnterprise = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -products 'Microsoft.VisualStudio.Product.Enterprise' -latest -property installationPath
+          Write-Host "VS Enterprise: $vsEnterprise"
+          echo "VCINSTALLDIR=$vsEnterprise\VC\" >> $env:GITHUB_ENV
 
       - name: Install Go
         uses: actions/setup-go@v5
