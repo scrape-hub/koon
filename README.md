@@ -364,7 +364,7 @@ koon-cli          Command-line interface via clap
 
 Key dependencies:
 - [boring2](https://github.com/0x676e67/boring2) — BoringSSL Rust bindings
-- [http2](https://github.com/hrylx/http2) (fork) — HTTP/2 with header field ordering
+- [http2](https://github.com/scrape-hub/http2) (fork) — HTTP/2 with header field ordering
 - [quinn](https://github.com/quinn-rs/quinn) + [h3](https://github.com/hyperium/h3) — QUIC / HTTP/3
 - [napi-rs](https://napi.rs) — Rust to Node.js bridge
 - [PyO3](https://pyo3.rs) + [maturin](https://github.com/PyO3/maturin) — Rust to Python bridge

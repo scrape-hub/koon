@@ -412,7 +412,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -727,7 +727,7 @@ dependencies = [
 [[package]]
 name = "http2"
 version = "0.5.12"
-source = "git+https://github.com/hrylx/http2.git?tag=v0.5.12-headers-order#e9143698d78f69fd7ecd8e2e51797f77d6e06a26"
+source = "git+https://github.com/scrape-hub/http2.git?tag=v0.5.12-headers-order#e9143698d78f69fd7ecd8e2e51797f77d6e06a26"
 dependencies = [
  "atomic-waker",
  "bytes",
@@ -1352,7 +1352,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.60.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
