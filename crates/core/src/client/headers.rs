@@ -492,4 +492,154 @@ mod tests {
         // No sec-fetch-mode in profile → nothing to auto-detect
         assert!(headers.get("sec-fetch-mode").is_none());
     }
+
+    #[test]
+    fn test_extra_headers_applied() {
+        let profile_headers = vec![
+            ("accept".into(), "text/html".into()),
+            ("user-agent".into(), "Mozilla/5.0".into()),
+            ("accept-encoding".into(), "gzip, deflate, br".into()),
+        ];
+        let custom_headers = vec![
+            ("origin".into(), "https://shop.example.com".into()),
+            ("referer".into(), "https://shop.example.com/".into()),
+        ];
+        let extra_headers = vec![
+            ("content-type".into(), "application/x-www-form-urlencoded".into()),
+        ];
+        let url: Uri = "https://api.example.com/v1/token".parse().unwrap();
+
+        let headers = build_request_headers(
+            &profile_headers,
+            &custom_headers,
+            &extra_headers,
+            None,
+            &[],
+            None,
+            false,
+            Some(&url),
+        );
+
+        // extra_headers must be present
+        assert_eq!(
+            headers.get("content-type").unwrap(),
+            "application/x-www-form-urlencoded"
+        );
+        // custom_headers must also be present
+        assert_eq!(
+            headers.get("origin").unwrap(),
+            "https://shop.example.com"
+        );
+        assert_eq!(
+            headers.get("referer").unwrap(),
+            "https://shop.example.com/"
+        );
+    }
+
+    #[test]
+    fn test_extra_headers_override_custom() {
+        let profile_headers = vec![
+            ("accept".into(), "text/html".into()),
+        ];
+        let custom_headers = vec![
+            ("content-type".into(), "text/plain".into()),
+        ];
+        let extra_headers = vec![
+            ("content-type".into(), "application/json".into()),
+        ];
+
+        let headers = build_request_headers(
+            &profile_headers,
+            &custom_headers,
+            &extra_headers,
+            None,
+            &[],
+            None,
+            false,
+            None,
+        );
+
+        // extra_headers override custom_headers
+        assert_eq!(headers.get("content-type").unwrap(), "application/json");
+    }
+
+    #[test]
+    fn test_extra_headers_same_result_as_custom() {
+        // Reproduces the bug report: same headers via custom vs extra
+        // should produce identical header sets
+        let profile_headers = vec![
+            ("accept".into(), "text/html".into()),
+            ("user-agent".into(), "Mozilla/5.0".into()),
+            ("accept-language".into(), "en-US".into()),
+            ("accept-encoding".into(), "gzip, deflate, br".into()),
+        ];
+        let url: Uri = "https://api.example.com/v1/token".parse().unwrap();
+
+        // Variant 1: all in custom_headers
+        let h1 = build_request_headers(
+            &profile_headers,
+            &[
+                ("content-type".into(), "application/x-www-form-urlencoded".into()),
+                ("origin".into(), "https://shop.example.com".into()),
+                ("referer".into(), "https://shop.example.com/".into()),
+            ],
+            &[],
+            None,
+            &[],
+            None,
+            false,
+            Some(&url),
+        );
+
+        // Variant 2: all in extra_headers
+        let h2 = build_request_headers(
+            &profile_headers,
+            &[],
+            &[
+                ("content-type".into(), "application/x-www-form-urlencoded".into()),
+                ("origin".into(), "https://shop.example.com".into()),
+                ("referer".into(), "https://shop.example.com/".into()),
+            ],
+            None,
+            &[],
+            None,
+            false,
+            Some(&url),
+        );
+
+        // Variant 3: split between custom and extra
+        let h3 = build_request_headers(
+            &profile_headers,
+            &[
+                ("origin".into(), "https://shop.example.com".into()),
+                ("referer".into(), "https://shop.example.com/".into()),
+            ],
+            &[
+                ("content-type".into(), "application/x-www-form-urlencoded".into()),
+            ],
+            None,
+            &[],
+            None,
+            false,
+            Some(&url),
+        );
+
+        // All three must contain the same headers
+        for variant in [&h1, &h2, &h3] {
+            assert_eq!(
+                variant.get("content-type").unwrap(),
+                "application/x-www-form-urlencoded",
+            );
+            assert_eq!(
+                variant.get("origin").unwrap(),
+                "https://shop.example.com",
+            );
+            assert_eq!(
+                variant.get("referer").unwrap(),
+                "https://shop.example.com/",
+            );
+            assert!(variant.get("accept").is_some());
+            assert!(variant.get("user-agent").is_some());
+        }
+    }
 }
