@@ -5,11 +5,29 @@ All notable changes to koon will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Per-Request Headers**: All HTTP methods now accept optional per-request headers
+  - Node.js: `client.get(url, { headers: { Authorization: 'Bearer ...' } })`
+  - R: `client$get(url, headers = c(Authorization = "Bearer ..."))`
+  - Per-request headers override constructor-level defaults (case-insensitive merge)
+  - Connection pool, TLS session, and HTTP/2 multiplexing are fully preserved
+  - New `KoonRequestOptions` TypeScript interface, new `options` parameter on `get`, `post`, `put`, `delete`, `patch`, `head`, `request`, `postMultipart`, `requestStreaming`
+  - Core: `request_streaming_with_headers()` added (streaming was missing extra_headers support)
+- **Chromium CORS Header Ordering**: Fetch/XHR requests now use Chrome's real CORS header order
+  - Real Chrome reorders headers differently for `fetch()` vs navigation — mismatch was detectable
+  - `CHROMIUM_CORS_ORDER` constant matches captured Chrome fetch() requests
+  - Applied automatically when CORS mode is detected + Chromium profile (sec-ch-ua present)
+  - Navigation requests keep the existing profile-based sort order
+- **Chromium sec-ch-ua GREASE Algorithm**: Replaced hardcoded brand strings with the real Chromium algorithm
+  - Implements the actual `user_agent_utils.cc` GREASE logic: deterministic brand shuffling per version
+  - Shared by Chrome, Edge, and Opera — each passes its own brand name
+  - Automatically correct for all past and future Chromium versions
 - **FetchMetadata Auto-Detection**: sec-fetch-* headers are now automatically corrected based on request context
   - Chrome/Edge/Opera profiles defaulted to `sec-fetch-mode: navigate` which conflicts with `Origin` headers on API requests — Akamai detected this inconsistency and returned 403
   - When `Origin` or API content-type (`application/json`, `application/x-www-form-urlencoded`, `multipart/form-data`) is detected, sec-fetch-* headers are corrected to `cors`/`empty`
   - `sec-fetch-site` computed from request URL vs Origin (`same-origin`, `same-site`, `cross-site`)
   - `sec-fetch-user: ?1` removed for non-navigate requests (only valid for navigate)
+  - `upgrade-insecure-requests` removed for CORS requests (navigate-only)
+  - `priority` corrected from `u=0` (navigation) to `u=1, i` (fetch)
   - User-set `sec-fetch-mode` in custom/extra headers skips auto-detection (full control preserved)
   - Firefox/Safari profiles unaffected (no sec-fetch-mode in profile → no auto-detection)
   - 10 unit tests covering all detection paths

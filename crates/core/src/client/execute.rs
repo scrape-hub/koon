@@ -260,6 +260,17 @@ impl super::Client {
         url: &str,
         body: Option<Vec<u8>>,
     ) -> Result<StreamingResponse, Error> {
+        self.request_streaming_with_headers(method, url, body, Vec::new()).await
+    }
+
+    /// Perform a streaming HTTP request with additional per-request headers.
+    pub async fn request_streaming_with_headers(
+        &self,
+        method: Method,
+        url: &str,
+        body: Option<Vec<u8>>,
+        extra_headers: Vec<(String, String)>,
+    ) -> Result<StreamingResponse, Error> {
         let uri: Uri = url.parse().map_err(|_| Error::Url(url::ParseError::EmptyHost))?;
 
         let host = uri
@@ -284,7 +295,7 @@ impl super::Client {
         // Try pooled H2 connection first
         if let Some(mut sender) = self.pool.try_get_h2(host, port) {
             match self
-                .send_on_h2_streaming(&mut sender, method.clone(), &uri, body.clone(), cookie_header.as_deref())
+                .send_on_h2_streaming(&mut sender, method.clone(), &uri, body.clone(), cookie_header.as_deref(), &extra_headers)
                 .await
             {
                 Ok(resp) => {
@@ -312,12 +323,12 @@ impl super::Client {
         if is_h2 {
             let mut sender = self.h2_handshake(tls_stream).await?;
             let resp = self
-                .send_on_h2_streaming(&mut sender, method, &uri, body, cookie_header.as_deref())
+                .send_on_h2_streaming(&mut sender, method, &uri, body, cookie_header.as_deref(), &extra_headers)
                 .await?;
             self.pool.insert_h2(host, port, sender);
             Ok(resp)
         } else {
-            self.send_on_h1_streaming(tls_stream, method, &uri, body, cookie_header.as_deref())
+            self.send_on_h1_streaming(tls_stream, method, &uri, body, cookie_header.as_deref(), &extra_headers)
                 .await
         }
     }

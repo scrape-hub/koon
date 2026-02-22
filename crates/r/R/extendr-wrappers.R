@@ -20,17 +20,17 @@ Koon <- new.env(parent = emptyenv())
 
 Koon$new <- function(browser, proxy = NULL, timeout = NULL, randomize = NULL, headers = NULL) .Call(wrap__Koon__new, browser, proxy, timeout, randomize, headers)
 
-Koon$get <- function(url) .Call(wrap__Koon__get, self, url)
+Koon$get <- function(url, headers = NULL) .Call(wrap__Koon__get, self, url, headers)
 
-Koon$post <- function(url, body = NULL) .Call(wrap__Koon__post, self, url, body)
+Koon$post <- function(url, body = NULL, headers = NULL) .Call(wrap__Koon__post, self, url, body, headers)
 
-Koon$put <- function(url, body = NULL) .Call(wrap__Koon__put, self, url, body)
+Koon$put <- function(url, body = NULL, headers = NULL) .Call(wrap__Koon__put, self, url, body, headers)
 
-Koon$delete <- function(url) .Call(wrap__Koon__delete, self, url)
+Koon$delete <- function(url, headers = NULL) .Call(wrap__Koon__delete, self, url, headers)
 
-Koon$patch <- function(url, body = NULL) .Call(wrap__Koon__patch, self, url, body)
+Koon$patch <- function(url, body = NULL, headers = NULL) .Call(wrap__Koon__patch, self, url, body, headers)
 
-Koon$head <- function(url) .Call(wrap__Koon__head, self, url)
+Koon$head <- function(url, headers = NULL) .Call(wrap__Koon__head, self, url, headers)
 
 Koon$save_session <- function() .Call(wrap__Koon__save_session, self)
 

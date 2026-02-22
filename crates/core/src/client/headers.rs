@@ -82,12 +82,22 @@ pub(super) fn build_request_headers(
         .iter()
         .chain(extra_headers.iter())
         .any(|(name, _)| name.eq_ignore_ascii_case("sec-fetch-mode"));
-    if !user_set_fetch_mode {
-        auto_detect_fetch_metadata(&mut headers, request_url);
-    }
+    let cors_detected = if !user_set_fetch_mode {
+        auto_detect_fetch_metadata(&mut headers, request_url)
+    } else {
+        false
+    };
 
-    // Sort to match profile order (critical for fingerprinting)
-    sort_headers_by_profile(&mut headers, profile_headers);
+    // Sort to match profile/cors order (critical for fingerprinting)
+    // Chromium cors requests have a different header order than navigation requests.
+    let is_chromium = profile_headers
+        .iter()
+        .any(|(name, _)| name.eq_ignore_ascii_case("sec-ch-ua"));
+    if cors_detected && is_chromium {
+        sort_headers_chromium_cors(&mut headers);
+    } else {
+        sort_headers_by_profile(&mut headers, profile_headers);
+    }
 
     headers
 }
@@ -99,10 +109,10 @@ pub(super) fn build_request_headers(
 /// corrected to match what a real browser would send for a fetch/XHR request.
 ///
 /// This prevents Akamai from detecting the inconsistency between navigate + Origin.
-fn auto_detect_fetch_metadata(headers: &mut http::HeaderMap, request_url: Option<&Uri>) {
+fn auto_detect_fetch_metadata(headers: &mut http::HeaderMap, request_url: Option<&Uri>) -> bool {
     // Only applies if the profile set sec-fetch-mode (Chrome/Edge/Opera)
     if !headers.contains_key("sec-fetch-mode") {
-        return;
+        return false;
     }
 
     let has_origin = headers.contains_key("origin");
@@ -127,6 +137,19 @@ fn auto_detect_fetch_metadata(headers: &mut http::HeaderMap, request_url: Option
         );
         // sec-fetch-user: ?1 is only valid for navigate
         headers.remove("sec-fetch-user");
+        // upgrade-insecure-requests is only sent for navigation, not fetch/XHR
+        headers.remove("upgrade-insecure-requests");
+        // Fix priority: u=0 (navigation) → u=1 (fetch)
+        if headers
+            .get("priority")
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|p| p.contains("u=0"))
+        {
+            headers.insert(
+                HeaderName::from_static("priority"),
+                HeaderValue::from_static("u=1, i"),
+            );
+        }
 
         if has_origin {
             // Compute sec-fetch-site from Origin vs request URL
@@ -148,6 +171,10 @@ fn auto_detect_fetch_metadata(headers: &mut http::HeaderMap, request_url: Option
                 HeaderValue::from_static("same-origin"),
             );
         }
+
+        true
+    } else {
+        false
     }
 }
 
@@ -212,6 +239,59 @@ fn registrable_domain(host: &str) -> &str {
         Some(pos) => &host[pos + 1..],
         None => host,
     }
+}
+
+/// Header order for Chromium-based browsers in CORS/fetch mode.
+///
+/// When Chrome makes a fetch() or XHR request (as opposed to a navigation),
+/// headers appear in a different order than the navigation profile. This list
+/// includes slots for common API headers (content-type, origin, referer, cookie)
+/// that are absent from the navigation profile but must appear at specific
+/// positions to avoid Akamai fingerprint mismatches.
+const CHROMIUM_CORS_ORDER: &[&str] = &[
+    "content-length",
+    "sec-ch-ua",
+    "content-type",
+    "sec-ch-ua-mobile",
+    "sec-ch-ua-platform",
+    "user-agent",
+    "accept",
+    "origin",
+    "sec-fetch-site",
+    "sec-fetch-mode",
+    "sec-fetch-dest",
+    "referer",
+    "accept-encoding",
+    "accept-language",
+    "cookie",
+    "priority",
+];
+
+/// Sort headers for Chromium CORS/fetch requests.
+///
+/// Uses a hardcoded order that matches real Chrome fetch() behavior.
+/// Any headers not in the list (app-specific custom headers like Authorization,
+/// ama-client-facts, etc.) are appended after the known headers.
+fn sort_headers_chromium_cors(headers: &mut http::HeaderMap) {
+    let mut sorted = http::HeaderMap::with_capacity(headers.keys_len());
+
+    // 1. Known headers in Chrome CORS order
+    for &name in CHROMIUM_CORS_ORDER {
+        if let Ok(hn) = HeaderName::from_bytes(name.as_bytes()) {
+            if let Some(val) = headers.remove(&hn) {
+                sorted.insert(hn, val);
+            }
+        }
+    }
+
+    // 2. Remaining headers (app-specific custom headers)
+    for (name, value) in headers.drain() {
+        if let Some(name) = name {
+            sorted.insert(name, value);
+        }
+    }
+
+    std::mem::swap(headers, &mut sorted);
 }
 
 /// Sort headers to match the profile's header order.

@@ -1,4 +1,4 @@
-use super::chrome::{chrome_http2, chrome_quic, chromium_brand, chromium_headers, chromium_tls, chromium_ua};
+use super::chrome::{chrome_http2, chrome_quic, chromium_headers, chromium_sec_ch_ua, chromium_tls, chromium_ua};
 use super::BrowserProfile;
 
 /// Edge browser profile factory.
@@ -111,12 +111,8 @@ fn edge_profile(major: u32, os: Os) -> BrowserProfile {
 }
 
 fn edge_headers(major: u32, os: Os) -> Vec<(String, String)> {
-    let brand = chromium_brand(major);
     let ver = major.to_string();
-
-    let sec_ch_ua = format!(
-        "\"Microsoft Edge\";v=\"{ver}\", \"Chromium\";v=\"{ver}\", \"{brand}\";v=\"24\""
-    );
+    let sec_ch_ua = chromium_sec_ch_ua(major, "Microsoft Edge", &ver);
 
     let platform = match os {
         Os::Windows => "\"Windows\"",

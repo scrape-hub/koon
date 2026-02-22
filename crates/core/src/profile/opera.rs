@@ -1,4 +1,4 @@
-use super::chrome::{chrome_http2, chrome_quic, chromium_brand, chromium_headers, chromium_tls, chromium_ua};
+use super::chrome::{chrome_http2, chrome_quic, chromium_headers, chromium_sec_ch_ua, chromium_tls, chromium_ua};
 use super::BrowserProfile;
 
 /// Opera browser profile factory.
@@ -75,13 +75,9 @@ fn opera_profile(opera_major: u32, chromium_major: u32, os: Os) -> BrowserProfil
 }
 
 fn opera_headers(opera_major: u32, chromium_major: u32, os: Os) -> Vec<(String, String)> {
-    let brand = chromium_brand(chromium_major);
     let opera_ver = opera_major.to_string();
     let chrome_ver = chromium_major.to_string();
-
-    let sec_ch_ua = format!(
-        "\"Opera\";v=\"{opera_ver}\", \"Chromium\";v=\"{chrome_ver}\", \"{brand}\";v=\"24\""
-    );
+    let sec_ch_ua = chromium_sec_ch_ua(chromium_major, "Opera", &opera_ver);
 
     let platform = match os {
         Os::Windows => "\"Windows\"",

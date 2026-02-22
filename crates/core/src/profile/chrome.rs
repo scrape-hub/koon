@@ -263,18 +263,9 @@ pub(super) fn chrome_quic() -> QuicConfig {
 
 // ========== Headers ==========
 
-/// sec-ch-ua "Not A Brand" string per Chrome version.
-fn chrome_brand(major: u32) -> &'static str {
-    chromium_brand(major)
-}
-
 fn chrome_headers(major: u32, os: Os) -> Vec<(String, String)> {
-    let brand = chrome_brand(major);
     let ver = major.to_string();
-
-    let sec_ch_ua = format!(
-        "\"Chromium\";v=\"{ver}\", \"{brand}\";v=\"24\", \"Google Chrome\";v=\"{ver}\""
-    );
+    let sec_ch_ua = chromium_sec_ch_ua(major, "Google Chrome", &ver);
 
     let (platform, ua_suffix) = match os {
         Os::Windows => ("\"Windows\"", format!("Chrome/{ver}.0.0.0 Safari/537.36")),
@@ -321,10 +312,109 @@ pub(super) fn chromium_ua(platform: &str, suffix: &str) -> String {
     format!("Mozilla/5.0 ({os_part}) AppleWebKit/537.36 (KHTML, like Gecko) {suffix}")
 }
 
-/// "Not A Brand" string per Chromium version. Shared by Chrome, Edge, Opera.
-pub(super) fn chromium_brand(major: u32) -> &'static str {
-    match major {
-        136 | 145 => "Not/A)Brand",
-        _ => "Not_A Brand",
+/// Generate the correct sec-ch-ua header value for a Chromium-based browser.
+///
+/// Uses the real Chromium GREASE algorithm from `user_agent_utils.cc`.
+/// The seed is the Chromium major version number. The brand list is shuffled
+/// deterministically based on the version, matching what a real browser sends.
+///
+/// `brand` is the product name ("Google Chrome", "Microsoft Edge", "Opera").
+/// `brand_ver` is the product version string (same as chromium_major for Chrome/Edge,
+/// Opera version for Opera).
+pub(super) fn chromium_sec_ch_ua(chromium_major: u32, brand: &str, brand_ver: &str) -> String {
+    const GREASE_CHARS: [char; 11] = [' ', '(', ':', '-', '.', '/', ')', ';', '=', '?', '_'];
+    const GREASE_VERSIONS: [&str; 3] = ["8", "99", "24"];
+    const ORDERS: [[usize; 3]; 6] = [
+        [0, 1, 2], [0, 2, 1], [1, 0, 2],
+        [1, 2, 0], [2, 0, 1], [2, 1, 0],
+    ];
+
+    let seed = chromium_major as usize;
+    let grease_brand = format!(
+        "Not{}A{}Brand",
+        GREASE_CHARS[seed % 11],
+        GREASE_CHARS[(seed + 1) % 11]
+    );
+    let grease_version = GREASE_VERSIONS[seed % 3];
+    let order = ORDERS[seed % 6];
+
+    let chromium_ver = chromium_major.to_string();
+
+    // Initial brand list: [GREASE, Chromium, Product]
+    let items: [String; 3] = [
+        format!("\"{grease_brand}\";v=\"{grease_version}\""),
+        format!("\"Chromium\";v=\"{chromium_ver}\""),
+        format!("\"{brand}\";v=\"{brand_ver}\""),
+    ];
+
+    // Shuffle: shuffled[order[i]] = items[i]
+    let mut shuffled: [&str; 3] = [""; 3];
+    for i in 0..3 {
+        shuffled[order[i]] = &items[i];
+    }
+
+    format!("{}, {}, {}", shuffled[0], shuffled[1], shuffled[2])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sec_ch_ua_chrome_145() {
+        // Verified against real Chrome 145 browser capture
+        let result = chromium_sec_ch_ua(145, "Google Chrome", "145");
+        assert_eq!(
+            result,
+            "\"Not:A-Brand\";v=\"99\", \"Google Chrome\";v=\"145\", \"Chromium\";v=\"145\""
+        );
+    }
+
+    #[test]
+    fn test_sec_ch_ua_chrome_131() {
+        let result = chromium_sec_ch_ua(131, "Google Chrome", "131");
+        assert_eq!(
+            result,
+            "\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\""
+        );
+    }
+
+    #[test]
+    fn test_sec_ch_ua_chrome_135() {
+        let result = chromium_sec_ch_ua(135, "Google Chrome", "135");
+        assert_eq!(
+            result,
+            "\"Google Chrome\";v=\"135\", \"Not-A.Brand\";v=\"8\", \"Chromium\";v=\"135\""
+        );
+    }
+
+    #[test]
+    fn test_sec_ch_ua_chrome_136() {
+        let result = chromium_sec_ch_ua(136, "Google Chrome", "136");
+        assert_eq!(
+            result,
+            "\"Chromium\";v=\"136\", \"Google Chrome\";v=\"136\", \"Not.A/Brand\";v=\"99\""
+        );
+    }
+
+    #[test]
+    fn test_sec_ch_ua_edge_145() {
+        let result = chromium_sec_ch_ua(145, "Microsoft Edge", "145");
+        assert_eq!(
+            result,
+            "\"Not:A-Brand\";v=\"99\", \"Microsoft Edge\";v=\"145\", \"Chromium\";v=\"145\""
+        );
+    }
+
+    #[test]
+    fn test_sec_ch_ua_opera_127() {
+        // Opera 127 uses Chromium 143
+        let result = chromium_sec_ch_ua(143, "Opera", "127");
+        // seed=143: 143%11=0 → ' ', 144%11=1 → '(' → "Not A(Brand"
+        // 143%3=2 → "24", 143%6=5 → [2,1,0]
+        assert_eq!(
+            result,
+            "\"Opera\";v=\"127\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\""
+        );
     }
 }

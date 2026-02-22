@@ -61,6 +61,11 @@ export interface KoonWsMessage {
   data: Buffer;
 }
 
+export interface KoonRequestOptions {
+  /** Additional headers for this request. Override constructor-level headers. */
+  headers?: Record<string, string>;
+}
+
 export interface KoonMultipartField {
   /** Field name. */
   name: string;
@@ -77,15 +82,15 @@ export interface KoonMultipartField {
 export class Koon {
   constructor(options?: KoonOptions);
 
-  get(url: string): Promise<KoonResponse>;
-  post(url: string, body?: Buffer): Promise<KoonResponse>;
-  put(url: string, body?: Buffer): Promise<KoonResponse>;
-  delete(url: string): Promise<KoonResponse>;
-  patch(url: string, body?: Buffer): Promise<KoonResponse>;
-  head(url: string): Promise<KoonResponse>;
-  request(method: string, url: string, body?: Buffer): Promise<KoonResponse>;
-  postMultipart(url: string, fields: KoonMultipartField[]): Promise<KoonResponse>;
-  requestStreaming(method: string, url: string, body?: Buffer): Promise<KoonStreamingResponse>;
+  get(url: string, options?: KoonRequestOptions): Promise<KoonResponse>;
+  post(url: string, body?: Buffer, options?: KoonRequestOptions): Promise<KoonResponse>;
+  put(url: string, body?: Buffer, options?: KoonRequestOptions): Promise<KoonResponse>;
+  delete(url: string, options?: KoonRequestOptions): Promise<KoonResponse>;
+  patch(url: string, body?: Buffer, options?: KoonRequestOptions): Promise<KoonResponse>;
+  head(url: string, options?: KoonRequestOptions): Promise<KoonResponse>;
+  request(method: string, url: string, body?: Buffer, options?: KoonRequestOptions): Promise<KoonResponse>;
+  postMultipart(url: string, fields: KoonMultipartField[], options?: KoonRequestOptions): Promise<KoonResponse>;
+  requestStreaming(method: string, url: string, body?: Buffer, options?: KoonRequestOptions): Promise<KoonStreamingResponse>;
 
   websocket(url: string, headers?: Record<string, string>): Promise<KoonWebSocket>;
 

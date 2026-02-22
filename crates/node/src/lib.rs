@@ -237,6 +237,17 @@ pub struct KoonOptions {
     pub doh: Option<String>,
 }
 
+/// Per-request options (headers, etc.).
+/// These override constructor-level defaults for a single request.
+#[napi(object)]
+#[derive(Default)]
+pub struct KoonRequestOptions {
+    /// Additional headers for this request.
+    /// These override constructor-level headers (case-insensitive).
+    #[napi(ts_type = "Record<string, string>")]
+    pub headers: Option<HashMap<String, String>>,
+}
+
 /// A single HTTP header (name-value pair).
 /// Using an array instead of a map preserves duplicate headers like Set-Cookie.
 #[derive(Clone)]
@@ -384,38 +395,38 @@ impl Koon {
 
     /// Perform an HTTP GET request.
     #[napi]
-    pub async fn get(&self, url: String) -> Result<KoonResponse> {
-        self.request("GET".to_string(), url, None).await
+    pub async fn get(&self, url: String, options: Option<KoonRequestOptions>) -> Result<KoonResponse> {
+        self.request("GET".to_string(), url, None, options).await
     }
 
     /// Perform an HTTP POST request.
     #[napi]
-    pub async fn post(&self, url: String, body: Option<Buffer>) -> Result<KoonResponse> {
-        self.request("POST".to_string(), url, body).await
+    pub async fn post(&self, url: String, body: Option<Buffer>, options: Option<KoonRequestOptions>) -> Result<KoonResponse> {
+        self.request("POST".to_string(), url, body, options).await
     }
 
     /// Perform an HTTP PUT request.
     #[napi]
-    pub async fn put(&self, url: String, body: Option<Buffer>) -> Result<KoonResponse> {
-        self.request("PUT".to_string(), url, body).await
+    pub async fn put(&self, url: String, body: Option<Buffer>, options: Option<KoonRequestOptions>) -> Result<KoonResponse> {
+        self.request("PUT".to_string(), url, body, options).await
     }
 
     /// Perform an HTTP DELETE request.
     #[napi]
-    pub async fn delete(&self, url: String) -> Result<KoonResponse> {
-        self.request("DELETE".to_string(), url, None).await
+    pub async fn delete(&self, url: String, options: Option<KoonRequestOptions>) -> Result<KoonResponse> {
+        self.request("DELETE".to_string(), url, None, options).await
     }
 
     /// Perform an HTTP PATCH request.
     #[napi]
-    pub async fn patch(&self, url: String, body: Option<Buffer>) -> Result<KoonResponse> {
-        self.request("PATCH".to_string(), url, body).await
+    pub async fn patch(&self, url: String, body: Option<Buffer>, options: Option<KoonRequestOptions>) -> Result<KoonResponse> {
+        self.request("PATCH".to_string(), url, body, options).await
     }
 
     /// Perform an HTTP HEAD request.
     #[napi]
-    pub async fn head(&self, url: String) -> Result<KoonResponse> {
-        self.request("HEAD".to_string(), url, None).await
+    pub async fn head(&self, url: String, options: Option<KoonRequestOptions>) -> Result<KoonResponse> {
+        self.request("HEAD".to_string(), url, None, options).await
     }
 
     /// Perform an HTTP request with a custom method.
@@ -425,16 +436,22 @@ impl Koon {
         method: String,
         url: String,
         body: Option<Buffer>,
+        options: Option<KoonRequestOptions>,
     ) -> Result<KoonResponse> {
         let method = method.parse().map_err(|_| {
             napi::Error::from_reason(format!("Invalid HTTP method: {method}"))
         })?;
 
         let body_bytes = body.map(|b| b.to_vec());
+        let extra_headers: Vec<(String, String)> = options
+            .and_then(|o| o.headers)
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
 
         let response = self
             .client
-            .request(method, &url, body_bytes)
+            .request_with_headers(method, &url, body_bytes, extra_headers)
             .await
             .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?;
 
@@ -467,6 +484,7 @@ impl Koon {
         &self,
         url: String,
         fields: Vec<KoonMultipartField>,
+        options: Option<KoonRequestOptions>,
     ) -> Result<KoonResponse> {
         let mut mp = Multipart::new();
         for field in fields {
@@ -482,9 +500,17 @@ impl Koon {
             }
         }
 
+        let (body, content_type) = mp.build();
+        let mut extra_headers: Vec<(String, String)> = options
+            .and_then(|o| o.headers)
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
+        extra_headers.push(("content-type".into(), content_type));
+
         let response = self
             .client
-            .post_multipart(&url, mp)
+            .request_with_headers("POST".parse().unwrap(), &url, Some(body), extra_headers)
             .await
             .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?;
 
@@ -521,15 +547,21 @@ impl Koon {
         method: String,
         url: String,
         body: Option<Buffer>,
+        options: Option<KoonRequestOptions>,
     ) -> Result<KoonStreamingResponse> {
         let method = method.parse().map_err(|_| {
             napi::Error::from_reason(format!("Invalid HTTP method: {method}"))
         })?;
         let body_bytes = body.map(|b| b.to_vec());
+        let extra_headers: Vec<(String, String)> = options
+            .and_then(|o| o.headers)
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
 
         let resp = self
             .client
-            .request_streaming(method, &url, body_bytes)
+            .request_streaming_with_headers(method, &url, body_bytes, extra_headers)
             .await
             .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?;
 

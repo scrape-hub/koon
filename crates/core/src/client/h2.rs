@@ -239,6 +239,7 @@ impl super::Client {
         uri: &Uri,
         body: Option<Vec<u8>>,
         cookie_header: Option<&str>,
+        extra_headers: &[(String, String)],
     ) -> Result<StreamingResponse, Error> {
         sender.clone().ready().await.map_err(Error::Http2)?;
 
@@ -259,7 +260,7 @@ impl super::Client {
         *req.headers_mut() = headers::build_request_headers(
             &self.profile.headers,
             &self.custom_headers,
-            &[],
+            extra_headers,
             cookie_header,
             &["host", "cookie"],
             None,

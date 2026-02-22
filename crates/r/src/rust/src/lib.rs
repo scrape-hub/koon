@@ -108,11 +108,13 @@ impl Koon {
     /// Perform an HTTP GET request.
     ///
     /// @param url The URL to request.
+    /// @param headers Optional named character vector of per-request headers.
     /// @return A list with components: status, version, url, body (raw), text, headers (data.frame).
-    fn get(&self, url: &str) -> List {
+    fn get(&self, url: &str, headers: Robj) -> List {
+        let extra = parse_headers_robj(&headers);
         let resp = self
             .runtime
-            .block_on(self.client.get(url))
+            .block_on(self.client.request_with_headers("GET".parse().unwrap(), url, None, extra))
             .unwrap_or_else(|e| panic!("GET {} failed: {}", url, e));
         response_to_list(resp)
     }
@@ -121,15 +123,17 @@ impl Koon {
     ///
     /// @param url The URL to request.
     /// @param body Optional raw vector with the request body.
+    /// @param headers Optional named character vector of per-request headers.
     /// @return A list with components: status, version, url, body (raw), text, headers (data.frame).
-    fn post(&self, url: &str, body: Nullable<Raw>) -> List {
+    fn post(&self, url: &str, body: Nullable<Raw>, headers: Robj) -> List {
         let body_bytes = match body {
             NotNull(r) => Some(r.as_slice().to_vec()),
             Null => None,
         };
+        let extra = parse_headers_robj(&headers);
         let resp = self
             .runtime
-            .block_on(self.client.post(url, body_bytes))
+            .block_on(self.client.request_with_headers("POST".parse().unwrap(), url, body_bytes, extra))
             .unwrap_or_else(|e| panic!("POST {} failed: {}", url, e));
         response_to_list(resp)
     }
@@ -138,15 +142,17 @@ impl Koon {
     ///
     /// @param url The URL to request.
     /// @param body Optional raw vector with the request body.
+    /// @param headers Optional named character vector of per-request headers.
     /// @return A list with components: status, version, url, body (raw), text, headers (data.frame).
-    fn put(&self, url: &str, body: Nullable<Raw>) -> List {
+    fn put(&self, url: &str, body: Nullable<Raw>, headers: Robj) -> List {
         let body_bytes = match body {
             NotNull(r) => Some(r.as_slice().to_vec()),
             Null => None,
         };
+        let extra = parse_headers_robj(&headers);
         let resp = self
             .runtime
-            .block_on(self.client.put(url, body_bytes))
+            .block_on(self.client.request_with_headers("PUT".parse().unwrap(), url, body_bytes, extra))
             .unwrap_or_else(|e| panic!("PUT {} failed: {}", url, e));
         response_to_list(resp)
     }
@@ -154,11 +160,13 @@ impl Koon {
     /// Perform an HTTP DELETE request.
     ///
     /// @param url The URL to request.
+    /// @param headers Optional named character vector of per-request headers.
     /// @return A list with components: status, version, url, body (raw), text, headers (data.frame).
-    fn delete(&self, url: &str) -> List {
+    fn delete(&self, url: &str, headers: Robj) -> List {
+        let extra = parse_headers_robj(&headers);
         let resp = self
             .runtime
-            .block_on(self.client.delete(url))
+            .block_on(self.client.request_with_headers("DELETE".parse().unwrap(), url, None, extra))
             .unwrap_or_else(|e| panic!("DELETE {} failed: {}", url, e));
         response_to_list(resp)
     }
@@ -167,15 +175,17 @@ impl Koon {
     ///
     /// @param url The URL to request.
     /// @param body Optional raw vector with the request body.
+    /// @param headers Optional named character vector of per-request headers.
     /// @return A list with components: status, version, url, body (raw), text, headers (data.frame).
-    fn patch(&self, url: &str, body: Nullable<Raw>) -> List {
+    fn patch(&self, url: &str, body: Nullable<Raw>, headers: Robj) -> List {
         let body_bytes = match body {
             NotNull(r) => Some(r.as_slice().to_vec()),
             Null => None,
         };
+        let extra = parse_headers_robj(&headers);
         let resp = self
             .runtime
-            .block_on(self.client.patch(url, body_bytes))
+            .block_on(self.client.request_with_headers("PATCH".parse().unwrap(), url, body_bytes, extra))
             .unwrap_or_else(|e| panic!("PATCH {} failed: {}", url, e));
         response_to_list(resp)
     }
@@ -183,11 +193,13 @@ impl Koon {
     /// Perform an HTTP HEAD request.
     ///
     /// @param url The URL to request.
+    /// @param headers Optional named character vector of per-request headers.
     /// @return A list with components: status, version, url, body (raw), text, headers (data.frame).
-    fn head(&self, url: &str) -> List {
+    fn head(&self, url: &str, headers: Robj) -> List {
+        let extra = parse_headers_robj(&headers);
         let resp = self
             .runtime
-            .block_on(self.client.head(url))
+            .block_on(self.client.request_with_headers("HEAD".parse().unwrap(), url, None, extra))
             .unwrap_or_else(|e| panic!("HEAD {} failed: {}", url, e));
         response_to_list(resp)
     }

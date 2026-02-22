@@ -78,13 +78,14 @@ impl super::Client {
         uri: &Uri,
         body: Option<Vec<u8>>,
         cookie_header: Option<&str>,
+        extra_headers: &[(String, String)],
     ) -> Result<StreamingResponse, Error> {
         let authority = uri.authority().map(|a| a.as_str()).unwrap_or("");
 
         let headers = headers::build_request_headers(
             &self.profile.headers,
             &self.custom_headers,
-            &[],
+            extra_headers,
             cookie_header,
             &["host", "cookie"],
             Some(authority),
