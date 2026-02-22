@@ -13,7 +13,7 @@ pub enum Error {
     InvalidHeader(String),
     ConnectionFailed(String),
     Json(serde_json::Error),
-    WebSocket(tungstenite::error::Error),
+    WebSocket(Box<tungstenite::error::Error>),
     #[cfg(feature = "doh")]
     Dns(String),
     Timeout,
@@ -93,6 +93,6 @@ impl From<serde_json::Error> for Error {
 
 impl From<tungstenite::error::Error> for Error {
     fn from(e: tungstenite::error::Error) -> Self {
-        Error::WebSocket(e)
+        Error::WebSocket(Box::new(e))
     }
 }

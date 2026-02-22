@@ -29,7 +29,7 @@ pub(super) fn build_request_headers(
     // Profile headers
     for (name, value) in profile_headers {
         let lower = name.to_lowercase();
-        if skip.iter().any(|s| *s == lower.as_str()) {
+        if skip.contains(&lower.as_str()) {
             continue;
         }
         if let (Ok(hn), Ok(hv)) = (

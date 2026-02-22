@@ -163,11 +163,9 @@ impl TlsConnector {
         }
 
         // ALPS (h2-specific, skip when forcing h1)
-        if !force_h1_only {
-            if config.alps.is_some() {
-                cfg.set_alps_use_new_codepoint(config.alps_use_new_codepoint);
-                cfg.add_application_settings(b"h2")?;
-            }
+        if !force_h1_only && config.alps.is_some() {
+            cfg.set_alps_use_new_codepoint(config.alps_use_new_codepoint);
+            cfg.add_application_settings(b"h2")?;
         }
 
         // Disable hostname verification for testing

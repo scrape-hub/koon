@@ -162,17 +162,14 @@ impl super::Client {
 
         // 3. Try cached H1.1 connection from pool
         if let Some(mut stream) = self.pool.try_take_h1(host, port) {
-            match self
+            if let Ok((response, keep_alive)) = self
                 .send_on_h1(&mut stream, method.clone(), uri, body.clone(), cookie_header, extra_headers)
                 .await
             {
-                Ok((response, keep_alive)) => {
-                    if keep_alive {
-                        self.pool.insert_h1(host, port, stream);
-                    }
-                    return Ok(response);
+                if keep_alive {
+                    self.pool.insert_h1(host, port, stream);
                 }
-                Err(_) => {}
+                return Ok(response);
             }
         }
 
@@ -182,6 +179,7 @@ impl super::Client {
 
     /// Open a new connection (H3 or TCP→TLS→H2/H1) and send a request.
     /// Extracted from `execute_single_request` steps 4+5 to allow GOAWAY retry.
+    #[allow(clippy::too_many_arguments)]
     async fn new_connection_request(
         &self,
         method: Method,

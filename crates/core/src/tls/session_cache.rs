@@ -22,6 +22,12 @@ pub struct SessionCache {
     inner: Arc<Mutex<HashMap<String, SslSession>>>,
 }
 
+impl Default for SessionCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SessionCache {
     pub fn new() -> Self {
         SessionCache {

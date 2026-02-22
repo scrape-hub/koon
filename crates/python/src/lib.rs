@@ -37,6 +37,7 @@ struct Koon {
 impl Koon {
     #[new]
     #[pyo3(signature = (browser="chrome", *, profile_json=None, proxy=None, timeout=30000, ignore_tls_errors=false, headers=None, follow_redirects=true, max_redirects=10, cookie_jar=true, randomize=false, session_resumption=true, doh=None))]
+    #[allow(clippy::too_many_arguments)]
     fn new(
         browser: &str,
         profile_json: Option<&str>,
@@ -612,6 +613,7 @@ impl KoonProxy {
     /// Start a new MITM proxy server.
     #[staticmethod]
     #[pyo3(signature = (*, browser="chrome", profile_json=None, listen_addr=None, header_mode=None, ca_dir=None, timeout=30000, randomize=false))]
+    #[allow(clippy::too_many_arguments)]
     fn start<'py>(
         py: Python<'py>,
         browser: &str,

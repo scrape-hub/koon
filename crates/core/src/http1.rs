@@ -461,10 +461,8 @@ pub(crate) async fn stream_until_close<S: AsyncRead + Unpin>(
     initial: &[u8],
     tx: tokio::sync::mpsc::Sender<Result<Vec<u8>, crate::error::Error>>,
 ) {
-    if !initial.is_empty() {
-        if tx.send(Ok(initial.to_vec())).await.is_err() {
-            return;
-        }
+    if !initial.is_empty() && tx.send(Ok(initial.to_vec())).await.is_err() {
+        return;
     }
 
     let mut tmp = [0u8; 8192];

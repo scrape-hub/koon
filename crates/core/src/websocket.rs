@@ -52,10 +52,10 @@ impl WebSocket {
         loop {
             match self.inner.next().await {
                 Some(Ok(tungstenite::Message::Text(t))) => {
-                    return Ok(Some(Message::Text(t.into())));
+                    return Ok(Some(Message::Text(t)));
                 }
                 Some(Ok(tungstenite::Message::Binary(b))) => {
-                    return Ok(Some(Message::Binary(b.into())));
+                    return Ok(Some(Message::Binary(b)));
                 }
                 Some(Ok(tungstenite::Message::Ping(_))) => {
                     // Pong is sent automatically by tungstenite

@@ -179,7 +179,7 @@ fn browser_to_name(browser: &Browser) -> &'static str {
 /// Resolve a Browser enum to a BrowserProfile via core's resolve().
 fn resolve_browser(browser: &Browser) -> Result<BrowserProfile> {
     BrowserProfile::resolve(browser_to_name(browser))
-        .map_err(|e| napi::Error::from_reason(e))
+        .map_err(napi::Error::from_reason)
 }
 
 /// Options for creating a Koon client.

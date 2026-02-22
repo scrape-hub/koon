@@ -128,8 +128,7 @@ impl BrowserProfile {
         }
         // Try suffix without dash (Node/Python format: "chrome145windows")
         for os in &["windows", "macos", "linux"] {
-            if input.ends_with(os) {
-                let prefix = &input[..input.len() - os.len()];
+            if let Some(prefix) = input.strip_suffix(os) {
                 if !prefix.is_empty() {
                     return (prefix, Some(os));
                 }
