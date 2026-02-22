@@ -1,5 +1,5 @@
 {
-  "name": "koon",
+  "name": "koonjs",
   "version": "0.4.4",
   "description": "Browser-impersonating HTTP client with TLS/HTTP2 fingerprint spoofing",
   "main": "index.js",
