@@ -14,7 +14,9 @@ use crate::http1;
 /// A WebSocket message (text or binary).
 #[derive(Debug, Clone)]
 pub enum Message {
+    /// UTF-8 text message.
     Text(String),
+    /// Binary message.
     Binary(Vec<u8>),
 }
 

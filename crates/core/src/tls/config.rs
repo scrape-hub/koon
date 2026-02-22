@@ -76,34 +76,46 @@ pub struct TlsConfig {
     pub danger_accept_invalid_certs: bool,
 }
 
+/// TLS protocol version.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TlsVersion {
+    /// TLS 1.2.
     Tls12,
+    /// TLS 1.3.
     Tls13,
 }
 
+/// ALPN (Application-Layer Protocol Negotiation) protocol identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AlpnProtocol {
+    /// HTTP/2 (`"h2"`).
     #[serde(rename = "h2")]
     Http2,
+    /// HTTP/1.1 (`"http/1.1"`).
     #[serde(rename = "http/1.1")]
     Http11,
 }
 
+/// ALPS (Application-Layer Protocol Settings) protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AlpsProtocol {
+    /// HTTP/2 ALPS.
     #[serde(rename = "h2")]
     Http2,
 }
 
+/// Certificate compression algorithm (RFC 8879).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CertCompression {
+    /// Brotli compression (used by Chrome).
     Brotli,
+    /// Zlib compression.
     Zlib,
+    /// Zstandard compression.
     Zstd,
 }
 

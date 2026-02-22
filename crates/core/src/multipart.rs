@@ -1,11 +1,11 @@
 use rand::Rng;
 
-/// A single part of a multipart form-data body.
+/// A single part of a `multipart/form-data` body.
 #[derive(Debug, Clone)]
 pub enum Part {
-    /// A text field.
+    /// A text form field with a name and string value.
     Text { name: String, value: String },
-    /// A file upload field.
+    /// A file upload field with filename, MIME type, and binary data.
     File {
         name: String,
         filename: String,

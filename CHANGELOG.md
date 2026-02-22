@@ -2,6 +2,20 @@
 
 All notable changes to koon will be documented in this file.
 
+## [0.4.6] - 2026-02-22
+
+### Improved
+- **Rustdoc**: Comprehensive doc comments for all public API types in koon-core
+  - `Error` enum + all 16 variants, `HttpResponse`/`SessionExport` fields
+  - TLS enums (`TlsVersion`, `AlpnProtocol`, `AlpsProtocol`, `CertCompression`)
+  - HTTP/2 enums (`PseudoHeader`, `SettingId`) and structs (`StreamDep`, `PriorityFrame`)
+  - `QuicConfig` fields, `CookieJar`/`Cookie`/`SameSite`, `SessionCache`/`SessionCacheExport`
+  - `ProxyConfig`/`ProxyKind`/`ProxyAuth`, `Part` variants, `Message` variants
+- **Python IDE support**: Docstrings for all classes, methods, and properties in `.pyi` stub file
+  - `Koon.__init__()` with full Args description, all `KoonResponse`/`KoonStreamingResponse`/`KoonWebSocket`/`KoonProxy` members
+- **Python `lib.rs`**: `///` doc comments for `Koon::new()` parameters and all `#[pyo3(get)]` properties
+- **`.gitignore`**: R build artifacts, Playwright MCP directory, local investigation notes
+
 ## [0.4.5] - 2026-02-22
 
 ### Added

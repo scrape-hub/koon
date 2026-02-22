@@ -1,22 +1,38 @@
 use std::fmt;
 
+/// All errors that can occur when using the koon HTTP client.
 #[derive(Debug)]
 pub enum Error {
+    /// BoringSSL TLS handshake or session error.
     Tls(boring2::ssl::Error),
+    /// BoringSSL internal error stack.
     TlsStack(boring2::error::ErrorStack),
+    /// HTTP/2 protocol error (stream reset, flow control, etc.).
     Http2(http2::Error),
+    /// QUIC transport error.
     Quic(String),
+    /// HTTP/3 protocol error.
     Http3(String),
+    /// OS-level I/O error (TCP connect, read, write).
     Io(std::io::Error),
+    /// URL parsing error.
     Url(url::ParseError),
+    /// Proxy connection or authentication error.
     Proxy(String),
+    /// Invalid HTTP header name or value.
     InvalidHeader(String),
+    /// TCP connection failed (DNS resolution, refused, etc.).
     ConnectionFailed(String),
+    /// JSON serialization or deserialization error.
     Json(serde_json::Error),
+    /// WebSocket protocol error.
     WebSocket(Box<tungstenite::error::Error>),
+    /// DNS-over-HTTPS resolution error.
     #[cfg(feature = "doh")]
     Dns(String),
+    /// Request timed out.
     Timeout,
+    /// Redirect limit exceeded.
     TooManyRedirects,
 }
 

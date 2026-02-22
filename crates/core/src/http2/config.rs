@@ -46,42 +46,74 @@ pub struct Http2Config {
     pub enable_connect_protocol: Option<bool>,
 }
 
+/// HTTP/2 pseudo-header field.
+///
+/// The order of pseudo-headers in the HEADERS frame is part of the
+/// Akamai HTTP/2 fingerprint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PseudoHeader {
+    /// `:method`
     Method,
+    /// `:authority`
     Authority,
+    /// `:scheme`
     Scheme,
+    /// `:path`
     Path,
+    /// `:status` (response only).
     Status,
+    /// `:protocol` (extended CONNECT).
     Protocol,
 }
 
+/// HTTP/2 SETTINGS parameter identifier.
+///
+/// The order in which settings are sent is part of the Akamai fingerprint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SettingId {
+    /// SETTINGS_HEADER_TABLE_SIZE (0x1).
     HeaderTableSize,
+    /// SETTINGS_ENABLE_PUSH (0x2).
     EnablePush,
+    /// SETTINGS_MAX_CONCURRENT_STREAMS (0x3).
     MaxConcurrentStreams,
+    /// SETTINGS_INITIAL_WINDOW_SIZE (0x4).
     InitialWindowSize,
+    /// SETTINGS_MAX_FRAME_SIZE (0x5).
     MaxFrameSize,
+    /// SETTINGS_MAX_HEADER_LIST_SIZE (0x6).
     MaxHeaderListSize,
+    /// SETTINGS_ENABLE_CONNECT_PROTOCOL (0x8).
     EnableConnectProtocol,
+    /// SETTINGS_NO_RFC7540_PRIORITIES (0x9).
     NoRfc7540Priorities,
 }
 
+/// Stream dependency for the HEADERS frame.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamDep {
+    /// The stream ID this stream depends on.
     pub stream_id: u32,
+    /// Weight (1–256).
     pub weight: u8,
+    /// Exclusive dependency flag.
     pub exclusive: bool,
 }
 
+/// An HTTP/2 PRIORITY frame sent after connection establishment.
+///
+/// Firefox uses these to build a priority tree. Chrome does not send them.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PriorityFrame {
+    /// The stream ID this priority applies to.
     pub stream_id: u32,
+    /// The stream ID this stream depends on.
     pub dependency: u32,
+    /// Weight (1–256).
     pub weight: u8,
+    /// Exclusive dependency flag.
     pub exclusive: bool,
 }
 

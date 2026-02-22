@@ -9,30 +9,43 @@ pub struct CookieJar {
     cookies: Vec<Cookie>,
 }
 
+/// The `SameSite` cookie attribute (RFC 6265bis).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SameSite {
+    /// Cookie is sent with same-site and top-level navigation requests.
     Lax,
+    /// Cookie is only sent with same-site requests.
     Strict,
+    /// Cookie is sent with all requests (requires `Secure`).
     None,
 }
 
-/// A single stored cookie.
+/// A single stored HTTP cookie.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cookie {
+    /// Cookie name.
     pub name: String,
+    /// Cookie value.
     pub value: String,
+    /// Domain the cookie belongs to (lowercase).
     pub domain: String,
+    /// URL path scope.
     pub path: String,
+    /// Only send over HTTPS.
     pub secure: bool,
+    /// Not accessible via JavaScript.
     #[serde(rename = "http_only")]
     pub _http_only: bool,
+    /// Expiration time (`None` = session cookie).
     #[serde(
         serialize_with = "serialize_expires",
         deserialize_with = "deserialize_expires"
     )]
     pub expires: Option<SystemTime>,
+    /// SameSite attribute.
     pub same_site: SameSite,
+    /// If true, only exact domain match (no subdomain matching).
     pub host_only: bool,
 }
 
@@ -60,6 +73,7 @@ fn deserialize_expires<'de, D: serde::Deserializer<'de>>(
 }
 
 impl CookieJar {
+    /// Create an empty cookie jar.
     pub fn new() -> Self {
         CookieJar {
             cookies: Vec::new(),

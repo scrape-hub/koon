@@ -6,9 +6,11 @@ use boring2::ssl::SslSession;
 use serde::{Deserialize, Serialize};
 
 /// Exported TLS session cache data for save/load.
+///
+/// Each entry maps a hostname to a base64-encoded DER-serialized TLS session.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionCacheExport {
-    /// hostname → base64-encoded DER bytes
+    /// Hostname to base64-encoded DER session mapping.
     pub sessions: HashMap<String, String>,
 }
 
@@ -29,6 +31,7 @@ impl Default for SessionCache {
 }
 
 impl SessionCache {
+    /// Create an empty session cache.
     pub fn new() -> Self {
         SessionCache {
             inner: Arc::new(Mutex::new(HashMap::new())),

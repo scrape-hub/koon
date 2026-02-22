@@ -4,21 +4,31 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::Error;
 
-/// HTTP response with body.
+/// HTTP response with fully buffered body.
 #[derive(Debug)]
 pub struct HttpResponse {
+    /// HTTP status code (e.g. 200, 404, 301).
     pub status: u16,
+    /// Response headers as (name, value) pairs in wire order.
     pub headers: Vec<(String, String)>,
+    /// Response body (decompressed).
     pub body: Vec<u8>,
+    /// HTTP version used (e.g. `"h2"`, `"HTTP/1.1"`, `"h3"`).
     pub version: String,
+    /// The final URL after following redirects.
     pub url: String,
 }
 
 /// Exported session data (cookies + TLS sessions) for save/load.
+///
+/// Serialize this to JSON to persist a client's cookies and TLS session
+/// tickets across process restarts.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionExport {
+    /// Cookie jar contents as JSON value.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cookies: Option<serde_json::Value>,
+    /// TLS session tickets: hostname to base64-encoded DER.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tls_sessions: Option<HashMap<String, String>>,
 }

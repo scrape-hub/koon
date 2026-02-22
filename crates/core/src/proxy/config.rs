@@ -1,23 +1,33 @@
 use url::Url;
 
-/// Proxy configuration.
+/// Proxy configuration for outbound HTTP requests.
 #[derive(Debug, Clone)]
 pub struct ProxyConfig {
+    /// The parsed proxy URL.
     pub url: Url,
+    /// Proxy protocol type.
     pub kind: ProxyKind,
+    /// Optional username/password authentication.
     pub auth: Option<ProxyAuth>,
 }
 
+/// Proxy protocol type.
 #[derive(Debug, Clone)]
 pub enum ProxyKind {
+    /// HTTP CONNECT proxy.
     Http,
+    /// HTTPS CONNECT proxy (TLS to proxy).
     Https,
+    /// SOCKS5 proxy.
     Socks5,
 }
 
+/// Proxy authentication credentials.
 #[derive(Debug, Clone)]
 pub struct ProxyAuth {
+    /// Proxy username.
     pub username: String,
+    /// Proxy password.
     pub password: String,
 }
 

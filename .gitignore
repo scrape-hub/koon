@@ -38,3 +38,14 @@ __pycache__/
 *.egg-info/
 dist/
 .venv/
+
+# R build artifacts
+crates/r/src/entrypoint.o
+crates/r/src/rust/target/
+crates/r/src/rust/Cargo.lock
+
+# Playwright MCP
+.playwright-mcp/
+
+# Local investigation notes (not for repo)
+AKAMAI_INVESTIGATION.md

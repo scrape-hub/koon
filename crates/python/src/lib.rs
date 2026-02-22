@@ -35,6 +35,21 @@ struct Koon {
 
 #[pymethods]
 impl Koon {
+    /// Create a new Koon HTTP client with browser fingerprint impersonation.
+    ///
+    /// Args:
+    ///     browser: Browser to impersonate (e.g. "chrome", "firefox147", "safari18.3").
+    ///     profile_json: Custom browser profile as JSON string (overrides `browser`).
+    ///     proxy: Proxy URL (http://, https://, socks5://).
+    ///     timeout: Request timeout in milliseconds.
+    ///     ignore_tls_errors: Skip TLS certificate verification.
+    ///     headers: Additional headers as {name: value} dict.
+    ///     follow_redirects: Automatically follow HTTP redirects.
+    ///     max_redirects: Maximum number of redirects to follow.
+    ///     cookie_jar: Enable automatic cookie storage.
+    ///     randomize: Randomize UA build number, accept-language q-values, and H2 window sizes.
+    ///     session_resumption: Enable TLS session resumption.
+    ///     doh: DNS-over-HTTPS provider ("cloudflare" or "google").
     #[new]
     #[pyo3(signature = (browser="chrome", *, profile_json=None, proxy=None, timeout=30000, ignore_tls_errors=false, headers=None, follow_redirects=true, max_redirects=10, cookie_jar=true, randomize=false, session_resumption=true, doh=None))]
     #[allow(clippy::too_many_arguments)]
@@ -336,12 +351,15 @@ impl Koon {
 /// HTTP response from a koon request.
 #[pyclass(frozen)]
 struct KoonResponse {
+    /// HTTP status code (e.g. 200, 404).
     #[pyo3(get)]
     status: u16,
     headers_vec: Vec<(String, String)>,
     body_bytes: Vec<u8>,
+    /// HTTP version used (e.g. "h2", "HTTP/1.1", "h3").
     #[pyo3(get)]
     version: String,
+    /// The final URL after redirects.
     #[pyo3(get)]
     url: String,
 }
@@ -397,11 +415,14 @@ impl KoonResponse {
 /// A streaming HTTP response that delivers the body in chunks.
 #[pyclass]
 struct KoonStreamingResponse {
+    /// HTTP status code (e.g. 200, 404).
     #[pyo3(get)]
     status: u16,
     headers_vec: Vec<(String, String)>,
+    /// HTTP version used (e.g. "h2", "HTTP/1.1", "h3").
     #[pyo3(get)]
     version: String,
+    /// The request URL.
     #[pyo3(get)]
     url: String,
     inner: Arc<tokio::sync::Mutex<Option<koon_core::StreamingResponse>>>,
@@ -600,10 +621,13 @@ impl KoonWebSocket {
 #[pyclass]
 struct KoonProxy {
     inner: Arc<tokio::sync::Mutex<Option<ProxyServer>>>,
+    /// The port the proxy server is listening on.
     #[pyo3(get)]
     port: u16,
+    /// The proxy URL (e.g. "http://127.0.0.1:8080").
     #[pyo3(get)]
     url: String,
+    /// Path to the generated CA certificate file.
     #[pyo3(get)]
     ca_cert_path: String,
 }
