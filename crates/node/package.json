@@ -14,7 +14,9 @@
     "koon.*.node"
   ],
   "scripts": {
-    "build": "cargo build --release -p koon-node",
+    "build": "cargo build --release -p koon-node && node -e \"require('fs').copyFileSync(require('path').resolve(__dirname,'../../target/release/koon_node.dll'), require('path').resolve(__dirname,'koon.win32-x64-msvc.node'))\"",
+    "build:linux": "cargo build --release -p koon-node && cp ../../target/release/libkoon_node.so koon.linux-x64-gnu.node",
+    "build:macos": "cargo build --release -p koon-node && cp ../../target/release/libkoon_node.dylib koon.darwin-$(uname -m).node",
     "test": "node ../../test_node.cjs"
   },
   "keywords": [
