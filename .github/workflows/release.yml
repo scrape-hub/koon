@@ -18,7 +18,7 @@ jobs:
       matrix:
         include:
           - target: x86_64-pc-windows-msvc
-            runner: windows-latest
+            runner: windows-2022
             node-file: koon.win32-x64-msvc.node
             cli-file: koon-x86_64-pc-windows-msvc.exe
             lib-prefix: ""
@@ -51,15 +51,6 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Fix MSVC discovery (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Remove-Item -Recurse -Force "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools" -ErrorAction SilentlyContinue
-          $vsEnterprise = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -products 'Microsoft.VisualStudio.Product.Enterprise' -latest -property installationPath
-          Write-Host "VS Enterprise: $vsEnterprise"
-          echo "VCINSTALLDIR=$vsEnterprise\VC\" >> $env:GITHUB_ENV
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -122,7 +113,7 @@ jobs:
       matrix:
         include:
           - target: x86_64-pc-windows-msvc
-            runner: windows-latest
+            runner: windows-2022
           - target: x86_64-unknown-linux-gnu
             runner: ubuntu-latest
           - target: aarch64-unknown-linux-gnu
