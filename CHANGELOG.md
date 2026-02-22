@@ -2,7 +2,7 @@
 
 All notable changes to koon will be documented in this file.
 
-## [0.4.3] - 2026-02-22
+## [0.4.4] - 2026-02-22
 
 ### Added
 - **CI/CD Pipelines** (GitHub Actions):
@@ -13,6 +13,12 @@ All notable changes to koon will be documented in this file.
     - Python wheels → PyPI (`koon`)
     - CLI binaries → GitHub Releases
     - Python source distribution (sdist)
+
+### Fixed
+- Resolved all clippy warnings (boxed large error variant, collapsed ifs, redundant closures)
+
+### Changed
+- Migrated repository to `scrape-hub/koon` (including h2 fork to `scrape-hub/http2`)
 
 ## [0.4.2] - 2026-02-21
 
