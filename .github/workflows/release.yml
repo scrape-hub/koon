@@ -1,0 +1,278 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ─── Node.js + CLI binaries (5 platforms) ───────────────────────────
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            node-file: koon.win32-x64-msvc.node
+            cli-file: koon-x86_64-pc-windows-msvc.exe
+            lib-prefix: ""
+            lib-ext: dll
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+            node-file: koon.linux-x64-gnu.node
+            cli-file: koon-x86_64-unknown-linux-gnu
+            lib-prefix: lib
+            lib-ext: so
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-latest
+            node-file: koon.linux-arm64-gnu.node
+            cli-file: koon-aarch64-unknown-linux-gnu
+            lib-prefix: lib
+            lib-ext: so
+          - target: x86_64-apple-darwin
+            runner: macos-13
+            node-file: koon.darwin-x64.node
+            cli-file: koon-x86_64-apple-darwin
+            lib-prefix: lib
+            lib-ext: dylib
+          - target: aarch64-apple-darwin
+            runner: macos-14
+            node-file: koon.darwin-arm64.node
+            cli-file: koon-aarch64-apple-darwin
+            lib-prefix: lib
+            lib-ext: dylib
+
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install NASM (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/setup-nasm@v1
+
+      - name: Install LLVM (Windows)
+        if: runner.os == 'Windows'
+        run: choco install llvm -y
+
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y crossbuild-essential-arm64
+
+      - name: Set cross-compilation env (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+          echo "CXX=aarch64-linux-gnu-g++" >> $GITHUB_ENV
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+
+      - name: Build
+        run: cargo build --release -p koon-node -p koon-cli --target ${{ matrix.target }}
+
+      - name: Rename node binary
+        shell: bash
+        run: |
+          cp "target/${{ matrix.target }}/release/${{ matrix.lib-prefix }}koon_node.${{ matrix.lib-ext }}" \
+             "crates/node/${{ matrix.node-file }}"
+
+      - name: Rename CLI binary
+        shell: bash
+        run: |
+          cp "target/${{ matrix.target }}/release/koon$([ '${{ runner.os }}' = 'Windows' ] && echo '.exe')" \
+             "${{ matrix.cli-file }}"
+
+      - name: Upload node artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-${{ matrix.target }}
+          path: crates/node/${{ matrix.node-file }}
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.target }}
+          path: ${{ matrix.cli-file }}
+
+  # ─── Python wheels (5 platforms) ────────────────────────────────────
+  build-python:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-latest
+          - target: x86_64-apple-darwin
+            runner: macos-13
+          - target: aarch64-apple-darwin
+            runner: macos-14
+
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install NASM (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/setup-nasm@v1
+
+      - name: Install LLVM (Windows)
+        if: runner.os == 'Windows'
+        run: choco install llvm -y
+
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y crossbuild-essential-arm64
+
+      - name: Set cross-compilation env (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+          echo "CXX=aarch64-linux-gnu-g++" >> $GITHUB_ENV
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist --find-interpreter --manifest-path crates/python/Cargo.toml
+          manylinux: "off"
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.target }}
+          path: dist/*.whl
+
+  # ─── Python source distribution ────────────────────────────────────
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist --manifest-path crates/python/Cargo.toml
+
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+  # ─── Publish to npm ─────────────────────────────────────────────────
+  publish-npm:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: https://registry.npmjs.org
+
+      - name: Download all node artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: node-*
+          path: crates/node/
+          merge-multiple: true
+
+      - name: List binaries
+        run: ls -la crates/node/*.node
+
+      - name: Publish to npm
+        run: npm publish --access public
+        working-directory: crates/node
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ─── Publish to PyPI ────────────────────────────────────────────────
+  publish-pypi:
+    needs: [build-python, sdist]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install maturin
+        run: pip install maturin
+
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          path: dist/
+          merge-multiple: true
+
+      - name: Download sdist
+        uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist/
+
+      - name: List artifacts
+        run: ls -la dist/
+
+      - name: Publish to PyPI
+        run: maturin upload --non-interactive --skip-existing dist/*
+        env:
+          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+
+  # ─── GitHub Release with CLI binaries ───────────────────────────────
+  publish-github:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all CLI artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: cli-*
+          path: cli-binaries/
+          merge-multiple: true
+
+      - name: List binaries
+        run: ls -la cli-binaries/
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create ${{ github.ref_name }} cli-binaries/* --generate-notes

@@ -19,10 +19,10 @@ pip install koon
 **R**
 ```r
 # Install from source (requires Rust toolchain)
-remotes::install_github("hrylx/koon", subdir = "crates/r")
+remotes::install_github("scrape-hub/koon", subdir = "crates/r")
 ```
 
-**CLI** — download from [Releases](https://github.com/hrylx/koon/releases), or:
+**CLI** — download from [Releases](https://github.com/scrape-hub/koon/releases), or:
 ```bash
 cargo install koon-cli
 ```
@@ -329,7 +329,7 @@ koon proxy --browser chrome145 --listen 127.0.0.1:8080
 
 ```toml
 [dependencies]
-koon-core = { git = "https://github.com/hrylx/koon.git" }
+koon-core = { git = "https://github.com/scrape-hub/koon.git" }
 ```
 
 ```rust

@@ -2,6 +2,18 @@
 
 All notable changes to koon will be documented in this file.
 
+## [0.4.3] - 2026-02-22
+
+### Added
+- **CI/CD Pipelines** (GitHub Actions):
+  - `ci.yml`: `cargo test` + `cargo clippy` on push/PR to master (Ubuntu, Go for BoringSSL)
+  - `release.yml`: Automated build + publish on `v*` tag push
+    - 5 platform matrix: Windows x64, Linux x64/ARM64, macOS x64/ARM64
+    - Node.js native addons → npm (`koon`)
+    - Python wheels → PyPI (`koon`)
+    - CLI binaries → GitHub Releases
+    - Python source distribution (sdist)
+
 ## [0.4.2] - 2026-02-21
 
 ### Fixed
