@@ -9,6 +9,7 @@ use http::{HeaderName, HeaderValue, Uri};
 /// - `request_url`: the target URI, used for auto-detecting sec-fetch-* headers
 ///
 /// Headers are sorted to match profile order before returning.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn build_request_headers(
     profile_headers: &[(String, String)],
     custom_headers: &[(String, String)],
