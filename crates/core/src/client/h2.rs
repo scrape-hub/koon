@@ -120,16 +120,11 @@ impl super::Client {
             h2_builder.enable_connect_protocol(val);
         }
 
-        // Headers field order (for HTTP/2 fingerprinting)
-        if !self.profile.headers.is_empty() {
-            let mut order = http2::frame::HeadersOrder::builder();
-            for (name, _) in &self.profile.headers {
-                if let Ok(hn) = HeaderName::from_bytes(name.as_bytes()) {
-                    order = order.push(hn);
-                }
-            }
-            h2_builder.headers_order(order.build());
-        }
+        // NOTE: Do NOT set h2_builder.headers_order() here.
+        // headers_order is per-connection and would force navigation header order
+        // on ALL requests (including CORS/fetch). Instead, we rely on the HeaderMap
+        // iteration order from sort_headers_chromium_cors() / sort_headers_by_profile()
+        // which correctly handles both navigation and CORS header ordering.
 
         // Perform the HTTP/2 handshake
         let (client, h2_conn) = h2_builder

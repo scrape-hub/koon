@@ -36,6 +36,12 @@ All notable changes to koon will be documented in this file.
   - `sessions-and-cookies.Rmd` — cookie persistence, save/load sessions, login workflows, profile export
   - `advanced-usage.Rmd` — custom headers, fingerprint randomization, proxy, timeout, error handling
 
+### Fixed
+- **H2 header wire order for CORS requests**: Removed per-connection `headers_order` from the
+  H2 builder, which forced navigation header order on all requests including CORS/fetch.
+  The H2 encoder now respects the HeaderMap iteration order set by `sort_headers_chromium_cors()`
+  and `sort_headers_by_profile()`, producing correct wire order for both navigation and CORS requests.
+
 ### Improved
 - **Rustdoc**: Comprehensive doc comments for all public API types in koon-core
   - `Error` enum + all 16 variants, `HttpResponse`/`SessionExport` fields
