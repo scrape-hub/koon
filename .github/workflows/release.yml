@@ -62,9 +62,45 @@ jobs:
         with:
           go-version: stable
 
-      - name: Setup MSVC (Windows)
+      - name: Setup MSVC Enterprise (Windows)
         if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
+        shell: pwsh
+        run: |
+          # Find Enterprise explicitly (skip broken BuildTools)
+          $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
+            -products 'Microsoft.VisualStudio.Product.Enterprise' `
+            -latest -property installationPath
+          if (-not $vsPath) { throw "VS Enterprise not found" }
+
+          # Capture env before vcvarsall
+          $before = @{}
+          cmd /c set 2>$null | ForEach-Object {
+            if ($_ -match '^([^=]+)=(.*)$') { $before[$matches[1]] = $matches[2] }
+          }
+
+          # Run Enterprise vcvars64 and capture env diff
+          $vcvars = Join-Path $vsPath 'VC\Auxiliary\Build\vcvars64.bat'
+          cmd /c "`"$vcvars`" >nul 2>&1 && set" | ForEach-Object {
+            if ($_ -match '^([^=]+)=(.*)$') {
+              $k = $matches[1]; $v = $matches[2]
+              if ($before[$k] -ne $v) {
+                if ($k -ieq 'Path') {
+                  $v.Split(';') | Where-Object { $_ -and -not $before['Path'].Contains($_) } |
+                    ForEach-Object { echo $_ >> $env:GITHUB_PATH }
+                } else {
+                  echo "$k=$v" >> $env:GITHUB_ENV
+                }
+              }
+            }
+          }
+
+          # Explicit linker override for Cargo (bypasses rustc's own vswhere detection)
+          $toolsDir = Get-ChildItem "$vsPath\VC\Tools\MSVC" -Directory |
+            Sort-Object Name -Descending | Select-Object -First 1
+          $linker = Join-Path $toolsDir.FullName 'bin\Hostx64\x64\link.exe'
+          echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$linker" >> $env:GITHUB_ENV
+          Write-Host "VS Enterprise: $vsPath"
+          Write-Host "Linker: $linker (exists: $(Test-Path $linker))"
 
       - name: Install NASM (Windows)
         if: runner.os == 'Windows'
@@ -83,13 +119,7 @@ jobs:
           echo "CXX=aarch64-linux-gnu-g++" >> $GITHUB_ENV
           echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
 
-      - name: Build (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: cargo build --release -p koon-node -p koon-cli --target ${{ matrix.target }}
-
-      - name: Build (Unix)
-        if: runner.os != 'Windows'
+      - name: Build
         run: cargo build --release -p koon-node -p koon-cli --target ${{ matrix.target }}
 
       - name: Rename node binary
@@ -137,9 +167,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup MSVC (Windows)
+      - name: Setup MSVC Enterprise (Windows)
         if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
+        shell: pwsh
+        run: |
+          $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
+            -products 'Microsoft.VisualStudio.Product.Enterprise' `
+            -latest -property installationPath
+          if (-not $vsPath) { throw "VS Enterprise not found" }
+          $before = @{}
+          cmd /c set 2>$null | ForEach-Object {
+            if ($_ -match '^([^=]+)=(.*)$') { $before[$matches[1]] = $matches[2] }
+          }
+          $vcvars = Join-Path $vsPath 'VC\Auxiliary\Build\vcvars64.bat'
+          cmd /c "`"$vcvars`" >nul 2>&1 && set" | ForEach-Object {
+            if ($_ -match '^([^=]+)=(.*)$') {
+              $k = $matches[1]; $v = $matches[2]
+              if ($before[$k] -ne $v) {
+                if ($k -ieq 'Path') {
+                  $v.Split(';') | Where-Object { $_ -and -not $before['Path'].Contains($_) } |
+                    ForEach-Object { echo $_ >> $env:GITHUB_PATH }
+                } else {
+                  echo "$k=$v" >> $env:GITHUB_ENV
+                }
+              }
+            }
+          }
+          $toolsDir = Get-ChildItem "$vsPath\VC\Tools\MSVC" -Directory |
+            Sort-Object Name -Descending | Select-Object -First 1
+          $linker = Join-Path $toolsDir.FullName 'bin\Hostx64\x64\link.exe'
+          echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$linker" >> $env:GITHUB_ENV
+          Write-Host "VS Enterprise: $vsPath  Linker exists: $(Test-Path $linker)"
 
       - name: Install Go
         uses: actions/setup-go@v5
