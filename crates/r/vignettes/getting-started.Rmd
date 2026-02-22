@@ -1,0 +1,121 @@
+---
+title: "Getting Started with koon"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with koon}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+## Installation
+
+koon requires a Rust toolchain (rustc >= 1.85). Install from source:
+
+```{r}
+# install.packages("remotes")
+remotes::install_github("nicescrape/koon", subdir = "crates/r")
+```
+
+## Your First Request
+
+Create a client with a browser profile and make a GET request:
+
+```{r}
+library(koon)
+
+client <- Koon$new("chrome145")
+resp <- client$get("https://httpbin.org/get")
+
+resp$status   # 200
+resp$version  # "HTTP/2.0"
+resp$url      # final URL after redirects
+```
+
+## Response Structure
+
+Every response is an R list with these components:
+
+| Field     | Type       | Description                            |
+|-----------|------------|----------------------------------------|
+| `status`  | integer    | HTTP status code (e.g. 200, 404)       |
+| `version` | character  | HTTP version (e.g. "HTTP/2.0")         |
+| `url`     | character  | Final URL after redirects              |
+| `body`    | raw        | Response body as raw bytes             |
+| `text`    | character  | Response body as UTF-8 string          |
+| `headers` | data.frame | Two columns: `name` and `value`        |
+
+```{r}
+# Inspect response headers
+resp$headers
+#>              name                value
+#> 1    content-type application/json
+#> 2 content-length                523
+#> ...
+```
+
+## POST Requests
+
+Send data with `$post()`. The body must be a raw vector:
+
+```{r}
+# POST with a text body
+resp <- client$post("https://httpbin.org/post", charToRaw("hello world"))
+cat(resp$text)
+
+# POST JSON
+json_body <- '{"name": "koon", "version": "0.4.4"}'
+resp <- client$post("https://httpbin.org/post", charToRaw(json_body))
+```
+
+## Parsing JSON Responses
+
+Use `jsonlite` to parse JSON response bodies:
+
+```{r}
+library(jsonlite)
+
+resp <- client$get("https://httpbin.org/get")
+data <- fromJSON(resp$text)
+data$headers$`User-Agent`
+```
+
+## Other HTTP Methods
+
+koon supports GET, POST, PUT, DELETE, PATCH, and HEAD:
+
+```{r}
+client$put("https://httpbin.org/put", charToRaw("data"))
+client$patch("https://httpbin.org/patch", charToRaw("update"))
+client$delete("https://httpbin.org/delete")
+client$head("https://httpbin.org/get")
+```
+
+## Browser Profiles
+
+koon ships with 50+ browser profiles. List them all:
+
+```{r}
+koon_browsers()
+#>  [1] "chrome131" "chrome132" ... "chrome145"
+#> [16] "firefox135" ... "firefox147"
+#> [29] "safari156" "safari160" "safari170" "safari180" "safari183"
+#> [34] "edge131" ... "edge145"
+#> [49] "opera124" ... "opera127"
+```
+
+Each profile reproduces the exact TLS, HTTP/2, and header fingerprint of that browser version:
+
+```{r}
+# Firefox profile
+ff <- Koon$new("firefox147")
+resp <- ff$get("https://tls.browserleaks.com/json")
+cat(resp$text)  # shows JA3/JA4 fingerprint matching real Firefox
+
+# Safari profile
+safari <- Koon$new("safari183")
+resp <- safari$get("https://httpbin.org/get")
+```

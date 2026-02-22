@@ -10,7 +10,26 @@ use std::process;
 use std::time::Duration;
 
 #[derive(Parser)]
-#[command(name = "koon", about = "Browser-impersonating HTTP client", version)]
+#[command(
+    name = "koon",
+    about = "Browser-impersonating HTTP client",
+    long_about = "HTTP client that impersonates real browser TLS, HTTP/2, and HTTP/3 fingerprints.\nPasses Akamai, Cloudflare, and other bot detection systems.",
+    version,
+    after_help = "\x1b[1mExamples:\x1b[0m
+  koon https://example.com
+  koon -b firefox147 https://example.com
+  koon -b chrome145-macos -v https://httpbin.org/get
+  koon -X POST -d '{\"key\":\"val\"}' https://httpbin.org/post
+  koon -d @body.json -H \"Content-Type: application/json\" https://api.example.com
+  koon --proxy socks5://127.0.0.1:1080 https://example.com
+  koon --doh cloudflare --randomize https://example.com
+  koon --save-session s.json https://example.com/login
+  koon --load-session s.json https://example.com/dashboard
+  koon --json https://httpbin.org/get
+  koon --export-profile chrome145
+  koon --list-browsers
+  koon proxy -b chrome145 --listen 127.0.0.1:8080"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
@@ -69,10 +88,6 @@ struct Cli {
     /// DNS-over-HTTPS provider (cloudflare, google)
     #[arg(long)]
     doh: Option<String>,
-
-    /// Skip TLS certificate verification (not yet supported, placeholder)
-    #[arg(short = 'k', long = "insecure")]
-    insecure: bool,
 
     /// Custom profile from JSON file
     #[arg(long = "profile")]

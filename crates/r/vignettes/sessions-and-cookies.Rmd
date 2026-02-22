@@ -1,0 +1,108 @@
+---
+title: "Sessions and Cookies"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Sessions and Cookies}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+## Cookie Persistence
+
+Cookies are automatically stored and sent with subsequent requests:
+
+```{r}
+library(koon)
+
+client <- Koon$new("chrome145")
+
+# Set a cookie
+client$get("https://httpbin.org/cookies/set/session_id/abc123")
+
+# Cookie is included in the next request
+resp <- client$get("https://httpbin.org/cookies")
+cat(resp$text)
+#> {"cookies": {"session_id": "abc123"}}
+```
+
+Multiple cookies work the same way:
+
+```{r}
+client$get("https://httpbin.org/cookies/set/user/alice")
+client$get("https://httpbin.org/cookies/set/lang/en")
+
+resp <- client$get("https://httpbin.org/cookies")
+jsonlite::fromJSON(resp$text)$cookies
+#> $session_id
+#> [1] "abc123"
+#> $user
+#> [1] "alice"
+#> $lang
+#> [1] "en"
+```
+
+## Saving and Loading Sessions
+
+Save the entire session state (cookies + TLS session tickets) to a JSON string, then restore it later:
+
+```{r}
+# Save session to a variable
+session_json <- client$save_session()
+
+# Save to file for persistence across R sessions
+writeLines(session_json, "my_session.json")
+
+# Later: create a new client and restore the session
+client2 <- Koon$new("chrome145")
+client2$load_session(readLines("my_session.json", warn = FALSE))
+
+# Cookies are restored
+resp <- client2$get("https://httpbin.org/cookies")
+cat(resp$text)
+```
+
+## Use Case: Login Session
+
+A typical workflow for sites that require authentication:
+
+```{r}
+client <- Koon$new("chrome145")
+
+# Step 1: POST login credentials
+login_body <- '{"username": "user", "password": "pass"}'
+resp <- client$post("https://example.com/api/login", charToRaw(login_body))
+
+# Step 2: Session cookies are now stored — subsequent requests are authenticated
+resp <- client$get("https://example.com/api/profile")
+profile <- jsonlite::fromJSON(resp$text)
+
+# Step 3: Save session so you don't have to login again
+writeLines(client$save_session(), "session.json")
+```
+
+Restore the session in a later script:
+
+```{r}
+client <- Koon$new("chrome145")
+client$load_session(readLines("session.json", warn = FALSE))
+
+# Authenticated request without re-login
+resp <- client$get("https://example.com/api/profile")
+```
+
+## Exporting the Browser Profile
+
+Export the full browser profile (TLS config, HTTP/2 settings, headers) as JSON:
+
+```{r}
+client <- Koon$new("safari183")
+profile_json <- client$export_profile()
+cat(substr(profile_json, 1, 200))  # preview first 200 chars
+writeLines(profile_json, "safari183_profile.json")
+```
+
+This is useful for debugging fingerprint issues or sharing configurations.

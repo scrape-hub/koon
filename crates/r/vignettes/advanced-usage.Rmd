@@ -1,0 +1,140 @@
+---
+title: "Advanced Usage"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Advanced Usage}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+## Custom Headers
+
+Pass a named character vector to set custom HTTP headers:
+
+```{r}
+library(koon)
+
+client <- Koon$new(
+  "chrome145",
+  headers = c(
+    "X-Custom-Header" = "my-value",
+    "Accept-Language" = "de-DE,de;q=0.9"
+  )
+)
+
+resp <- client$get("https://httpbin.org/headers")
+cat(resp$text)
+```
+
+## Fingerprint Randomization
+
+Enable slight randomization of the browser fingerprint to avoid identical fingerprints across requests. This varies User-Agent build numbers, Accept-Language q-values, and HTTP/2 window sizes:
+
+```{r}
+client <- Koon$new("chrome145", randomize = TRUE)
+cat(client$export_profile())  # slightly different each time
+```
+
+## Proxy Configuration
+
+Route requests through an HTTP or SOCKS5 proxy:
+
+```{r}
+# HTTP proxy
+client <- Koon$new("chrome145", proxy = "http://proxy.example.com:8080")
+
+# SOCKS5 proxy
+client <- Koon$new("chrome145", proxy = "socks5://127.0.0.1:1080")
+
+# Proxy with authentication
+client <- Koon$new("chrome145", proxy = "http://user:pass@proxy.example.com:8080")
+
+resp <- client$get("https://httpbin.org/ip")
+cat(resp$text)
+```
+
+## Timeout Configuration
+
+Set a custom request timeout in milliseconds (default: 30000ms):
+
+```{r}
+# 10 second timeout
+client <- Koon$new("chrome145", timeout = 10000)
+
+# 60 second timeout for slow endpoints
+client <- Koon$new("chrome145", timeout = 60000)
+```
+
+## Error Handling
+
+koon raises errors on network failures, timeouts, and invalid responses. Use `tryCatch` to handle them:
+
+```{r}
+client <- Koon$new("chrome145", timeout = 5000)
+
+result <- tryCatch(
+  client$get("https://httpbin.org/delay/10"),
+  error = function(e) {
+    message("Request failed: ", conditionMessage(e))
+    NULL
+  }
+)
+
+if (!is.null(result)) {
+  cat("Status:", result$status, "\n")
+}
+```
+
+A helper function for retries:
+
+```{r}
+request_with_retry <- function(client, url, max_retries = 3) {
+  for (i in seq_len(max_retries)) {
+    result <- tryCatch(client$get(url), error = function(e) NULL)
+    if (!is.null(result) && result$status == 200) return(result)
+    Sys.sleep(2^i)  # exponential backoff
+  }
+  stop("Request failed after ", max_retries, " retries")
+}
+
+client <- Koon$new("chrome145")
+resp <- request_with_retry(client, "https://httpbin.org/get")
+```
+
+## Working with Response Headers
+
+Response headers are returned as a data.frame, making them easy to filter:
+
+```{r}
+resp <- client$get("https://httpbin.org/response-headers?X-Test=hello")
+
+# All headers
+resp$headers
+
+# Find a specific header
+resp$headers[resp$headers$name == "x-test", "value"]
+
+# Content-Type
+ct <- resp$headers[resp$headers$name == "content-type", "value"]
+cat("Content-Type:", ct, "\n")
+```
+
+## Combining Options
+
+All constructor parameters can be combined:
+
+```{r}
+client <- Koon$new(
+  "firefox147",
+  proxy = "socks5://127.0.0.1:1080",
+  timeout = 15000,
+  randomize = TRUE,
+  headers = c("Accept-Language" = "en-US,en;q=0.9")
+)
+
+resp <- client$get("https://httpbin.org/get")
+```
