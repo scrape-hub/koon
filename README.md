@@ -117,6 +117,7 @@ Each profile includes Windows, macOS, and Linux user-agent variants (`chrome145-
 - **Session persistence** — save/load cookies and TLS session tickets to JSON
 - **Fingerprint randomization** — slight jitter on UA build number, accept-language q-values, H2 window sizes
 - **Response decompression** — gzip, brotli, deflate, zstd (automatic)
+- **Local address binding** — bind outgoing connections to a specific local IP (multi-IP servers, IP rotation)
 - **Connection pooling** — H3 multiplexed + H2 multiplexed + H1.1 keep-alive
 
 ## Usage
@@ -131,6 +132,7 @@ const client = new Koon({
   browser: 'chrome145',
   headers: { 'X-Custom': 'value' },
   proxy: 'socks5://127.0.0.1:1080',  // optional
+  localAddress: '192.168.1.100',      // optional: bind to specific IP
   randomize: true,                     // optional: slight fingerprint jitter
 });
 
@@ -201,7 +203,7 @@ import asyncio
 from koon import Koon
 
 async def main():
-    client = Koon("chrome145", headers={"X-Custom": "value"})
+    client = Koon("chrome145", headers={"X-Custom": "value"}, local_address="192.168.1.100")
 
     # HTTP methods
     r = await client.get("https://httpbin.org/get")
@@ -264,7 +266,8 @@ asyncio.run(main())
 library(koon)
 
 # Browser profile + options
-client <- Koon$new("chrome145", proxy = "socks5://127.0.0.1:1080", randomize = TRUE)
+client <- Koon$new("chrome145", proxy = "socks5://127.0.0.1:1080", randomize = TRUE,
+                    local_address = "192.168.1.100")
 
 # HTTP methods (synchronous)
 resp <- client$get("https://httpbin.org/get")

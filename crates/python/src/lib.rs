@@ -66,8 +66,9 @@ impl Koon {
     ///     randomize: Randomize UA build number, accept-language q-values, and H2 window sizes.
     ///     session_resumption: Enable TLS session resumption.
     ///     doh: DNS-over-HTTPS provider ("cloudflare" or "google").
+    ///     local_address: Bind outgoing connections to a specific local IP address.
     #[new]
-    #[pyo3(signature = (browser="chrome", *, profile_json=None, proxy=None, timeout=30000, ignore_tls_errors=false, headers=None, follow_redirects=true, max_redirects=10, cookie_jar=true, randomize=false, session_resumption=true, doh=None))]
+    #[pyo3(signature = (browser="chrome", *, profile_json=None, proxy=None, timeout=30000, ignore_tls_errors=false, headers=None, follow_redirects=true, max_redirects=10, cookie_jar=true, randomize=false, session_resumption=true, doh=None, local_address=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         browser: &str,
@@ -82,6 +83,7 @@ impl Koon {
         randomize: bool,
         session_resumption: bool,
         doh: Option<&str>,
+        local_address: Option<&str>,
     ) -> PyResult<Self> {
         let mut profile = if let Some(json) = profile_json {
             BrowserProfile::from_json(json).map_err(to_py_err)?
@@ -124,6 +126,15 @@ impl Koon {
             }
             .map_err(to_py_err)?;
             builder = builder.doh(resolver);
+        }
+
+        if let Some(addr_str) = local_address {
+            let addr: std::net::IpAddr = addr_str.parse().map_err(|e| {
+                PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "Invalid local_address '{addr_str}': {e}"
+                ))
+            })?;
+            builder = builder.local_address(addr);
         }
 
         let client = builder.build().map_err(to_py_err)?;

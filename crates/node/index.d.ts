@@ -39,6 +39,8 @@ export interface KoonOptions {
   sessionResumption?: boolean;
   /** DNS-over-HTTPS provider ("cloudflare", "google", or URL). */
   doh?: string;
+  /** Bind outgoing connections to a specific local IP address. */
+  localAddress?: string;
 }
 
 export class KoonResponse {

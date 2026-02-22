@@ -1,6 +1,7 @@
+use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 
-use tokio::net::TcpStream;
+use tokio::net::{TcpSocket, TcpStream};
 use tokio_boring2::SslStream;
 
 use crate::error::Error;
@@ -8,6 +9,32 @@ use crate::proxy::ProxyKind;
 use crate::tls::TlsConnector;
 
 impl super::Client {
+    /// Connect a TCP stream, optionally binding to a local address.
+    async fn tcp_connect(&self, addr: impl tokio::net::ToSocketAddrs) -> Result<TcpStream, Error> {
+        match self.local_address {
+            Some(local_ip) => {
+                // Resolve the remote address first
+                let remote: SocketAddr = tokio::net::lookup_host(addr)
+                    .await
+                    .map_err(Error::Io)?
+                    .next()
+                    .ok_or_else(|| Error::Io(std::io::Error::new(
+                        std::io::ErrorKind::AddrNotAvailable,
+                        "DNS resolution returned no addresses",
+                    )))?;
+
+                let socket = match local_ip {
+                    IpAddr::V4(_) => TcpSocket::new_v4(),
+                    IpAddr::V6(_) => TcpSocket::new_v6(),
+                }.map_err(Error::Io)?;
+
+                socket.bind(SocketAddr::new(local_ip, 0)).map_err(Error::Io)?;
+                socket.connect(remote).await.map_err(Error::Io)
+            }
+            None => TcpStream::connect(addr).await.map_err(Error::Io),
+        }
+    }
+
     /// Establish TCP connection, optionally through a proxy.
     /// When DoH is enabled, resolves hostname via encrypted DNS first.
     pub(super) async fn connect_tcp(&self, host: &str, port: u16) -> Result<TcpStream, Error> {
@@ -17,22 +44,22 @@ impl super::Client {
                 if let Some(resolver) = &self.doh_resolver {
                     // Resolve via DoH, then connect to IP directly
                     let addrs = resolver.resolve(host).await?;
-                    let addr = std::net::SocketAddr::new(addrs[0], port);
+                    let addr = SocketAddr::new(addrs[0], port);
                     let stream =
-                        tokio::time::timeout(self.timeout, TcpStream::connect(addr))
+                        tokio::time::timeout(self.timeout, self.tcp_connect(addr))
                             .await
-                            .map_err(|_| Error::Timeout)?
-                            .map_err(Error::Io)?;
+                            .map_err(|_| Error::Timeout)?;
+                    let stream = stream?;
                     stream.set_nodelay(true).ok();
                     return Ok(stream);
                 }
 
                 // Fallback: OS DNS resolution
                 let addr = format!("{host}:{port}");
-                let stream = tokio::time::timeout(self.timeout, TcpStream::connect(&addr))
+                let stream = tokio::time::timeout(self.timeout, self.tcp_connect(addr.as_str()))
                     .await
-                    .map_err(|_| Error::Timeout)?
-                    .map_err(Error::Io)?;
+                    .map_err(|_| Error::Timeout)?;
+                let stream = stream?;
 
                 // Set TCP_NODELAY for lower latency
                 stream.set_nodelay(true).ok();
@@ -78,7 +105,7 @@ impl super::Client {
             ProxyKind::Http | ProxyKind::Https => {
                 // HTTP CONNECT tunnel
                 let proxy_addr = format!("{}:{}", proxy.host(), proxy.port());
-                let stream = TcpStream::connect(&proxy_addr)
+                let stream = self.tcp_connect(proxy_addr.as_str())
                     .await
                     .map_err(|e| Error::Proxy(format!("Failed to connect to proxy: {e}")))?;
 

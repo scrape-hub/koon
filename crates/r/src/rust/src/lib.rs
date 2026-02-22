@@ -65,8 +65,9 @@ impl Koon {
     /// @param timeout Request timeout in milliseconds (default: 30000).
     /// @param randomize Logical; randomize fingerprint slightly (default: FALSE).
     /// @param headers Optional named character vector of custom headers.
+    /// @param local_address Optional local IP address to bind outgoing connections to.
     /// @return A new Koon client object.
-    fn new(browser: &str, proxy: Nullable<String>, timeout: Nullable<i32>, randomize: Nullable<bool>, headers: Robj) -> Self {
+    fn new(browser: &str, proxy: Nullable<String>, timeout: Nullable<i32>, randomize: Nullable<bool>, headers: Robj, local_address: Nullable<String>) -> Self {
         let mut profile = BrowserProfile::resolve(browser)
             .unwrap_or_else(|e| panic!("Unknown browser profile '{}': {}", browser, e));
 
@@ -93,6 +94,13 @@ impl Koon {
             builder = builder
                 .proxy(&proxy_url)
                 .unwrap_or_else(|e| panic!("Invalid proxy URL '{}': {}", proxy_url, e));
+        }
+
+        if let NotNull(addr_str) = local_address {
+            let addr: std::net::IpAddr = addr_str
+                .parse()
+                .unwrap_or_else(|e| panic!("Invalid local_address '{}': {}", addr_str, e));
+            builder = builder.local_address(addr);
         }
 
         let client = builder

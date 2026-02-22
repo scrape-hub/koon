@@ -236,6 +236,10 @@ pub struct KoonOptions {
     /// DNS-over-HTTPS provider for encrypted DNS and ECH support.
     /// Supported values: 'cloudflare', 'google'.
     pub doh: Option<String>,
+
+    /// Bind outgoing connections to a specific local IP address.
+    /// Useful for servers with multiple IPs or IP rotation without a proxy.
+    pub local_address: Option<String>,
 }
 
 /// Per-request options (headers, timeout).
@@ -463,6 +467,13 @@ impl Koon {
             }
             .map_err(|e| napi::Error::from_reason(format!("Failed to create DoH resolver: {e}")))?;
             builder = builder.doh(resolver);
+        }
+
+        if let Some(ref addr_str) = opts.local_address {
+            let addr: std::net::IpAddr = addr_str.parse().map_err(|e| {
+                napi::Error::from_reason(format!("Invalid localAddress '{addr_str}': {e}"))
+            })?;
+            builder = builder.local_address(addr);
         }
 
         let client = builder.build().map_err(|e| {

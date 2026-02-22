@@ -10,6 +10,7 @@ mod response;
 pub use response::{HttpResponse, SessionExport};
 
 use std::collections::HashMap;
+use std::net::IpAddr;
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -38,6 +39,7 @@ pub struct ClientBuilder {
     max_redirects: u32,
     cookie_jar: bool,
     session_resumption: bool,
+    local_address: Option<IpAddr>,
     #[cfg(feature = "doh")]
     doh_resolver: Option<DohResolver>,
 }
@@ -53,6 +55,7 @@ impl ClientBuilder {
             max_redirects: 10,
             cookie_jar: true,
             session_resumption: true,
+            local_address: None,
             #[cfg(feature = "doh")]
             doh_resolver: None,
         }
@@ -100,6 +103,12 @@ impl ClientBuilder {
         self
     }
 
+    /// Bind outgoing connections to a specific local IP address.
+    pub fn local_address(mut self, addr: IpAddr) -> Self {
+        self.local_address = Some(addr);
+        self
+    }
+
     /// Set a DNS-over-HTTPS resolver for encrypted DNS and ECH support.
     #[cfg(feature = "doh")]
     pub fn doh(mut self, resolver: DohResolver) -> Self {
@@ -134,6 +143,7 @@ impl ClientBuilder {
             max_redirects: self.max_redirects,
             cookie_jar: jar,
             session_cache,
+            local_address: self.local_address,
             #[cfg(feature = "doh")]
             doh_resolver: self.doh_resolver,
             pool: ConnectionPool::new(256, Duration::from_secs(90)),
@@ -157,6 +167,7 @@ pub struct Client {
     max_redirects: u32,
     cookie_jar: Option<Mutex<CookieJar>>,
     session_cache: Option<SessionCache>,
+    local_address: Option<IpAddr>,
     #[cfg(feature = "doh")]
     doh_resolver: Option<DohResolver>,
     pool: ConnectionPool,

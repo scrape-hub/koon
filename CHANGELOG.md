@@ -5,6 +5,13 @@ All notable changes to koon will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Local Address Binding**: Bind outgoing TCP connections to a specific local IP address
+  - Useful for servers with multiple IPs or IP rotation without a proxy
+  - Node.js: `new Koon({ localAddress: '192.168.1.100' })`
+  - Python: `Koon("chrome", local_address="192.168.1.100")`
+  - R: `Koon$new("chrome", local_address = "192.168.1.100")`
+  - Rust: `Client::builder(profile).local_address(addr).build()`
+  - Supports both IPv4 and IPv6 addresses
 - **Ergonomic Response API**: `KoonResponse` is now a class with convenience methods
   - `ok` (getter): `true` when status is 2xx
   - `text()`: Decode body as UTF-8 string
