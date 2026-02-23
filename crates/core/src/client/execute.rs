@@ -24,6 +24,9 @@ impl super::Client {
         let mut redirect_count: u32 = 0;
 
         loop {
+            // Fire on_request hook
+            self.fire_on_request(current_method.as_str(), &current_url.to_string());
+
             // Inject cookies into request headers
             let cookie_header = self
                 .cookie_jar
@@ -39,6 +42,12 @@ impl super::Client {
                     &extra_headers,
                 )
                 .await?;
+
+            // Track bandwidth
+            self.track_bytes(response.bytes_sent, response.bytes_received);
+
+            // Fire on_response hook
+            self.fire_on_response(response.status, &current_url.to_string(), &response.headers);
 
             // Store cookies from response
             if let Some(jar) = &self.cookie_jar {
@@ -292,6 +301,9 @@ impl super::Client {
             ));
         }
 
+        // Fire on_request hook
+        self.fire_on_request(method.as_str(), url);
+
         let cookie_header = self
             .cookie_jar
             .as_ref()
@@ -306,6 +318,8 @@ impl super::Client {
                 .await
             {
                 Ok(resp) => {
+                    // Fire on_response hook
+                    self.fire_on_response(resp.status, url, &resp.headers);
                     // Keep H2 connection in pool (it's multiplexed)
                     self.pool.insert_h2(host, port, proxy_idx, sender);
                     return Ok(resp);
@@ -332,11 +346,16 @@ impl super::Client {
             let resp = self
                 .send_on_h2_streaming(&mut sender, method, &uri, body, cookie_header.as_deref(), &extra_headers)
                 .await?;
+            // Fire on_response hook
+            self.fire_on_response(resp.status, url, &resp.headers);
             self.pool.insert_h2(host, port, proxy_idx, sender);
             Ok(resp)
         } else {
-            self.send_on_h1_streaming(tls_stream, method, &uri, body, cookie_header.as_deref(), &extra_headers)
-                .await
+            let resp = self.send_on_h1_streaming(tls_stream, method, &uri, body, cookie_header.as_deref(), &extra_headers)
+                .await?;
+            // Fire on_response hook
+            self.fire_on_response(resp.status, url, &resp.headers);
+            Ok(resp)
         }
     }
 
@@ -352,6 +371,9 @@ impl super::Client {
         raw_headers: Vec<(String, String)>,
         body: Option<Vec<u8>>,
     ) -> Result<HttpResponse, Error> {
+        // Fire on_request hook
+        self.fire_on_request(method.as_str(), url);
+
         let uri: Uri = url
             .parse()
             .map_err(|_| Error::Url(url::ParseError::EmptyHost))?;
@@ -379,6 +401,8 @@ impl super::Client {
                 .await
             {
                 Ok(response) => {
+                    // Fire on_response hook
+                    self.fire_on_response(response.status, url, &response.headers);
                     self.pool.insert_h2(host, port, proxy_idx, sender);
                     return Ok(response);
                 }
@@ -398,13 +422,13 @@ impl super::Client {
         let alpn = tls_stream.ssl().selected_alpn_protocol();
         let is_h2 = matches!(alpn, Some(b"h2"));
 
-        if is_h2 {
+        let response = if is_h2 {
             let mut sender = self.h2_handshake(tls_stream).await?;
             let response = self
                 .send_on_h2_raw(&mut sender, method, &uri, body, &raw_headers)
                 .await?;
             self.pool.insert_h2(host, port, proxy_idx, sender);
-            Ok(response)
+            response
         } else {
             let mut stream = tls_stream;
             let (response, keep_alive) = self
@@ -413,7 +437,15 @@ impl super::Client {
             if keep_alive {
                 self.pool.insert_h1(host, port, proxy_idx, stream);
             }
-            Ok(response)
-        }
+            response
+        };
+
+        // Track bandwidth
+        self.track_bytes(response.bytes_sent, response.bytes_received);
+
+        // Fire on_response hook
+        self.fire_on_response(response.status, url, &response.headers);
+
+        Ok(response)
     }
 }

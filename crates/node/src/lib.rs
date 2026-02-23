@@ -1,10 +1,13 @@
 use napi::bindgen_prelude::*;
+use napi::threadsafe_function::{ThreadsafeFunction, ThreadSafeCallContext, ErrorStrategy};
+use napi::NapiRaw;
 use napi_derive::napi;
 use koon_core::dns::DohResolver;
 use koon_core::multipart::Multipart;
 use koon_core::profile::BrowserProfile;
 use koon_core::{Client, HeaderMode, ProxyServer, ProxyServerConfig};
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::timeout as tokio_timeout;
 
@@ -289,6 +292,8 @@ pub struct KoonResponse {
     body_val: Vec<u8>,
     version_val: String,
     url_val: String,
+    bytes_sent_val: u32,
+    bytes_received_val: u32,
 }
 
 #[napi]
@@ -357,6 +362,18 @@ impl KoonResponse {
             .find(|h| h.name.to_lowercase() == name_lower)
             .map(|h| h.value.clone())
     }
+
+    /// Approximate bytes sent for this request (headers + body).
+    #[napi(getter)]
+    pub fn bytes_sent(&self) -> u32 {
+        self.bytes_sent_val
+    }
+
+    /// Approximate bytes received for this response (headers + body, pre-decompression).
+    #[napi(getter)]
+    pub fn bytes_received(&self) -> u32 {
+        self.bytes_received_val
+    }
 }
 
 /// A field in a multipart/form-data request.
@@ -389,6 +406,8 @@ fn response_to_napi(response: koon_core::HttpResponse) -> KoonResponse {
         body_val: response.body,
         version_val: response.version,
         url_val: response.url,
+        bytes_sent_val: response.bytes_sent as u32,
+        bytes_received_val: response.bytes_received as u32,
     }
 }
 
@@ -414,9 +433,20 @@ pub struct Koon {
 
 #[napi]
 impl Koon {
-    #[napi(constructor)]
-    pub fn new(options: Option<KoonOptions>) -> Result<Self> {
-        let opts = options.unwrap_or_default();
+    /// Create a new Koon client.
+    ///
+    /// The `raw_options` parameter is typed as `napi::JsObject` to allow extracting
+    /// both plain options and JsFunction hooks from a single object.
+    /// The TypeScript signature is declared in `index.d.ts`.
+    #[napi(constructor, ts_args_type = "options?: KoonOptions")]
+    pub fn new(env: Env, raw_options: Option<napi::JsObject>) -> Result<Self> {
+        // Extract KoonOptions fields from the raw JS object via FromNapiValue
+        let opts: KoonOptions = match raw_options {
+            Some(ref obj) => unsafe {
+                <KoonOptions as FromNapiValue>::from_napi_value(env.raw(), obj.raw())?
+            },
+            None => KoonOptions::default(),
+        };
 
         let mut profile = if let Some(ref json) = opts.profile_json {
             BrowserProfile::from_json(json).map_err(|e| {
@@ -483,6 +513,50 @@ impl Koon {
                 napi::Error::from_reason(format!("Invalid localAddress '{addr_str}': {e}"))
             })?;
             builder = builder.local_address(addr);
+        }
+
+        // Wire up on_request / on_response hooks: JsFunction → ThreadsafeFunction → Arc closure
+        if let Some(ref obj) = raw_options {
+            // Check if onRequest is a function (not undefined/null)
+            if let Ok(val) = obj.get_named_property::<napi::JsUnknown>("onRequest") {
+                if val.get_type()? == napi::ValueType::Function {
+                    let js_fn = unsafe { val.cast::<JsFunction>() };
+                    let tsfn = js_fn
+                        .create_threadsafe_function(0, |ctx: ThreadSafeCallContext<(String, String)>| {
+                            let method = ctx.env.create_string(&ctx.value.0)?;
+                            let url = ctx.env.create_string(&ctx.value.1)?;
+                            Ok(vec![method, url])
+                        })?;
+                    let tsfn: Arc<ThreadsafeFunction<(String, String), ErrorStrategy::Fatal>> = Arc::new(tsfn);
+                    builder = builder.on_request(move |method: &str, url: &str| {
+                        tsfn.call((method.to_string(), url.to_string()), napi::threadsafe_function::ThreadsafeFunctionCallMode::NonBlocking);
+                    });
+                }
+            }
+
+            // Check if onResponse is a function (not undefined/null)
+            if let Ok(val) = obj.get_named_property::<napi::JsUnknown>("onResponse") {
+                if val.get_type()? == napi::ValueType::Function {
+                    let js_fn = unsafe { val.cast::<JsFunction>() };
+                    let tsfn = js_fn
+                        .create_threadsafe_function(0, |ctx: ThreadSafeCallContext<(u16, String, Vec<(String, String)>)>| {
+                            let status = ctx.env.create_uint32(ctx.value.0 as u32)?;
+                            let url = ctx.env.create_string(&ctx.value.1)?;
+                            let mut arr = ctx.env.create_array_with_length(ctx.value.2.len())?;
+                            for (i, (name, value)) in ctx.value.2.iter().enumerate() {
+                                let mut obj = ctx.env.create_object()?;
+                                obj.set_named_property("name", ctx.env.create_string(name)?)?;
+                                obj.set_named_property("value", ctx.env.create_string(value)?)?;
+                                arr.set_element(i as u32, obj)?;
+                            }
+                            Ok(vec![status.into_unknown(), url.into_unknown(), arr.coerce_to_object()?.into_unknown()])
+                        })?;
+                    let tsfn: Arc<ThreadsafeFunction<(u16, String, Vec<(String, String)>), ErrorStrategy::Fatal>> = Arc::new(tsfn);
+                    builder = builder.on_response(move |status: u16, url: &str, headers: &[(String, String)]| {
+                        tsfn.call((status, url.to_string(), headers.to_vec()), napi::threadsafe_function::ThreadsafeFunctionCallMode::NonBlocking);
+                    });
+                }
+            }
         }
 
         let client = builder.build().map_err(|e| {
@@ -678,11 +752,13 @@ impl Koon {
             })
             .collect();
 
+        let bytes_sent = resp.bytes_sent() as u32;
         Ok(KoonStreamingResponse {
             status_val: resp.status as u32,
             headers_val: headers,
             version_val: resp.version.clone(),
             url_val: resp.url.clone(),
+            bytes_sent_val: bytes_sent,
             inner: tokio::sync::Mutex::new(Some(resp)),
         })
     }
@@ -732,6 +808,24 @@ impl Koon {
             .map_err(|e| napi::Error::from_reason(format!("Failed to load session from file: {e}")))
     }
 
+    /// Get the total number of bytes sent across all requests.
+    #[napi]
+    pub fn total_bytes_sent(&self) -> BigInt {
+        BigInt::from(self.client.total_bytes_sent())
+    }
+
+    /// Get the total number of bytes received across all requests.
+    #[napi]
+    pub fn total_bytes_received(&self) -> BigInt {
+        BigInt::from(self.client.total_bytes_received())
+    }
+
+    /// Reset both cumulative byte counters to zero.
+    #[napi]
+    pub fn reset_counters(&self) {
+        self.client.reset_counters();
+    }
+
     /// Open a WebSocket connection to a wss:// URL.
     ///
     /// @example
@@ -773,6 +867,7 @@ pub struct KoonStreamingResponse {
     headers_val: Vec<KoonHeader>,
     version_val: String,
     url_val: String,
+    bytes_sent_val: u32,
 }
 
 #[napi]
@@ -799,6 +894,19 @@ impl KoonStreamingResponse {
     #[napi(getter)]
     pub fn url(&self) -> String {
         self.url_val.clone()
+    }
+
+    /// Approximate bytes sent for this request.
+    #[napi(getter)]
+    pub fn bytes_sent(&self) -> u32 {
+        self.bytes_sent_val
+    }
+
+    /// Approximate bytes received so far (headers + body chunks consumed).
+    #[napi]
+    pub fn bytes_received(&self) -> u32 {
+        let guard = self.inner.blocking_lock();
+        guard.as_ref().map(|r| r.bytes_received() as u32).unwrap_or(0)
     }
 
     /// Get the next body chunk. Returns null when the body is complete.

@@ -43,6 +43,10 @@ export interface KoonOptions {
   doh?: string;
   /** Bind outgoing connections to a specific local IP address. */
   localAddress?: string;
+  /** Observe-only hook called before each HTTP request (including redirects). */
+  onRequest?: (method: string, url: string) => void;
+  /** Observe-only hook called after each HTTP response (including redirects). */
+  onResponse?: (status: number, url: string, headers: Array<{ name: string; value: string }>) => void;
 }
 
 export class KoonResponse {
@@ -58,6 +62,10 @@ export class KoonResponse {
   readonly url: string;
   /** Whether the status code is 2xx (success). */
   readonly ok: boolean;
+  /** Approximate bytes sent for this request (headers + body). */
+  readonly bytesSent: number;
+  /** Approximate bytes received for this response (headers + body, pre-decompression). */
+  readonly bytesReceived: number;
 
   /** Decode response body as UTF-8 string. */
   text(): string;
@@ -109,6 +117,13 @@ export class Koon {
 
   websocket(url: string, headers?: Record<string, string>): Promise<KoonWebSocket>;
 
+  /** Get the total number of bytes sent across all requests. */
+  totalBytesSent(): bigint;
+  /** Get the total number of bytes received across all requests. */
+  totalBytesReceived(): bigint;
+  /** Reset both cumulative byte counters to zero. */
+  resetCounters(): void;
+
   exportProfile(): string;
   saveSession(): string;
   loadSession(json: string): void;
@@ -121,7 +136,11 @@ export class KoonStreamingResponse {
   readonly headers: Array<{ name: string; value: string }>;
   readonly version: string;
   readonly url: string;
+  /** Approximate bytes sent for this request. */
+  readonly bytesSent: number;
 
+  /** Approximate bytes received so far (headers + body chunks consumed). */
+  bytesReceived(): number;
   nextChunk(): Promise<Buffer | null>;
   collect(): Promise<Buffer>;
 }

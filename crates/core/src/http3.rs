@@ -68,6 +68,15 @@ pub(crate) async fn send_request(
         .body(())
         .map_err(|e| Error::Http3(format!("Failed to build H3 request: {e}")))?;
 
+    // Estimate bytes_sent
+    let req_headers_vec: Vec<(String, String)> = req.headers()
+        .iter()
+        .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
+        .collect();
+    let req_header_size = crate::client::estimate_headers_size(&req_headers_vec);
+    let body_len = body.as_ref().map(|b| b.len() as u64).unwrap_or(0);
+    let bytes_sent = req_header_size + body_len;
+
     // Send request
     let mut stream = connection
         .send_request(req)
@@ -121,12 +130,18 @@ pub(crate) async fn send_request(
         }
     }
 
+    let raw_body_len = body_data.len() as u64;
+    let resp_header_size = crate::client::estimate_headers_size(&resp_headers);
+    let bytes_received = raw_body_len + resp_header_size;
+
     Ok(HttpResponse {
         status,
         headers: resp_headers,
         body: body_data,
         version: "h3".to_string(),
         url: uri.to_string(),
+        bytes_sent,
+        bytes_received,
     })
 }
 

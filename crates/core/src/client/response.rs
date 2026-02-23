@@ -17,6 +17,22 @@ pub struct HttpResponse {
     pub version: String,
     /// The final URL after following redirects.
     pub url: String,
+    /// Approximate bytes sent for this request (headers + body, pre-TLS).
+    pub bytes_sent: u64,
+    /// Approximate bytes received for this response (headers + body, pre-decompression).
+    pub bytes_received: u64,
+}
+
+/// Estimate the serialized size of HTTP headers.
+///
+/// Each header contributes `name.len() + ": ".len() + value.len() + "\r\n".len()`.
+/// Adds a fixed overhead for the status line / pseudo-headers (~32 bytes).
+pub(crate) fn estimate_headers_size(headers: &[(String, String)]) -> u64 {
+    let mut size: u64 = 32; // status line / pseudo-header overhead
+    for (name, value) in headers {
+        size += name.len() as u64 + value.len() as u64 + 4; // ": " + "\r\n"
+    }
+    size
 }
 
 /// Exported session data (cookies + TLS sessions) for save/load.

@@ -8,7 +8,7 @@ use crate::http2::config::{PseudoHeader, SettingId};
 use crate::streaming::StreamingResponse;
 
 use super::headers;
-use super::response::{decompress_body, HttpResponse};
+use super::response::{decompress_body, estimate_headers_size, HttpResponse};
 
 impl super::Client {
     /// Perform the HTTP/2 handshake over a TLS connection.
@@ -177,6 +177,15 @@ impl super::Client {
             Some(uri),
         );
 
+        // Estimate bytes_sent: request headers + body
+        let req_headers_vec: Vec<(String, String)> = req.headers()
+            .iter()
+            .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
+            .collect();
+        let req_header_size = estimate_headers_size(&req_headers_vec);
+        let body_len = body.as_ref().map(|b| b.len() as u64).unwrap_or(0);
+        let bytes_sent = req_header_size + body_len;
+
         // Send the request
         let has_body = body.is_some();
         let (response_future, mut send_stream) = sender
@@ -211,6 +220,11 @@ impl super::Client {
             let _ = recv_stream.flow_control().release_capacity(chunk.len());
         }
 
+        // bytes_received = raw body (pre-decompression) + header estimate
+        let raw_body_len = body_data.len() as u64;
+        let resp_header_size = estimate_headers_size(&resp_headers);
+        let bytes_received = raw_body_len + resp_header_size;
+
         let content_encoding = resp_headers
             .iter()
             .find(|(k, _)| k == "content-encoding")
@@ -223,6 +237,8 @@ impl super::Client {
             body,
             version: "h2".to_string(),
             url: uri.to_string(),
+            bytes_sent,
+            bytes_received,
         })
     }
 
@@ -263,6 +279,15 @@ impl super::Client {
             Some(uri),
         );
 
+        // Estimate bytes_sent
+        let req_headers_vec: Vec<(String, String)> = req.headers()
+            .iter()
+            .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
+            .collect();
+        let req_header_size = estimate_headers_size(&req_headers_vec);
+        let body_len = body.as_ref().map(|b| b.len() as u64).unwrap_or(0);
+        let bytes_sent = req_header_size + body_len;
+
         let has_body = body.is_some();
         let (response_future, mut send_stream) = sender
             .send_request(req, !has_body)
@@ -284,8 +309,15 @@ impl super::Client {
             .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
             .collect();
 
+        let resp_header_size = estimate_headers_size(&resp_headers);
+
         let mut recv_stream = response.into_body();
         let (tx, rx) = mpsc::channel(16);
+
+        // Track header bytes + request bytes immediately
+        let bytes_received_counter = self.bytes_received_counter();
+        bytes_received_counter.fetch_add(resp_header_size, std::sync::atomic::Ordering::Relaxed);
+        self.bytes_sent_counter().fetch_add(bytes_sent, std::sync::atomic::Ordering::Relaxed);
 
         tokio::spawn(async move {
             while let Some(chunk) = recv_stream.data().await {
@@ -310,6 +342,8 @@ impl super::Client {
             "h2".to_string(),
             uri.to_string(),
             rx,
+            bytes_sent,
+            bytes_received_counter,
         ))
     }
 
@@ -352,6 +386,9 @@ impl super::Client {
             }
         }
 
+        // Estimate bytes_sent for raw headers
+        let bytes_sent = estimate_headers_size(raw_headers) + body.as_ref().map(|b| b.len() as u64).unwrap_or(0);
+
         let has_body = body.is_some();
         let (response_future, mut send_stream) = sender
             .send_request(req, !has_body)
@@ -383,6 +420,10 @@ impl super::Client {
             let _ = recv_stream.flow_control().release_capacity(chunk.len());
         }
 
+        let raw_body_len = body_data.len() as u64;
+        let resp_header_size = estimate_headers_size(&resp_headers);
+        let bytes_received = raw_body_len + resp_header_size;
+
         let content_encoding = resp_headers
             .iter()
             .find(|(k, _)| k == "content-encoding")
@@ -395,6 +436,8 @@ impl super::Client {
             body,
             version: "h2".to_string(),
             url: uri.to_string(),
+            bytes_sent,
+            bytes_received,
         })
     }
 }

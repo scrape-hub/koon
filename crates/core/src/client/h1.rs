@@ -37,7 +37,7 @@ impl super::Client {
 
         // Write request
         let body_ref = body.as_deref();
-        http1::write_request(stream, &method, uri, &headers, body_ref).await?;
+        let bytes_sent = http1::write_request(stream, &method, uri, &headers, body_ref).await?;
 
         // Read response (with timeout)
         let raw = tokio::time::timeout(self.timeout, http1::read_response(stream))
@@ -49,6 +49,11 @@ impl super::Client {
             .headers
             .iter()
             .any(|(k, v)| k == "connection" && v.eq_ignore_ascii_case("close"));
+
+        // bytes_received = raw body (pre-decompression) + header estimate
+        let raw_body_len = raw.body.len() as u64;
+        let header_size = super::response::estimate_headers_size(&raw.headers);
+        let bytes_received = raw_body_len + header_size;
 
         // Decompress body
         let content_encoding = raw
@@ -64,6 +69,8 @@ impl super::Client {
             body,
             version: "HTTP/1.1".to_string(),
             url: uri.to_string(),
+            bytes_sent,
+            bytes_received,
         };
 
         Ok((response, keep_alive))
@@ -94,13 +101,15 @@ impl super::Client {
         );
 
         let body_ref = body.as_deref();
-        http1::write_request(&mut stream, &method, uri, &headers, body_ref).await?;
+        let bytes_sent = http1::write_request(&mut stream, &method, uri, &headers, body_ref).await?;
 
         // Read only headers
         let (status, resp_headers, remaining) =
             tokio::time::timeout(self.timeout, http1::read_response_for_streaming(&mut stream))
                 .await
                 .map_err(|_| Error::Timeout)??;
+
+        let header_size = super::response::estimate_headers_size(&resp_headers);
 
         let is_chunked = resp_headers
             .iter()
@@ -113,6 +122,10 @@ impl super::Client {
         let (tx, rx) = mpsc::channel(16);
 
         // Spawn background task to stream body — connection is NOT returned to pool
+        let bytes_received_counter = self.bytes_received_counter();
+        // Track header bytes immediately
+        bytes_received_counter.fetch_add(header_size, std::sync::atomic::Ordering::Relaxed);
+        self.bytes_sent_counter().fetch_add(bytes_sent, std::sync::atomic::Ordering::Relaxed);
         tokio::spawn(async move {
             if is_chunked {
                 http1::stream_chunked_body(&mut stream, &remaining, tx).await;
@@ -129,6 +142,8 @@ impl super::Client {
             "HTTP/1.1".to_string(),
             uri.to_string(),
             rx,
+            bytes_sent,
+            bytes_received_counter,
         ))
     }
 
@@ -171,7 +186,7 @@ impl super::Client {
         );
 
         let body_ref = body.as_deref();
-        http1::write_request(stream, &method, uri, &headers, body_ref).await?;
+        let bytes_sent = http1::write_request(stream, &method, uri, &headers, body_ref).await?;
 
         let raw = tokio::time::timeout(self.timeout, http1::read_response(stream))
             .await
@@ -181,6 +196,10 @@ impl super::Client {
             .headers
             .iter()
             .any(|(k, v)| k == "connection" && v.eq_ignore_ascii_case("close"));
+
+        let raw_body_len = raw.body.len() as u64;
+        let header_size = super::response::estimate_headers_size(&raw.headers);
+        let bytes_received = raw_body_len + header_size;
 
         let content_encoding = raw
             .headers
@@ -195,6 +214,8 @@ impl super::Client {
             body,
             version: "HTTP/1.1".to_string(),
             url: uri.to_string(),
+            bytes_sent,
+            bytes_received,
         };
 
         Ok((response, keep_alive))

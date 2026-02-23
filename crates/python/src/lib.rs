@@ -69,7 +69,7 @@ impl Koon {
     ///     local_address: Bind outgoing connections to a specific local IP address.
     ///     proxies: List of proxy URLs for round-robin rotation (takes priority over `proxy`).
     #[new]
-    #[pyo3(signature = (browser="chrome", *, profile_json=None, proxy=None, proxies=None, timeout=30000, ignore_tls_errors=false, headers=None, follow_redirects=true, max_redirects=10, cookie_jar=true, randomize=false, session_resumption=true, doh=None, local_address=None))]
+    #[pyo3(signature = (browser="chrome", *, profile_json=None, proxy=None, proxies=None, timeout=30000, ignore_tls_errors=false, headers=None, follow_redirects=true, max_redirects=10, cookie_jar=true, randomize=false, session_resumption=true, doh=None, local_address=None, on_request=None, on_response=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         browser: &str,
@@ -86,6 +86,8 @@ impl Koon {
         session_resumption: bool,
         doh: Option<&str>,
         local_address: Option<&str>,
+        on_request: Option<Py<PyAny>>,
+        on_response: Option<Py<PyAny>>,
     ) -> PyResult<Self> {
         let mut profile = if let Some(json) = profile_json {
             BrowserProfile::from_json(json).map_err(to_py_err)?
@@ -142,6 +144,23 @@ impl Koon {
             builder = builder.local_address(addr);
         }
 
+        if let Some(callback) = on_request {
+            builder = builder.on_request(move |method: &str, url: &str| {
+                Python::attach(|py| {
+                    let _ = callback.call1(py, (method, url));
+                });
+            });
+        }
+
+        if let Some(callback) = on_response {
+            builder = builder.on_response(move |status: u16, url: &str, headers: &[(String, String)]| {
+                Python::attach(|py| {
+                    let headers_list: Vec<(&str, &str)> = headers.iter().map(|(n, v)| (n.as_str(), v.as_str())).collect();
+                    let _ = callback.call1(py, (status, url, headers_list));
+                });
+            });
+        }
+
         let client = builder.build().map_err(to_py_err)?;
 
         Ok(Koon {
@@ -172,6 +191,21 @@ impl Koon {
     /// Load a session from a file.
     fn load_session_from_file(&self, path: &str) -> PyResult<()> {
         self.client.load_session_from_file(path).map_err(to_py_err)
+    }
+
+    /// Get the total number of bytes sent across all requests.
+    fn total_bytes_sent(&self) -> u64 {
+        self.client.total_bytes_sent()
+    }
+
+    /// Get the total number of bytes received across all requests.
+    fn total_bytes_received(&self) -> u64 {
+        self.client.total_bytes_received()
+    }
+
+    /// Reset both cumulative byte counters to zero.
+    fn reset_counters(&self) {
+        self.client.reset_counters();
     }
 
     /// Perform an HTTP GET request.
@@ -412,11 +446,13 @@ impl Koon {
                 .await
                 .map_err(to_py_err)?;
 
+            let bytes_sent = resp.bytes_sent();
             Ok(KoonStreamingResponse {
                 status: resp.status,
                 headers_vec: resp.headers.clone(),
                 version: resp.version.clone(),
                 url: resp.url.clone(),
+                bytes_sent,
                 inner: Arc::new(tokio::sync::Mutex::new(Some(resp))),
             })
         })
@@ -459,6 +495,12 @@ struct KoonResponse {
     /// The final URL after redirects.
     #[pyo3(get)]
     url: String,
+    /// Approximate bytes sent for this request (headers + body).
+    #[pyo3(get)]
+    bytes_sent: u64,
+    /// Approximate bytes received for this response (headers + body, pre-decompression).
+    #[pyo3(get)]
+    bytes_received: u64,
 }
 
 impl KoonResponse {
@@ -469,6 +511,8 @@ impl KoonResponse {
             body_bytes: resp.body,
             version: resp.version,
             url: resp.url,
+            bytes_sent: resp.bytes_sent,
+            bytes_received: resp.bytes_received,
         }
     }
 }
@@ -539,6 +583,9 @@ struct KoonStreamingResponse {
     /// The request URL.
     #[pyo3(get)]
     url: String,
+    /// Approximate bytes sent for this request.
+    #[pyo3(get)]
+    bytes_sent: u64,
     inner: Arc<tokio::sync::Mutex<Option<koon_core::StreamingResponse>>>,
 }
 
@@ -548,6 +595,13 @@ impl KoonStreamingResponse {
     #[getter]
     fn headers(&self) -> Vec<(String, String)> {
         self.headers_vec.clone()
+    }
+
+    /// Approximate bytes received so far (headers + body chunks consumed).
+    #[getter]
+    fn bytes_received(&self) -> u64 {
+        let guard = self.inner.blocking_lock();
+        guard.as_ref().map(|r| r.bytes_received()).unwrap_or(0)
     }
 
     /// Get the next body chunk. Returns None when the body is complete.

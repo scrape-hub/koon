@@ -8,11 +8,19 @@ mod headers;
 mod response;
 
 pub use response::{HttpResponse, SessionExport};
+pub(crate) use response::estimate_headers_size;
 
 use std::collections::HashMap;
 use std::net::IpAddr;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
+
+/// Observe-only hook called before each HTTP request (including redirects).
+pub type OnRequestHook = Arc<dyn Fn(&str, &str) + Send + Sync>;
+
+/// Observe-only hook called after each HTTP response (including redirects).
+pub type OnResponseHook = Arc<dyn Fn(u16, &str, &[(String, String)]) + Send + Sync>;
 
 use boring2::ssl::SslConnector;
 use h3_quinn::quinn;
@@ -41,6 +49,8 @@ pub struct ClientBuilder {
     cookie_jar: bool,
     session_resumption: bool,
     local_address: Option<IpAddr>,
+    on_request: Option<OnRequestHook>,
+    on_response: Option<OnResponseHook>,
     #[cfg(feature = "doh")]
     doh_resolver: Option<DohResolver>,
 }
@@ -58,6 +68,8 @@ impl ClientBuilder {
             cookie_jar: true,
             session_resumption: true,
             local_address: None,
+            on_request: None,
+            on_response: None,
             #[cfg(feature = "doh")]
             doh_resolver: None,
         }
@@ -120,6 +132,27 @@ impl ClientBuilder {
         self
     }
 
+    /// Register an observe-only hook called before each HTTP request.
+    ///
+    /// The hook receives `(method, url)` and fires for every request
+    /// including intermediate redirects.
+    pub fn on_request<F: Fn(&str, &str) + Send + Sync + 'static>(mut self, f: F) -> Self {
+        self.on_request = Some(Arc::new(f));
+        self
+    }
+
+    /// Register an observe-only hook called after each HTTP response.
+    ///
+    /// The hook receives `(status, url, headers)` and fires for every
+    /// response including intermediate redirects.
+    pub fn on_response<F: Fn(u16, &str, &[(String, String)]) + Send + Sync + 'static>(
+        mut self,
+        f: F,
+    ) -> Self {
+        self.on_response = Some(Arc::new(f));
+        self
+    }
+
     /// Set a DNS-over-HTTPS resolver for encrypted DNS and ECH support.
     #[cfg(feature = "doh")]
     pub fn doh(mut self, resolver: DohResolver) -> Self {
@@ -156,11 +189,15 @@ impl ClientBuilder {
             cookie_jar: jar,
             session_cache,
             local_address: self.local_address,
+            on_request: self.on_request,
+            on_response: self.on_response,
             #[cfg(feature = "doh")]
             doh_resolver: self.doh_resolver,
             pool: ConnectionPool::new(256, Duration::from_secs(90)),
             alt_svc_cache: Mutex::new(HashMap::new()),
             quic_endpoint: Mutex::new(None),
+            total_bytes_sent: Arc::new(AtomicU64::new(0)),
+            total_bytes_received: Arc::new(AtomicU64::new(0)),
         })
     }
 }
@@ -181,6 +218,8 @@ pub struct Client {
     cookie_jar: Option<Mutex<CookieJar>>,
     session_cache: Option<SessionCache>,
     local_address: Option<IpAddr>,
+    on_request: Option<OnRequestHook>,
+    on_response: Option<OnResponseHook>,
     #[cfg(feature = "doh")]
     doh_resolver: Option<DohResolver>,
     pool: ConnectionPool,
@@ -188,6 +227,10 @@ pub struct Client {
     alt_svc_cache: Mutex<HashMap<(String, u16), alt_svc::AltSvcEntry>>,
     /// Lazily-initialized QUIC endpoint (shared across all H3 connections).
     quic_endpoint: Mutex<Option<quinn::Endpoint>>,
+    /// Cumulative bytes sent across all requests.
+    total_bytes_sent: Arc<AtomicU64>,
+    /// Cumulative bytes received across all requests.
+    total_bytes_received: Arc<AtomicU64>,
 }
 
 impl Client {
@@ -199,6 +242,52 @@ impl Client {
     /// Get a reference to the browser profile.
     pub fn profile(&self) -> &BrowserProfile {
         &self.profile
+    }
+
+    /// Fire the on_request hook if registered.
+    pub(super) fn fire_on_request(&self, method: &str, url: &str) {
+        if let Some(hook) = &self.on_request {
+            hook(method, url);
+        }
+    }
+
+    /// Fire the on_response hook if registered.
+    pub(super) fn fire_on_response(&self, status: u16, url: &str, headers: &[(String, String)]) {
+        if let Some(hook) = &self.on_response {
+            hook(status, url, headers);
+        }
+    }
+
+    /// Get the total number of bytes sent across all requests.
+    pub fn total_bytes_sent(&self) -> u64 {
+        self.total_bytes_sent.load(Ordering::Relaxed)
+    }
+
+    /// Get the total number of bytes received across all requests.
+    pub fn total_bytes_received(&self) -> u64 {
+        self.total_bytes_received.load(Ordering::Relaxed)
+    }
+
+    /// Reset both cumulative byte counters to zero.
+    pub fn reset_counters(&self) {
+        self.total_bytes_sent.store(0, Ordering::Relaxed);
+        self.total_bytes_received.store(0, Ordering::Relaxed);
+    }
+
+    /// Add bytes to the cumulative counters.
+    pub(super) fn track_bytes(&self, sent: u64, received: u64) {
+        self.total_bytes_sent.fetch_add(sent, Ordering::Relaxed);
+        self.total_bytes_received.fetch_add(received, Ordering::Relaxed);
+    }
+
+    /// Get a clone of the shared bytes_received counter (for streaming responses).
+    pub(super) fn bytes_received_counter(&self) -> Arc<AtomicU64> {
+        self.total_bytes_received.clone()
+    }
+
+    /// Get a clone of the shared bytes_sent counter (for streaming responses).
+    pub(super) fn bytes_sent_counter(&self) -> Arc<AtomicU64> {
+        self.total_bytes_sent.clone()
     }
 
     /// Select proxy for this request: rotation > single > none.

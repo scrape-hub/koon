@@ -21,7 +21,9 @@ fn response_to_list(resp: koon_core::HttpResponse) -> List {
         url = resp.url,
         body = Raw::from_bytes(&resp.body),
         text = text,
-        headers = headers_df
+        headers = headers_df,
+        bytes_sent = resp.bytes_sent as f64,
+        bytes_received = resp.bytes_received as f64
     )
 }
 
@@ -53,6 +55,25 @@ fn parse_headers_robj(robj: &Robj) -> Vec<(String, String)> {
 struct Koon {
     client: Arc<Client>,
     runtime: Runtime,
+    on_request: Option<Robj>,
+    on_response: Option<Robj>,
+}
+
+impl Koon {
+    fn fire_on_request_r(&self, method: &str, url: &str) {
+        if let Some(ref f) = self.on_request {
+            let _ = f.call(pairlist!(method, url));
+        }
+    }
+
+    fn fire_on_response_r(&self, resp: &koon_core::HttpResponse) {
+        if let Some(ref f) = self.on_response {
+            let header_names: Vec<String> = resp.headers.iter().map(|(n, _)| n.clone()).collect();
+            let header_values: Vec<String> = resp.headers.iter().map(|(_, v)| v.clone()).collect();
+            let headers_df = data_frame!(name = header_names, value = header_values);
+            let _ = f.call(pairlist!(resp.status as i32, &resp.url, headers_df));
+        }
+    }
 }
 
 #[extendr]
@@ -68,8 +89,10 @@ impl Koon {
     /// @param randomize Logical; randomize fingerprint slightly (default: FALSE).
     /// @param headers Optional named character vector of custom headers.
     /// @param local_address Optional local IP address to bind outgoing connections to.
+    /// @param on_request Optional function(method, url) called before each request.
+    /// @param on_response Optional function(status, url, headers) called after each response.
     /// @return A new Koon client object.
-    fn new(browser: &str, proxy: Nullable<String>, proxies: Robj, timeout: Nullable<i32>, randomize: Nullable<bool>, headers: Robj, local_address: Nullable<String>) -> Self {
+    fn new(browser: &str, proxy: Nullable<String>, proxies: Robj, timeout: Nullable<i32>, randomize: Nullable<bool>, headers: Robj, local_address: Nullable<String>, on_request: Robj, on_response: Robj) -> Self {
         let mut profile = BrowserProfile::resolve(browser)
             .unwrap_or_else(|e| panic!("Unknown browser profile '{}': {}", browser, e));
 
@@ -118,9 +141,14 @@ impl Koon {
 
         let runtime = Runtime::new().expect("Failed to create tokio runtime");
 
+        let on_req = if on_request.is_function() { Some(on_request) } else { None };
+        let on_resp = if on_response.is_function() { Some(on_response) } else { None };
+
         Koon {
             client: Arc::new(client),
             runtime,
+            on_request: on_req,
+            on_response: on_resp,
         }
     }
 
@@ -130,11 +158,13 @@ impl Koon {
     /// @param headers Optional named character vector of per-request headers.
     /// @return A list with components: status, version, url, body (raw), text, headers (data.frame).
     fn get(&self, url: &str, headers: Robj) -> List {
+        self.fire_on_request_r("GET", url);
         let extra = parse_headers_robj(&headers);
         let resp = self
             .runtime
             .block_on(self.client.request_with_headers("GET".parse().unwrap(), url, None, extra))
             .unwrap_or_else(|e| panic!("GET {} failed: {}", url, e));
+        self.fire_on_response_r(&resp);
         response_to_list(resp)
     }
 
@@ -145,6 +175,7 @@ impl Koon {
     /// @param headers Optional named character vector of per-request headers.
     /// @return A list with components: status, version, url, body (raw), text, headers (data.frame).
     fn post(&self, url: &str, body: Nullable<Raw>, headers: Robj) -> List {
+        self.fire_on_request_r("POST", url);
         let body_bytes = match body {
             NotNull(r) => Some(r.as_slice().to_vec()),
             Null => None,
@@ -154,6 +185,7 @@ impl Koon {
             .runtime
             .block_on(self.client.request_with_headers("POST".parse().unwrap(), url, body_bytes, extra))
             .unwrap_or_else(|e| panic!("POST {} failed: {}", url, e));
+        self.fire_on_response_r(&resp);
         response_to_list(resp)
     }
 
@@ -164,6 +196,7 @@ impl Koon {
     /// @param headers Optional named character vector of per-request headers.
     /// @return A list with components: status, version, url, body (raw), text, headers (data.frame).
     fn put(&self, url: &str, body: Nullable<Raw>, headers: Robj) -> List {
+        self.fire_on_request_r("PUT", url);
         let body_bytes = match body {
             NotNull(r) => Some(r.as_slice().to_vec()),
             Null => None,
@@ -173,6 +206,7 @@ impl Koon {
             .runtime
             .block_on(self.client.request_with_headers("PUT".parse().unwrap(), url, body_bytes, extra))
             .unwrap_or_else(|e| panic!("PUT {} failed: {}", url, e));
+        self.fire_on_response_r(&resp);
         response_to_list(resp)
     }
 
@@ -182,11 +216,13 @@ impl Koon {
     /// @param headers Optional named character vector of per-request headers.
     /// @return A list with components: status, version, url, body (raw), text, headers (data.frame).
     fn delete(&self, url: &str, headers: Robj) -> List {
+        self.fire_on_request_r("DELETE", url);
         let extra = parse_headers_robj(&headers);
         let resp = self
             .runtime
             .block_on(self.client.request_with_headers("DELETE".parse().unwrap(), url, None, extra))
             .unwrap_or_else(|e| panic!("DELETE {} failed: {}", url, e));
+        self.fire_on_response_r(&resp);
         response_to_list(resp)
     }
 
@@ -197,6 +233,7 @@ impl Koon {
     /// @param headers Optional named character vector of per-request headers.
     /// @return A list with components: status, version, url, body (raw), text, headers (data.frame).
     fn patch(&self, url: &str, body: Nullable<Raw>, headers: Robj) -> List {
+        self.fire_on_request_r("PATCH", url);
         let body_bytes = match body {
             NotNull(r) => Some(r.as_slice().to_vec()),
             Null => None,
@@ -206,6 +243,7 @@ impl Koon {
             .runtime
             .block_on(self.client.request_with_headers("PATCH".parse().unwrap(), url, body_bytes, extra))
             .unwrap_or_else(|e| panic!("PATCH {} failed: {}", url, e));
+        self.fire_on_response_r(&resp);
         response_to_list(resp)
     }
 
@@ -215,11 +253,13 @@ impl Koon {
     /// @param headers Optional named character vector of per-request headers.
     /// @return A list with components: status, version, url, body (raw), text, headers (data.frame).
     fn head(&self, url: &str, headers: Robj) -> List {
+        self.fire_on_request_r("HEAD", url);
         let extra = parse_headers_robj(&headers);
         let resp = self
             .runtime
             .block_on(self.client.request_with_headers("HEAD".parse().unwrap(), url, None, extra))
             .unwrap_or_else(|e| panic!("HEAD {} failed: {}", url, e));
+        self.fire_on_response_r(&resp);
         response_to_list(resp)
     }
 
@@ -249,6 +289,25 @@ impl Koon {
             .profile()
             .to_json_pretty()
             .unwrap_or_else(|e| panic!("Failed to export profile: {}", e))
+    }
+
+    /// Get the total number of bytes sent across all requests.
+    ///
+    /// @return A numeric value (double) with the total bytes sent.
+    fn total_bytes_sent(&self) -> f64 {
+        self.client.total_bytes_sent() as f64
+    }
+
+    /// Get the total number of bytes received across all requests.
+    ///
+    /// @return A numeric value (double) with the total bytes received.
+    fn total_bytes_received(&self) -> f64 {
+        self.client.total_bytes_received() as f64
+    }
+
+    /// Reset both cumulative byte counters to zero.
+    fn reset_counters(&self) {
+        self.client.reset_counters();
     }
 }
 

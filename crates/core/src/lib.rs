@@ -15,7 +15,7 @@ pub mod proxy;
 pub mod streaming;
 pub mod websocket;
 
-pub use client::{Client, ClientBuilder, HttpResponse, SessionExport};
+pub use client::{Client, ClientBuilder, HttpResponse, OnRequestHook, OnResponseHook, SessionExport};
 pub use cookie::{Cookie, CookieJar, SameSite};
 pub use error::Error;
 pub use multipart::{Multipart, Part};

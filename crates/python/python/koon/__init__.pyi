@@ -1,4 +1,4 @@
-from typing import Any, AsyncIterator, Optional, Union
+from typing import Any, AsyncIterator, Callable, Optional, Sequence, Tuple, Union
 
 class Koon:
     """Browser impersonation HTTP client with TLS/HTTP2 fingerprint spoofing."""
@@ -18,6 +18,9 @@ class Koon:
         randomize: bool = False,
         session_resumption: bool = True,
         doh: Optional[str] = None,
+        local_address: Optional[str] = None,
+        on_request: Optional[Callable[[str, str], None]] = None,
+        on_response: Optional[Callable[[int, str, Sequence[Tuple[str, str]]], None]] = None,
     ) -> None:
         """Create a new Koon HTTP client with browser fingerprint impersonation.
 
@@ -34,6 +37,9 @@ class Koon:
             randomize: Randomize UA build number, accept-language q-values, and H2 window sizes.
             session_resumption: Enable TLS session resumption.
             doh: DNS-over-HTTPS provider (``"cloudflare"`` or ``"google"``).
+            local_address: Bind outgoing connections to a specific local IP address.
+            on_request: Observe-only hook called before each HTTP request (including redirects). Receives (method, url).
+            on_response: Observe-only hook called after each HTTP response (including redirects). Receives (status, url, headers).
         """
         ...
     def export_profile(self) -> str:
@@ -50,6 +56,15 @@ class Koon:
         ...
     def load_session_from_file(self, path: str) -> None:
         """Load a session from a file."""
+        ...
+    def total_bytes_sent(self) -> int:
+        """Get the total number of bytes sent across all requests."""
+        ...
+    def total_bytes_received(self) -> int:
+        """Get the total number of bytes received across all requests."""
+        ...
+    def reset_counters(self) -> None:
+        """Reset both cumulative byte counters to zero."""
         ...
     async def get(self, url: str) -> KoonResponse:
         """Perform an HTTP GET request."""
@@ -121,6 +136,14 @@ class KoonResponse:
     def url(self) -> str:
         """The final URL after redirects."""
         ...
+    @property
+    def bytes_sent(self) -> int:
+        """Approximate bytes sent for this request (headers + body)."""
+        ...
+    @property
+    def bytes_received(self) -> int:
+        """Approximate bytes received for this response (headers + body, pre-decompression)."""
+        ...
     def json(self) -> object:
         """Parse response body as JSON (delegates to ``json.loads``)."""
         ...
@@ -143,6 +166,14 @@ class KoonStreamingResponse:
     @property
     def url(self) -> str:
         """The request URL."""
+        ...
+    @property
+    def bytes_sent(self) -> int:
+        """Approximate bytes sent for this request."""
+        ...
+    @property
+    def bytes_received(self) -> int:
+        """Approximate bytes received so far (headers + body chunks consumed)."""
         ...
     async def next_chunk(self) -> Optional[bytes]:
         """Get the next body chunk. Returns None when the body is complete."""

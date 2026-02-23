@@ -1,3 +1,6 @@
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+
 use tokio::sync::mpsc;
 
 use crate::error::Error;
@@ -20,6 +23,10 @@ pub struct StreamingResponse {
     pub url: String,
     /// Channel receiver for body chunks.
     body_rx: mpsc::Receiver<Result<Vec<u8>, Error>>,
+    /// Approximate bytes sent for this request.
+    bytes_sent_val: u64,
+    /// Shared counter for bytes received (incremented as chunks arrive).
+    bytes_received_counter: Arc<AtomicU64>,
 }
 
 impl StreamingResponse {
@@ -30,6 +37,8 @@ impl StreamingResponse {
         version: String,
         url: String,
         body_rx: mpsc::Receiver<Result<Vec<u8>, Error>>,
+        bytes_sent: u64,
+        bytes_received_counter: Arc<AtomicU64>,
     ) -> Self {
         StreamingResponse {
             status,
@@ -37,13 +46,30 @@ impl StreamingResponse {
             version,
             url,
             body_rx,
+            bytes_sent_val: bytes_sent,
+            bytes_received_counter,
         }
+    }
+
+    /// Approximate bytes sent for this request (headers + body).
+    pub fn bytes_sent(&self) -> u64 {
+        self.bytes_sent_val
+    }
+
+    /// Approximate bytes received so far (headers + body chunks read).
+    /// This value increases as chunks are consumed via [`next_chunk()`].
+    pub fn bytes_received(&self) -> u64 {
+        self.bytes_received_counter.load(Ordering::Relaxed)
     }
 
     /// Receive the next body chunk.
     /// Returns `None` when the body is complete.
     pub async fn next_chunk(&mut self) -> Option<Result<Vec<u8>, Error>> {
-        self.body_rx.recv().await
+        let result = self.body_rx.recv().await;
+        if let Some(Ok(ref data)) = result {
+            self.bytes_received_counter.fetch_add(data.len() as u64, Ordering::Relaxed);
+        }
+        result
     }
 
     /// Collect the entire body into a single buffer.
@@ -51,7 +77,9 @@ impl StreamingResponse {
     pub async fn collect_body(mut self) -> Result<Vec<u8>, Error> {
         let mut body = Vec::new();
         while let Some(chunk) = self.body_rx.recv().await {
-            body.extend_from_slice(&chunk?);
+            let data = chunk?;
+            self.bytes_received_counter.fetch_add(data.len() as u64, Ordering::Relaxed);
+            body.extend_from_slice(&data);
         }
         Ok(body)
     }

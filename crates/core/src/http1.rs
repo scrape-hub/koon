@@ -25,7 +25,7 @@ pub(crate) async fn write_request<S: AsyncWrite + Unpin>(
     uri: &Uri,
     headers: &HeaderMap,
     body: Option<&[u8]>,
-) -> Result<(), Error> {
+) -> Result<u64, Error> {
     let path = uri
         .path_and_query()
         .map(|pq| pq.as_str())
@@ -64,7 +64,8 @@ pub(crate) async fn write_request<S: AsyncWrite + Unpin>(
 
     stream.flush().await?;
 
-    Ok(())
+    let bytes_sent = buf.len() as u64 + body.map(|b| b.len() as u64).unwrap_or(0);
+    Ok(bytes_sent)
 }
 
 /// Internal: Read and parse HTTP/1.1 response headers from a stream.
@@ -509,7 +510,7 @@ mod tests {
         );
 
         let mut buf = Vec::new();
-        write_request(&mut buf, &Method::GET, &uri, &headers, None)
+        let bytes_sent = write_request(&mut buf, &Method::GET, &uri, &headers, None)
             .await
             .unwrap();
 
@@ -520,6 +521,7 @@ mod tests {
         assert!(output.ends_with("\r\n\r\n"));
         // No content-length for GET without body
         assert!(!output.contains("content-length"));
+        assert_eq!(bytes_sent, output.len() as u64);
     }
 
     #[tokio::test]
@@ -533,7 +535,7 @@ mod tests {
 
         let body = b"hello world";
         let mut buf = Vec::new();
-        write_request(&mut buf, &Method::POST, &uri, &headers, Some(body))
+        let _bytes_sent = write_request(&mut buf, &Method::POST, &uri, &headers, Some(body))
             .await
             .unwrap();
 

@@ -5,6 +5,24 @@ All notable changes to koon will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Bandwidth Tracking**: Per-request and cumulative byte counters for bandwidth budget monitoring
+  - Per-request: `bytes_sent` / `bytes_received` on every response (headers + body, pre-decompression)
+  - Cumulative: `total_bytes_sent()` / `total_bytes_received()` / `reset_counters()` on the client
+  - Streaming responses track bytes incrementally as chunks are consumed
+  - Accuracy ~99.97% vs TCP (excludes TLS record overhead and H2/H3 framing)
+  - Node.js: `resp.bytesSent`, `resp.bytesReceived`, `client.totalBytesSent()`, `client.totalBytesReceived()`, `client.resetCounters()`
+  - Python: `resp.bytes_sent`, `resp.bytes_received`, `client.total_bytes_sent()`, `client.total_bytes_received()`, `client.reset_counters()`
+  - R: `resp$bytes_sent`, `resp$bytes_received`, `client$total_bytes_sent()`, `client$total_bytes_received()`, `client$reset_counters()`
+  - Rust: `response.bytes_sent`, `response.bytes_received`, `client.total_bytes_sent()`, `client.total_bytes_received()`, `client.reset_counters()`
+- **Request Hooks**: Observe-only `onRequest` / `onResponse` callbacks for logging and debugging
+  - Fires per HTTP request including intermediate redirects (not just the final response)
+  - `onRequest(method, url)` — called before each request is sent
+  - `onResponse(status, url, headers)` — called after each response is received
+  - Node.js: `new Koon({ onRequest: (m, u) => ..., onResponse: (s, u, h) => ... })`
+  - Python: `Koon("chrome", on_request=lambda m,u: ..., on_response=lambda s,u,h: ...)`
+  - R: `Koon$new("chrome", on_request = function(m, u) ..., on_response = function(s, u, h) ...)`
+    (R hooks fire once per call, not per redirect — R is single-threaded)
+  - Rust: `Client::builder(profile).on_request(|m, u| ...).on_response(|s, u, h| ...).build()`
 - **Proxy Rotation**: Round-robin rotation over multiple proxy URLs
   - Each request picks the next proxy in order, cycling back to the first
   - Proxy-aware connection pool: each proxy gets its own connections per origin
