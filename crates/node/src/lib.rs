@@ -535,6 +535,7 @@ impl Koon {
             }
 
             // Check if onResponse is a function (not undefined/null)
+            #[allow(clippy::type_complexity)]
             if let Ok(val) = obj.get_named_property::<napi::JsUnknown>("onResponse") {
                 if val.get_type()? == napi::ValueType::Function {
                     let js_fn = unsafe { val.cast::<JsFunction>() };
