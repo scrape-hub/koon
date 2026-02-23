@@ -16,7 +16,10 @@ fn to_py_err(e: impl std::fmt::Display) -> PyErr {
 }
 
 /// Run a future with an optional per-request timeout.
-async fn run_with_timeout<F>(future: F, timeout_ms: Option<u32>) -> PyResult<koon_core::HttpResponse>
+async fn run_with_timeout<F>(
+    future: F,
+    timeout_ms: Option<u32>,
+) -> PyResult<koon_core::HttpResponse>
 where
     F: Future<Output = Result<koon_core::HttpResponse, koon_core::Error>>,
 {
@@ -32,9 +35,7 @@ where
 
 /// Resolve a browser name string to a BrowserProfile.
 fn resolve_profile(browser: &str) -> PyResult<BrowserProfile> {
-    BrowserProfile::resolve(browser).map_err(|e| {
-        PyErr::new::<pyo3::exceptions::PyValueError, _>(e)
-    })
+    BrowserProfile::resolve(browser).map_err(PyErr::new::<pyo3::exceptions::PyValueError, _>)
 }
 
 /// Helper enum for WebSocket send data (resolved before entering async block).
@@ -153,12 +154,17 @@ impl Koon {
         }
 
         if let Some(callback) = on_response {
-            builder = builder.on_response(move |status: u16, url: &str, headers: &[(String, String)]| {
-                Python::attach(|py| {
-                    let headers_list: Vec<(&str, &str)> = headers.iter().map(|(n, v)| (n.as_str(), v.as_str())).collect();
-                    let _ = callback.call1(py, (status, url, headers_list));
-                });
-            });
+            builder = builder.on_response(
+                move |status: u16, url: &str, headers: &[(String, String)]| {
+                    Python::attach(|py| {
+                        let headers_list: Vec<(&str, &str)> = headers
+                            .iter()
+                            .map(|(n, v)| (n.as_str(), v.as_str()))
+                            .collect();
+                        let _ = callback.call1(py, (status, url, headers_list));
+                    });
+                },
+            );
         }
 
         let client = builder.build().map_err(to_py_err)?;
@@ -215,7 +221,13 @@ impl Koon {
     ///     headers: Optional dict of per-request headers.
     ///     timeout: Optional per-request timeout in milliseconds.
     #[pyo3(signature = (url, *, headers=None, timeout=None))]
-    fn get<'py>(&self, py: Python<'py>, url: String, headers: Option<HashMap<String, String>>, timeout: Option<u32>) -> PyResult<Bound<'py, PyAny>> {
+    fn get<'py>(
+        &self,
+        py: Python<'py>,
+        url: String,
+        headers: Option<HashMap<String, String>>,
+        timeout: Option<u32>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         let client = self.client.clone();
         let extra: Vec<(String, String)> = headers.unwrap_or_default().into_iter().collect();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
@@ -282,7 +294,13 @@ impl Koon {
     ///     headers: Optional dict of per-request headers.
     ///     timeout: Optional per-request timeout in milliseconds.
     #[pyo3(signature = (url, *, headers=None, timeout=None))]
-    fn delete<'py>(&self, py: Python<'py>, url: String, headers: Option<HashMap<String, String>>, timeout: Option<u32>) -> PyResult<Bound<'py, PyAny>> {
+    fn delete<'py>(
+        &self,
+        py: Python<'py>,
+        url: String,
+        headers: Option<HashMap<String, String>>,
+        timeout: Option<u32>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         let client = self.client.clone();
         let extra: Vec<(String, String)> = headers.unwrap_or_default().into_iter().collect();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
@@ -324,7 +342,13 @@ impl Koon {
     ///     headers: Optional dict of per-request headers.
     ///     timeout: Optional per-request timeout in milliseconds.
     #[pyo3(signature = (url, *, headers=None, timeout=None))]
-    fn head<'py>(&self, py: Python<'py>, url: String, headers: Option<HashMap<String, String>>, timeout: Option<u32>) -> PyResult<Bound<'py, PyAny>> {
+    fn head<'py>(
+        &self,
+        py: Python<'py>,
+        url: String,
+        headers: Option<HashMap<String, String>>,
+        timeout: Option<u32>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         let client = self.client.clone();
         let extra: Vec<(String, String)> = headers.unwrap_or_default().into_iter().collect();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
@@ -725,10 +749,7 @@ impl KoonWebSocket {
                         let dict = PyDict::new(py);
                         if is_text {
                             dict.set_item("type", "text")?;
-                            dict.set_item(
-                                "data",
-                                String::from_utf8_lossy(&data).as_ref(),
-                            )?;
+                            dict.set_item("data", String::from_utf8_lossy(&data).as_ref())?;
                         } else {
                             dict.set_item("type", "binary")?;
                             dict.set_item("data", PyBytes::new(py, &data))?;

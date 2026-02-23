@@ -7,8 +7,8 @@ use std::time::{Duration, Instant};
 
 use boring2::ssl::{SslConnector, SslMethod, SslVerifyMode};
 use hickory_proto::op::{Edns, Message, MessageType, OpCode, Query};
-use hickory_proto::rr::record_data::RData;
 use hickory_proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
+use hickory_proto::rr::record_data::RData;
 use hickory_proto::rr::{DNSClass, Name, RecordType};
 use hickory_proto::serialize::binary::{BinDecodable, BinEncodable};
 use tokio::net::TcpStream;
@@ -92,8 +92,8 @@ impl DohResolver {
         builder.set_verify(SslVerifyMode::PEER);
 
         // Load root certs
-        use boring2::x509::store::X509StoreBuilder;
         use boring2::x509::X509;
+        use boring2::x509::store::X509StoreBuilder;
         let mut store_builder = X509StoreBuilder::new()?;
         for cert_der in webpki_root_certs::TLS_SERVER_ROOT_CERTS {
             if let Ok(x509) = X509::from_der(cert_der.as_ref()) {
@@ -171,10 +171,7 @@ impl DohResolver {
     }
 
     /// Query HTTPS DNS record (type 65) for ECH config and ALPN info.
-    pub async fn query_https_record(
-        &self,
-        hostname: &str,
-    ) -> Result<Option<HttpsRecord>, Error> {
+    pub async fn query_https_record(&self, hostname: &str) -> Result<Option<HttpsRecord>, Error> {
         // Check cache first
         {
             let cache = self.https_cache.lock().unwrap();
@@ -247,9 +244,7 @@ impl DohResolver {
     }
 
     /// Get or create a persistent H2 connection to the DoH server.
-    async fn get_or_connect_h2(
-        &self,
-    ) -> Result<http2::client::SendRequest<bytes::Bytes>, Error> {
+    async fn get_or_connect_h2(&self) -> Result<http2::client::SendRequest<bytes::Bytes>, Error> {
         let mut guard = self.h2_sender.lock().await;
 
         // Try to reuse existing sender
@@ -331,17 +326,13 @@ impl DohResolver {
             .map_err(|e| Error::Dns(format!("DoH H2 response failed: {e}")))?;
 
         if response.status() != http::StatusCode::OK {
-            return Err(Error::Dns(format!(
-                "DoH HTTP error: {}",
-                response.status()
-            )));
+            return Err(Error::Dns(format!("DoH HTTP error: {}", response.status())));
         }
 
         let mut body = Vec::new();
         let mut recv_stream = response.into_body();
         while let Some(chunk) = recv_stream.data().await {
-            let chunk =
-                chunk.map_err(|e| Error::Dns(format!("DoH H2 body read failed: {e}")))?;
+            let chunk = chunk.map_err(|e| Error::Dns(format!("DoH H2 body read failed: {e}")))?;
             body.extend_from_slice(&chunk);
             let _ = recv_stream.flow_control().release_capacity(chunk.len());
         }
@@ -352,8 +343,8 @@ impl DohResolver {
 
 /// Build DNS wire-format query message.
 fn build_dns_wire(fqdn: &str, rtype: RecordType) -> Result<Vec<u8>, Error> {
-    let name = Name::from_str(fqdn)
-        .map_err(|e| Error::Dns(format!("Invalid DNS name '{fqdn}': {e}")))?;
+    let name =
+        Name::from_str(fqdn).map_err(|e| Error::Dns(format!("Invalid DNS name '{fqdn}': {e}")))?;
 
     let mut msg = Message::new();
     msg.set_id(rand::random::<u16>());

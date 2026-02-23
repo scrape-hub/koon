@@ -1,11 +1,7 @@
 use std::borrow::Cow;
 
-use crate::http2::config::{
-    Http2Config, PseudoHeader, SettingId,
-};
-use crate::tls::config::{
-    AlpnProtocol, CertCompression, TlsConfig, TlsVersion,
-};
+use crate::http2::config::{Http2Config, PseudoHeader, SettingId};
+use crate::tls::config::{AlpnProtocol, CertCompression, TlsConfig, TlsVersion};
 
 use super::BrowserProfile;
 
@@ -224,7 +220,10 @@ fn safari_ua(version: &str) -> String {
 fn safari_headers_pre_sec_fetch(version: &str) -> Vec<(String, String)> {
     vec![
         ("user-agent".into(), safari_ua(version)),
-        ("accept".into(), "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8".into()),
+        (
+            "accept".into(),
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8".into(),
+        ),
         ("upgrade-insecure-requests".into(), "1".into()),
         ("accept-language".into(), "en-US,en;q=0.9".into()),
         ("accept-encoding".into(), "gzip, deflate, br".into()),
@@ -237,7 +236,10 @@ fn safari_headers_v17(version: &str) -> Vec<(String, String)> {
         ("sec-fetch-dest".into(), "document".into()),
         ("user-agent".into(), safari_ua(version)),
         ("upgrade-insecure-requests".into(), "1".into()),
-        ("accept".into(), "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8".into()),
+        (
+            "accept".into(),
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8".into(),
+        ),
         ("sec-fetch-site".into(), "none".into()),
         ("sec-fetch-mode".into(), "navigate".into()),
         ("accept-language".into(), "en-US,en;q=0.9".into()),
@@ -252,7 +254,10 @@ fn safari_headers_v18(version: &str) -> Vec<(String, String)> {
         ("sec-fetch-dest".into(), "document".into()),
         ("user-agent".into(), safari_ua(version)),
         ("upgrade-insecure-requests".into(), "1".into()),
-        ("accept".into(), "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8".into()),
+        (
+            "accept".into(),
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8".into(),
+        ),
         ("sec-fetch-site".into(), "none".into()),
         ("sec-fetch-mode".into(), "navigate".into()),
         ("accept-language".into(), "en-US,en;q=0.9".into()),

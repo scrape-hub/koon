@@ -51,7 +51,7 @@ impl ProxyConfig {
             other => {
                 return Err(crate::Error::Proxy(format!(
                     "Unsupported proxy scheme: {other}"
-                )))
+                )));
             }
         };
 
@@ -109,8 +109,10 @@ impl ProxyRotation {
                 "Proxy rotation requires at least one proxy URL".into(),
             ));
         }
-        let proxies: Result<Vec<ProxyConfig>, _> =
-            proxy_urls.iter().map(|url| ProxyConfig::parse(url)).collect();
+        let proxies: Result<Vec<ProxyConfig>, _> = proxy_urls
+            .iter()
+            .map(|url| ProxyConfig::parse(url))
+            .collect();
         Ok(ProxyRotation {
             proxies: proxies?,
             index: AtomicUsize::new(0),

@@ -26,10 +26,7 @@ pub(crate) async fn write_request<S: AsyncWrite + Unpin>(
     headers: &HeaderMap,
     body: Option<&[u8]>,
 ) -> Result<u64, Error> {
-    let path = uri
-        .path_and_query()
-        .map(|pq| pq.as_str())
-        .unwrap_or("/");
+    let path = uri.path_and_query().map(|pq| pq.as_str()).unwrap_or("/");
 
     // Build request into a single buffer to minimize write syscalls
     let mut buf = String::with_capacity(512);
@@ -47,8 +44,9 @@ pub(crate) async fn write_request<S: AsyncWrite + Unpin>(
 
     // Content-Length for body
     if let Some(b) = body {
-        write!(buf, "content-length: {}\r\n", b.len())
-            .map_err(|e| Error::ConnectionFailed(format!("Failed to format content-length: {e}")))?;
+        write!(buf, "content-length: {}\r\n", b.len()).map_err(|e| {
+            Error::ConnectionFailed(format!("Failed to format content-length: {e}"))
+        })?;
     }
 
     // End of headers
@@ -345,9 +343,9 @@ pub(crate) async fn stream_chunked_body<S: AsyncRead + Unpin>(
                     Ok(s) => s,
                     Err(_) => {
                         let _ = tx
-                            .send(Err(crate::error::Error::ConnectionFailed(
-                                format!("Invalid chunk size: {size_hex}"),
-                            )))
+                            .send(Err(crate::error::Error::ConnectionFailed(format!(
+                                "Invalid chunk size: {size_hex}"
+                            ))))
                             .await;
                         return;
                     }
@@ -558,8 +556,14 @@ mod tests {
 
         assert_eq!(resp.status, 200);
         assert_eq!(resp.headers.len(), 2);
-        assert_eq!(resp.headers[0], ("content-type".to_string(), "text/plain".to_string()));
-        assert_eq!(resp.headers[1], ("content-length".to_string(), "5".to_string()));
+        assert_eq!(
+            resp.headers[0],
+            ("content-type".to_string(), "text/plain".to_string())
+        );
+        assert_eq!(
+            resp.headers[1],
+            ("content-length".to_string(), "5".to_string())
+        );
         assert_eq!(resp.body, b"hello");
     }
 

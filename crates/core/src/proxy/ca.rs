@@ -8,7 +8,7 @@ use boring2::hash::MessageDigest;
 use boring2::pkey::{PKey, Private};
 use boring2::rsa::Rsa;
 use boring2::x509::extension::{BasicConstraints, KeyUsage, SubjectAlternativeName};
-use boring2::x509::{X509Name, X509};
+use boring2::x509::{X509, X509Name};
 
 use crate::error::Error;
 
@@ -95,8 +95,8 @@ impl CertAuthority {
     fn generate_ca() -> Result<(X509, PKey<Private>), Error> {
         let rsa = Rsa::generate(2048)
             .map_err(|e| Error::Proxy(format!("RSA key generation failed: {e}")))?;
-        let key = PKey::from_rsa(rsa)
-            .map_err(|e| Error::Proxy(format!("PKey creation failed: {e}")))?;
+        let key =
+            PKey::from_rsa(rsa).map_err(|e| Error::Proxy(format!("PKey creation failed: {e}")))?;
 
         let mut name_builder = X509Name::builder()
             .map_err(|e| Error::Proxy(format!("X509Name builder failed: {e}")))?;
@@ -108,15 +108,15 @@ impl CertAuthority {
             .map_err(|e| Error::Proxy(format!("O entry failed: {e}")))?;
         let name = name_builder.build();
 
-        let mut builder = X509::builder()
-            .map_err(|e| Error::Proxy(format!("X509 builder failed: {e}")))?;
+        let mut builder =
+            X509::builder().map_err(|e| Error::Proxy(format!("X509 builder failed: {e}")))?;
         builder
             .set_version(2)
             .map_err(|e| Error::Proxy(format!("set_version failed: {e}")))?;
 
         let serial = {
-            let mut bn = BigNum::new()
-                .map_err(|e| Error::Proxy(format!("BigNum::new failed: {e}")))?;
+            let mut bn =
+                BigNum::new().map_err(|e| Error::Proxy(format!("BigNum::new failed: {e}")))?;
             bn.rand(128, MsbOption::MAYBE_ZERO, false)
                 .map_err(|e| Error::Proxy(format!("BigNum::rand failed: {e}")))?;
             bn.to_asn1_integer()
@@ -147,7 +147,10 @@ impl CertAuthority {
             .set_not_after(&not_after)
             .map_err(|e| Error::Proxy(format!("set_not_after failed: {e}")))?;
 
-        let bc = BasicConstraints::new().critical().ca().build()
+        let bc = BasicConstraints::new()
+            .critical()
+            .ca()
+            .build()
             .map_err(|e| Error::Proxy(format!("BasicConstraints failed: {e}")))?;
         builder
             .append_extension(&bc)
@@ -184,15 +187,15 @@ impl CertAuthority {
             .map_err(|e| Error::Proxy(format!("Leaf CN entry failed: {e}")))?;
         let name = name_builder.build();
 
-        let mut builder = X509::builder()
-            .map_err(|e| Error::Proxy(format!("Leaf X509 builder failed: {e}")))?;
+        let mut builder =
+            X509::builder().map_err(|e| Error::Proxy(format!("Leaf X509 builder failed: {e}")))?;
         builder
             .set_version(2)
             .map_err(|e| Error::Proxy(format!("Leaf set_version failed: {e}")))?;
 
         let serial = {
-            let mut bn = BigNum::new()
-                .map_err(|e| Error::Proxy(format!("Leaf BigNum::new failed: {e}")))?;
+            let mut bn =
+                BigNum::new().map_err(|e| Error::Proxy(format!("Leaf BigNum::new failed: {e}")))?;
             bn.rand(128, MsbOption::MAYBE_ZERO, false)
                 .map_err(|e| Error::Proxy(format!("Leaf BigNum::rand failed: {e}")))?;
             bn.to_asn1_integer()
@@ -223,7 +226,8 @@ impl CertAuthority {
             .set_not_after(&not_after)
             .map_err(|e| Error::Proxy(format!("Leaf set_not_after failed: {e}")))?;
 
-        let bc = BasicConstraints::new().build()
+        let bc = BasicConstraints::new()
+            .build()
             .map_err(|e| Error::Proxy(format!("Leaf BasicConstraints failed: {e}")))?;
         builder
             .append_extension(&bc)

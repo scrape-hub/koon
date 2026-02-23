@@ -19,10 +19,7 @@ pub(crate) async fn send_request(
 ) -> Result<HttpResponse, Error> {
     let authority = uri.authority().map(|a| a.as_str()).unwrap_or("");
     let scheme = uri.scheme_str().unwrap_or("https");
-    let path = uri
-        .path_and_query()
-        .map(|pq| pq.as_str())
-        .unwrap_or("/");
+    let path = uri.path_and_query().map(|pq| pq.as_str()).unwrap_or("/");
 
     let h3_uri: Uri = format!("{scheme}://{authority}{path}")
         .parse()
@@ -69,7 +66,8 @@ pub(crate) async fn send_request(
         .map_err(|e| Error::Http3(format!("Failed to build H3 request: {e}")))?;
 
     // Estimate bytes_sent
-    let req_headers_vec: Vec<(String, String)> = req.headers()
+    let req_headers_vec: Vec<(String, String)> = req
+        .headers()
         .iter()
         .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
         .collect();
@@ -107,12 +105,7 @@ pub(crate) async fn send_request(
     let resp_headers: Vec<(String, String)> = response
         .headers()
         .iter()
-        .map(|(k, v)| {
-            (
-                k.as_str().to_string(),
-                v.to_str().unwrap_or("").to_string(),
-            )
-        })
+        .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
         .collect();
 
     // Read body

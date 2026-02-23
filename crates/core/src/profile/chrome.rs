@@ -1,12 +1,8 @@
 use std::borrow::Cow;
 
-use crate::http2::config::{
-    Http2Config, PseudoHeader, SettingId, StreamDep,
-};
+use crate::http2::config::{Http2Config, PseudoHeader, SettingId, StreamDep};
 use crate::quic::QuicConfig;
-use crate::tls::config::{
-    AlpnProtocol, AlpsProtocol, CertCompression, TlsConfig, TlsVersion,
-};
+use crate::tls::config::{AlpnProtocol, AlpsProtocol, CertCompression, TlsConfig, TlsVersion};
 
 use super::BrowserProfile;
 
@@ -19,79 +15,169 @@ pub struct Chrome;
 
 impl Chrome {
     // ========== Chrome 131 ==========
-    pub fn v131_windows() -> BrowserProfile { chrome_profile(131, Os::Windows) }
-    pub fn v131_macos() -> BrowserProfile { chrome_profile(131, Os::MacOS) }
-    pub fn v131_linux() -> BrowserProfile { chrome_profile(131, Os::Linux) }
+    pub fn v131_windows() -> BrowserProfile {
+        chrome_profile(131, Os::Windows)
+    }
+    pub fn v131_macos() -> BrowserProfile {
+        chrome_profile(131, Os::MacOS)
+    }
+    pub fn v131_linux() -> BrowserProfile {
+        chrome_profile(131, Os::Linux)
+    }
 
     // ========== Chrome 132 ==========
-    pub fn v132_windows() -> BrowserProfile { chrome_profile(132, Os::Windows) }
-    pub fn v132_macos() -> BrowserProfile { chrome_profile(132, Os::MacOS) }
-    pub fn v132_linux() -> BrowserProfile { chrome_profile(132, Os::Linux) }
+    pub fn v132_windows() -> BrowserProfile {
+        chrome_profile(132, Os::Windows)
+    }
+    pub fn v132_macos() -> BrowserProfile {
+        chrome_profile(132, Os::MacOS)
+    }
+    pub fn v132_linux() -> BrowserProfile {
+        chrome_profile(132, Os::Linux)
+    }
 
     // ========== Chrome 133 ==========
-    pub fn v133_windows() -> BrowserProfile { chrome_profile(133, Os::Windows) }
-    pub fn v133_macos() -> BrowserProfile { chrome_profile(133, Os::MacOS) }
-    pub fn v133_linux() -> BrowserProfile { chrome_profile(133, Os::Linux) }
+    pub fn v133_windows() -> BrowserProfile {
+        chrome_profile(133, Os::Windows)
+    }
+    pub fn v133_macos() -> BrowserProfile {
+        chrome_profile(133, Os::MacOS)
+    }
+    pub fn v133_linux() -> BrowserProfile {
+        chrome_profile(133, Os::Linux)
+    }
 
     // ========== Chrome 134 ==========
-    pub fn v134_windows() -> BrowserProfile { chrome_profile(134, Os::Windows) }
-    pub fn v134_macos() -> BrowserProfile { chrome_profile(134, Os::MacOS) }
-    pub fn v134_linux() -> BrowserProfile { chrome_profile(134, Os::Linux) }
+    pub fn v134_windows() -> BrowserProfile {
+        chrome_profile(134, Os::Windows)
+    }
+    pub fn v134_macos() -> BrowserProfile {
+        chrome_profile(134, Os::MacOS)
+    }
+    pub fn v134_linux() -> BrowserProfile {
+        chrome_profile(134, Os::Linux)
+    }
 
     // ========== Chrome 135 ==========
-    pub fn v135_windows() -> BrowserProfile { chrome_profile(135, Os::Windows) }
-    pub fn v135_macos() -> BrowserProfile { chrome_profile(135, Os::MacOS) }
-    pub fn v135_linux() -> BrowserProfile { chrome_profile(135, Os::Linux) }
+    pub fn v135_windows() -> BrowserProfile {
+        chrome_profile(135, Os::Windows)
+    }
+    pub fn v135_macos() -> BrowserProfile {
+        chrome_profile(135, Os::MacOS)
+    }
+    pub fn v135_linux() -> BrowserProfile {
+        chrome_profile(135, Os::Linux)
+    }
 
     // ========== Chrome 136 ==========
-    pub fn v136_windows() -> BrowserProfile { chrome_profile(136, Os::Windows) }
-    pub fn v136_macos() -> BrowserProfile { chrome_profile(136, Os::MacOS) }
-    pub fn v136_linux() -> BrowserProfile { chrome_profile(136, Os::Linux) }
+    pub fn v136_windows() -> BrowserProfile {
+        chrome_profile(136, Os::Windows)
+    }
+    pub fn v136_macos() -> BrowserProfile {
+        chrome_profile(136, Os::MacOS)
+    }
+    pub fn v136_linux() -> BrowserProfile {
+        chrome_profile(136, Os::Linux)
+    }
 
     // ========== Chrome 137 ==========
-    pub fn v137_windows() -> BrowserProfile { chrome_profile(137, Os::Windows) }
-    pub fn v137_macos() -> BrowserProfile { chrome_profile(137, Os::MacOS) }
-    pub fn v137_linux() -> BrowserProfile { chrome_profile(137, Os::Linux) }
+    pub fn v137_windows() -> BrowserProfile {
+        chrome_profile(137, Os::Windows)
+    }
+    pub fn v137_macos() -> BrowserProfile {
+        chrome_profile(137, Os::MacOS)
+    }
+    pub fn v137_linux() -> BrowserProfile {
+        chrome_profile(137, Os::Linux)
+    }
 
     // ========== Chrome 138 ==========
-    pub fn v138_windows() -> BrowserProfile { chrome_profile(138, Os::Windows) }
-    pub fn v138_macos() -> BrowserProfile { chrome_profile(138, Os::MacOS) }
-    pub fn v138_linux() -> BrowserProfile { chrome_profile(138, Os::Linux) }
+    pub fn v138_windows() -> BrowserProfile {
+        chrome_profile(138, Os::Windows)
+    }
+    pub fn v138_macos() -> BrowserProfile {
+        chrome_profile(138, Os::MacOS)
+    }
+    pub fn v138_linux() -> BrowserProfile {
+        chrome_profile(138, Os::Linux)
+    }
 
     // ========== Chrome 139 ==========
-    pub fn v139_windows() -> BrowserProfile { chrome_profile(139, Os::Windows) }
-    pub fn v139_macos() -> BrowserProfile { chrome_profile(139, Os::MacOS) }
-    pub fn v139_linux() -> BrowserProfile { chrome_profile(139, Os::Linux) }
+    pub fn v139_windows() -> BrowserProfile {
+        chrome_profile(139, Os::Windows)
+    }
+    pub fn v139_macos() -> BrowserProfile {
+        chrome_profile(139, Os::MacOS)
+    }
+    pub fn v139_linux() -> BrowserProfile {
+        chrome_profile(139, Os::Linux)
+    }
 
     // ========== Chrome 140 ==========
-    pub fn v140_windows() -> BrowserProfile { chrome_profile(140, Os::Windows) }
-    pub fn v140_macos() -> BrowserProfile { chrome_profile(140, Os::MacOS) }
-    pub fn v140_linux() -> BrowserProfile { chrome_profile(140, Os::Linux) }
+    pub fn v140_windows() -> BrowserProfile {
+        chrome_profile(140, Os::Windows)
+    }
+    pub fn v140_macos() -> BrowserProfile {
+        chrome_profile(140, Os::MacOS)
+    }
+    pub fn v140_linux() -> BrowserProfile {
+        chrome_profile(140, Os::Linux)
+    }
 
     // ========== Chrome 141 ==========
-    pub fn v141_windows() -> BrowserProfile { chrome_profile(141, Os::Windows) }
-    pub fn v141_macos() -> BrowserProfile { chrome_profile(141, Os::MacOS) }
-    pub fn v141_linux() -> BrowserProfile { chrome_profile(141, Os::Linux) }
+    pub fn v141_windows() -> BrowserProfile {
+        chrome_profile(141, Os::Windows)
+    }
+    pub fn v141_macos() -> BrowserProfile {
+        chrome_profile(141, Os::MacOS)
+    }
+    pub fn v141_linux() -> BrowserProfile {
+        chrome_profile(141, Os::Linux)
+    }
 
     // ========== Chrome 142 ==========
-    pub fn v142_windows() -> BrowserProfile { chrome_profile(142, Os::Windows) }
-    pub fn v142_macos() -> BrowserProfile { chrome_profile(142, Os::MacOS) }
-    pub fn v142_linux() -> BrowserProfile { chrome_profile(142, Os::Linux) }
+    pub fn v142_windows() -> BrowserProfile {
+        chrome_profile(142, Os::Windows)
+    }
+    pub fn v142_macos() -> BrowserProfile {
+        chrome_profile(142, Os::MacOS)
+    }
+    pub fn v142_linux() -> BrowserProfile {
+        chrome_profile(142, Os::Linux)
+    }
 
     // ========== Chrome 143 ==========
-    pub fn v143_windows() -> BrowserProfile { chrome_profile(143, Os::Windows) }
-    pub fn v143_macos() -> BrowserProfile { chrome_profile(143, Os::MacOS) }
-    pub fn v143_linux() -> BrowserProfile { chrome_profile(143, Os::Linux) }
+    pub fn v143_windows() -> BrowserProfile {
+        chrome_profile(143, Os::Windows)
+    }
+    pub fn v143_macos() -> BrowserProfile {
+        chrome_profile(143, Os::MacOS)
+    }
+    pub fn v143_linux() -> BrowserProfile {
+        chrome_profile(143, Os::Linux)
+    }
 
     // ========== Chrome 144 ==========
-    pub fn v144_windows() -> BrowserProfile { chrome_profile(144, Os::Windows) }
-    pub fn v144_macos() -> BrowserProfile { chrome_profile(144, Os::MacOS) }
-    pub fn v144_linux() -> BrowserProfile { chrome_profile(144, Os::Linux) }
+    pub fn v144_windows() -> BrowserProfile {
+        chrome_profile(144, Os::Windows)
+    }
+    pub fn v144_macos() -> BrowserProfile {
+        chrome_profile(144, Os::MacOS)
+    }
+    pub fn v144_linux() -> BrowserProfile {
+        chrome_profile(144, Os::Linux)
+    }
 
     // ========== Chrome 145 ==========
-    pub fn v145_windows() -> BrowserProfile { chrome_profile(145, Os::Windows) }
-    pub fn v145_macos() -> BrowserProfile { chrome_profile(145, Os::MacOS) }
-    pub fn v145_linux() -> BrowserProfile { chrome_profile(145, Os::Linux) }
+    pub fn v145_windows() -> BrowserProfile {
+        chrome_profile(145, Os::Windows)
+    }
+    pub fn v145_macos() -> BrowserProfile {
+        chrome_profile(145, Os::MacOS)
+    }
+    pub fn v145_linux() -> BrowserProfile {
+        chrome_profile(145, Os::Linux)
+    }
 
     /// Latest Chrome profile (currently v145 on Windows).
     pub fn latest() -> BrowserProfile {
@@ -325,8 +411,12 @@ pub(super) fn chromium_sec_ch_ua(chromium_major: u32, brand: &str, brand_ver: &s
     const GREASE_CHARS: [char; 11] = [' ', '(', ':', '-', '.', '/', ')', ';', '=', '?', '_'];
     const GREASE_VERSIONS: [&str; 3] = ["8", "99", "24"];
     const ORDERS: [[usize; 3]; 6] = [
-        [0, 1, 2], [0, 2, 1], [1, 0, 2],
-        [1, 2, 0], [2, 0, 1], [2, 1, 0],
+        [0, 1, 2],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
     ];
 
     let seed = chromium_major as usize;

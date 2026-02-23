@@ -18,17 +18,22 @@ impl super::Client {
                     .await
                     .map_err(Error::Io)?
                     .next()
-                    .ok_or_else(|| Error::Io(std::io::Error::new(
-                        std::io::ErrorKind::AddrNotAvailable,
-                        "DNS resolution returned no addresses",
-                    )))?;
+                    .ok_or_else(|| {
+                        Error::Io(std::io::Error::new(
+                            std::io::ErrorKind::AddrNotAvailable,
+                            "DNS resolution returned no addresses",
+                        ))
+                    })?;
 
                 let socket = match local_ip {
                     IpAddr::V4(_) => TcpSocket::new_v4(),
                     IpAddr::V6(_) => TcpSocket::new_v6(),
-                }.map_err(Error::Io)?;
+                }
+                .map_err(Error::Io)?;
 
-                socket.bind(SocketAddr::new(local_ip, 0)).map_err(Error::Io)?;
+                socket
+                    .bind(SocketAddr::new(local_ip, 0))
+                    .map_err(Error::Io)?;
                 socket.connect(remote).await.map_err(Error::Io)
             }
             None => TcpStream::connect(addr).await.map_err(Error::Io),
@@ -58,10 +63,9 @@ impl super::Client {
                     // Resolve via DoH, then connect to IP directly
                     let addrs = resolver.resolve(host).await?;
                     let addr = SocketAddr::new(addrs[0], port);
-                    let stream =
-                        tokio::time::timeout(self.timeout, self.tcp_connect(addr))
-                            .await
-                            .map_err(|_| Error::Timeout)?;
+                    let stream = tokio::time::timeout(self.timeout, self.tcp_connect(addr))
+                        .await
+                        .map_err(|_| Error::Timeout)?;
                     let stream = stream?;
                     stream.set_nodelay(true).ok();
                     return Ok(stream);
@@ -105,12 +109,9 @@ impl super::Client {
                     .await
                     .map_err(|e| Error::Proxy(format!("SOCKS5 error: {e}")))?
                 } else {
-                    tokio_socks::tcp::Socks5Stream::connect(
-                        proxy_addr.as_str(),
-                        target.as_str(),
-                    )
-                    .await
-                    .map_err(|e| Error::Proxy(format!("SOCKS5 error: {e}")))?
+                    tokio_socks::tcp::Socks5Stream::connect(proxy_addr.as_str(), target.as_str())
+                        .await
+                        .map_err(|e| Error::Proxy(format!("SOCKS5 error: {e}")))?
                 };
 
                 Ok(stream.into_inner())
@@ -118,7 +119,8 @@ impl super::Client {
             ProxyKind::Http | ProxyKind::Https => {
                 // HTTP CONNECT tunnel
                 let proxy_addr = format!("{}:{}", proxy.host(), proxy.port());
-                let stream = self.tcp_connect(proxy_addr.as_str())
+                let stream = self
+                    .tcp_connect(proxy_addr.as_str())
                     .await
                     .map_err(|e| Error::Proxy(format!("Failed to connect to proxy: {e}")))?;
 
@@ -142,9 +144,7 @@ impl super::Client {
                 let response = String::from_utf8_lossy(&buf[..n]);
 
                 if !response.contains("200") {
-                    return Err(Error::Proxy(format!(
-                        "CONNECT tunnel failed: {response}"
-                    )));
+                    return Err(Error::Proxy(format!("CONNECT tunnel failed: {response}")));
                 }
 
                 Ok(stream)
@@ -237,9 +237,7 @@ impl super::Client {
         Pin::new(&mut stream)
             .connect()
             .await
-            .map_err(|e| {
-                Error::ConnectionFailed(format!("TLS ECH retry handshake failed: {e}"))
-            })?;
+            .map_err(|e| Error::ConnectionFailed(format!("TLS ECH retry handshake failed: {e}")))?;
 
         Ok(stream)
     }

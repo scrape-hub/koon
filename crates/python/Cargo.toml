@@ -9,6 +9,9 @@ license.workspace = true
 name = "koon"
 crate-type = ["cdylib"]
 
+[lints]
+workspace = true
+
 [dependencies]
 koon-core = { path = "../core", features = ["doh"] }
 pyo3 = { version = "0.28", features = ["extension-module"] }

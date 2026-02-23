@@ -7,8 +7,8 @@ mod h3;
 mod headers;
 mod response;
 
-pub use response::{HttpResponse, SessionExport};
 pub(crate) use response::estimate_headers_size;
+pub use response::{HttpResponse, SessionExport};
 
 use std::collections::HashMap;
 use std::net::IpAddr;
@@ -277,7 +277,8 @@ impl Client {
     /// Add bytes to the cumulative counters.
     pub(super) fn track_bytes(&self, sent: u64, received: u64) {
         self.total_bytes_sent.fetch_add(sent, Ordering::Relaxed);
-        self.total_bytes_received.fetch_add(received, Ordering::Relaxed);
+        self.total_bytes_received
+            .fetch_add(received, Ordering::Relaxed);
     }
 
     /// Get a clone of the shared bytes_received counter (for streaming responses).
@@ -302,8 +303,6 @@ impl Client {
             (None, self.proxy.as_ref())
         }
     }
-
-
 
     /// Create a new client with default settings (redirects on, cookies on).
     pub fn new(profile: BrowserProfile) -> Result<Self, Error> {
@@ -348,11 +347,16 @@ impl Client {
         url: &str,
         body: Option<Vec<u8>>,
     ) -> Result<HttpResponse, Error> {
-        self.request_with_headers(method, url, body, Vec::new()).await
+        self.request_with_headers(method, url, body, Vec::new())
+            .await
     }
 
     /// Perform an HTTP POST request with a multipart/form-data body.
-    pub async fn post_multipart(&self, url: &str, multipart: Multipart) -> Result<HttpResponse, Error> {
+    pub async fn post_multipart(
+        &self,
+        url: &str,
+        multipart: Multipart,
+    ) -> Result<HttpResponse, Error> {
         let (body, content_type) = multipart.build();
         self.request_with_headers(
             Method::POST,
@@ -370,9 +374,10 @@ impl Client {
             serde_json::to_value(jar.cookies()).unwrap_or(serde_json::Value::Array(Vec::new()))
         });
 
-        let tls_sessions = self.session_cache.as_ref().map(|cache| {
-            cache.export().sessions
-        });
+        let tls_sessions = self
+            .session_cache
+            .as_ref()
+            .map(|cache| cache.export().sessions);
 
         let export = SessionExport {
             cookies,
@@ -464,7 +469,13 @@ impl Client {
             &self.custom_headers,
             &extra_headers,
             None,
-            &["host", "cookie", "accept-encoding", "content-type", "content-length"],
+            &[
+                "host",
+                "cookie",
+                "accept-encoding",
+                "content-type",
+                "content-length",
+            ],
             Some(authority),
             false,
             None, // WebSocket doesn't need sec-fetch-* correction

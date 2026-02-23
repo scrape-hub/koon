@@ -1,5 +1,7 @@
-use super::chrome::{chrome_http2, chrome_quic, chromium_headers, chromium_sec_ch_ua, chromium_tls, chromium_ua};
 use super::BrowserProfile;
+use super::chrome::{
+    chrome_http2, chrome_quic, chromium_headers, chromium_sec_ch_ua, chromium_tls, chromium_ua,
+};
 
 /// Edge browser profile factory.
 ///
@@ -10,64 +12,124 @@ pub struct Edge;
 
 impl Edge {
     // ========== Edge 131 ==========
-    pub fn v131_windows() -> BrowserProfile { edge_profile(131, Os::Windows) }
-    pub fn v131_macos() -> BrowserProfile { edge_profile(131, Os::MacOS) }
+    pub fn v131_windows() -> BrowserProfile {
+        edge_profile(131, Os::Windows)
+    }
+    pub fn v131_macos() -> BrowserProfile {
+        edge_profile(131, Os::MacOS)
+    }
 
     // ========== Edge 132 ==========
-    pub fn v132_windows() -> BrowserProfile { edge_profile(132, Os::Windows) }
-    pub fn v132_macos() -> BrowserProfile { edge_profile(132, Os::MacOS) }
+    pub fn v132_windows() -> BrowserProfile {
+        edge_profile(132, Os::Windows)
+    }
+    pub fn v132_macos() -> BrowserProfile {
+        edge_profile(132, Os::MacOS)
+    }
 
     // ========== Edge 133 ==========
-    pub fn v133_windows() -> BrowserProfile { edge_profile(133, Os::Windows) }
-    pub fn v133_macos() -> BrowserProfile { edge_profile(133, Os::MacOS) }
+    pub fn v133_windows() -> BrowserProfile {
+        edge_profile(133, Os::Windows)
+    }
+    pub fn v133_macos() -> BrowserProfile {
+        edge_profile(133, Os::MacOS)
+    }
 
     // ========== Edge 134 ==========
-    pub fn v134_windows() -> BrowserProfile { edge_profile(134, Os::Windows) }
-    pub fn v134_macos() -> BrowserProfile { edge_profile(134, Os::MacOS) }
+    pub fn v134_windows() -> BrowserProfile {
+        edge_profile(134, Os::Windows)
+    }
+    pub fn v134_macos() -> BrowserProfile {
+        edge_profile(134, Os::MacOS)
+    }
 
     // ========== Edge 135 ==========
-    pub fn v135_windows() -> BrowserProfile { edge_profile(135, Os::Windows) }
-    pub fn v135_macos() -> BrowserProfile { edge_profile(135, Os::MacOS) }
+    pub fn v135_windows() -> BrowserProfile {
+        edge_profile(135, Os::Windows)
+    }
+    pub fn v135_macos() -> BrowserProfile {
+        edge_profile(135, Os::MacOS)
+    }
 
     // ========== Edge 136 ==========
-    pub fn v136_windows() -> BrowserProfile { edge_profile(136, Os::Windows) }
-    pub fn v136_macos() -> BrowserProfile { edge_profile(136, Os::MacOS) }
+    pub fn v136_windows() -> BrowserProfile {
+        edge_profile(136, Os::Windows)
+    }
+    pub fn v136_macos() -> BrowserProfile {
+        edge_profile(136, Os::MacOS)
+    }
 
     // ========== Edge 137 ==========
-    pub fn v137_windows() -> BrowserProfile { edge_profile(137, Os::Windows) }
-    pub fn v137_macos() -> BrowserProfile { edge_profile(137, Os::MacOS) }
+    pub fn v137_windows() -> BrowserProfile {
+        edge_profile(137, Os::Windows)
+    }
+    pub fn v137_macos() -> BrowserProfile {
+        edge_profile(137, Os::MacOS)
+    }
 
     // ========== Edge 138 ==========
-    pub fn v138_windows() -> BrowserProfile { edge_profile(138, Os::Windows) }
-    pub fn v138_macos() -> BrowserProfile { edge_profile(138, Os::MacOS) }
+    pub fn v138_windows() -> BrowserProfile {
+        edge_profile(138, Os::Windows)
+    }
+    pub fn v138_macos() -> BrowserProfile {
+        edge_profile(138, Os::MacOS)
+    }
 
     // ========== Edge 139 ==========
-    pub fn v139_windows() -> BrowserProfile { edge_profile(139, Os::Windows) }
-    pub fn v139_macos() -> BrowserProfile { edge_profile(139, Os::MacOS) }
+    pub fn v139_windows() -> BrowserProfile {
+        edge_profile(139, Os::Windows)
+    }
+    pub fn v139_macos() -> BrowserProfile {
+        edge_profile(139, Os::MacOS)
+    }
 
     // ========== Edge 140 ==========
-    pub fn v140_windows() -> BrowserProfile { edge_profile(140, Os::Windows) }
-    pub fn v140_macos() -> BrowserProfile { edge_profile(140, Os::MacOS) }
+    pub fn v140_windows() -> BrowserProfile {
+        edge_profile(140, Os::Windows)
+    }
+    pub fn v140_macos() -> BrowserProfile {
+        edge_profile(140, Os::MacOS)
+    }
 
     // ========== Edge 141 ==========
-    pub fn v141_windows() -> BrowserProfile { edge_profile(141, Os::Windows) }
-    pub fn v141_macos() -> BrowserProfile { edge_profile(141, Os::MacOS) }
+    pub fn v141_windows() -> BrowserProfile {
+        edge_profile(141, Os::Windows)
+    }
+    pub fn v141_macos() -> BrowserProfile {
+        edge_profile(141, Os::MacOS)
+    }
 
     // ========== Edge 142 ==========
-    pub fn v142_windows() -> BrowserProfile { edge_profile(142, Os::Windows) }
-    pub fn v142_macos() -> BrowserProfile { edge_profile(142, Os::MacOS) }
+    pub fn v142_windows() -> BrowserProfile {
+        edge_profile(142, Os::Windows)
+    }
+    pub fn v142_macos() -> BrowserProfile {
+        edge_profile(142, Os::MacOS)
+    }
 
     // ========== Edge 143 ==========
-    pub fn v143_windows() -> BrowserProfile { edge_profile(143, Os::Windows) }
-    pub fn v143_macos() -> BrowserProfile { edge_profile(143, Os::MacOS) }
+    pub fn v143_windows() -> BrowserProfile {
+        edge_profile(143, Os::Windows)
+    }
+    pub fn v143_macos() -> BrowserProfile {
+        edge_profile(143, Os::MacOS)
+    }
 
     // ========== Edge 144 ==========
-    pub fn v144_windows() -> BrowserProfile { edge_profile(144, Os::Windows) }
-    pub fn v144_macos() -> BrowserProfile { edge_profile(144, Os::MacOS) }
+    pub fn v144_windows() -> BrowserProfile {
+        edge_profile(144, Os::Windows)
+    }
+    pub fn v144_macos() -> BrowserProfile {
+        edge_profile(144, Os::MacOS)
+    }
 
     // ========== Edge 145 ==========
-    pub fn v145_windows() -> BrowserProfile { edge_profile(145, Os::Windows) }
-    pub fn v145_macos() -> BrowserProfile { edge_profile(145, Os::MacOS) }
+    pub fn v145_windows() -> BrowserProfile {
+        edge_profile(145, Os::Windows)
+    }
+    pub fn v145_macos() -> BrowserProfile {
+        edge_profile(145, Os::MacOS)
+    }
 
     /// Latest Edge profile (currently v145 on Windows).
     pub fn latest() -> BrowserProfile {

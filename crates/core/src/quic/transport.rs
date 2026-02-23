@@ -12,7 +12,8 @@ use crate::error::Error;
 pub(crate) fn build_endpoint(quic_config: &QuicConfig) -> Result<Endpoint, Error> {
     let mut endpoint_config = EndpointConfig::default();
     endpoint_config.grease_quic_bit(quic_config.grease_quic_bit);
-    endpoint_config.max_udp_payload_size(quic_config.max_udp_payload_size)
+    endpoint_config
+        .max_udp_payload_size(quic_config.max_udp_payload_size)
         .map_err(|e| Error::Quic(format!("Invalid max_udp_payload_size: {e}")))?;
 
     let socket = std::net::UdpSocket::bind("0.0.0.0:0")
@@ -22,8 +23,7 @@ pub(crate) fn build_endpoint(quic_config: &QuicConfig) -> Result<Endpoint, Error
         endpoint_config,
         None, // no server config
         socket,
-        quinn::default_runtime()
-            .ok_or_else(|| Error::Quic("No async runtime available".into()))?,
+        quinn::default_runtime().ok_or_else(|| Error::Quic("No async runtime available".into()))?,
     )
     .map_err(|e| Error::Quic(format!("Failed to create QUIC endpoint: {e}")))?;
 
@@ -63,8 +63,7 @@ pub(crate) fn build_client_config(quic_config: &QuicConfig) -> Result<ClientConf
     transport.initial_mtu(quic_config.max_udp_payload_size);
 
     transport.receive_window(
-        VarInt::from_u64(quic_config.initial_max_data)
-            .unwrap_or(VarInt::from_u32(15728640)),
+        VarInt::from_u64(quic_config.initial_max_data).unwrap_or(VarInt::from_u32(15728640)),
     );
 
     transport.stream_receive_window(
@@ -73,13 +72,11 @@ pub(crate) fn build_client_config(quic_config: &QuicConfig) -> Result<ClientConf
     );
 
     transport.max_concurrent_bidi_streams(
-        VarInt::from_u64(quic_config.initial_max_streams_bidi)
-            .unwrap_or(VarInt::from_u32(100)),
+        VarInt::from_u64(quic_config.initial_max_streams_bidi).unwrap_or(VarInt::from_u32(100)),
     );
 
     transport.max_concurrent_uni_streams(
-        VarInt::from_u64(quic_config.initial_max_streams_uni)
-            .unwrap_or(VarInt::from_u32(100)),
+        VarInt::from_u64(quic_config.initial_max_streams_uni).unwrap_or(VarInt::from_u32(100)),
     );
 
     // Keep-alive to maintain the connection

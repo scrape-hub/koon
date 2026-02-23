@@ -8,7 +8,7 @@ use crate::http2::config::{PseudoHeader, SettingId};
 use crate::streaming::StreamingResponse;
 
 use super::headers;
-use super::response::{decompress_body, estimate_headers_size, HttpResponse};
+use super::response::{HttpResponse, decompress_body, estimate_headers_size};
 
 impl super::Client {
     /// Perform the HTTP/2 handshake over a TLS connection.
@@ -57,9 +57,7 @@ impl super::Client {
                     SettingId::EnableConnectProtocol => {
                         http2::frame::SettingId::EnableConnectProtocol
                     }
-                    SettingId::NoRfc7540Priorities => {
-                        http2::frame::SettingId::NoRfc7540Priorities
-                    }
+                    SettingId::NoRfc7540Priorities => http2::frame::SettingId::NoRfc7540Priorities,
                 };
                 order = order.push(id);
             }
@@ -101,10 +99,8 @@ impl super::Client {
                     pf.weight,
                     pf.exclusive,
                 );
-                let priority = http2::frame::Priority::new(
-                    http2::frame::StreamId::from(pf.stream_id),
-                    dep,
-                );
+                let priority =
+                    http2::frame::Priority::new(http2::frame::StreamId::from(pf.stream_id), dep);
                 prio_builder = prio_builder.push(priority);
             }
             h2_builder.priorities(prio_builder.build());
@@ -178,7 +174,8 @@ impl super::Client {
         );
 
         // Estimate bytes_sent: request headers + body
-        let req_headers_vec: Vec<(String, String)> = req.headers()
+        let req_headers_vec: Vec<(String, String)> = req
+            .headers()
             .iter()
             .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
             .collect();
@@ -188,9 +185,8 @@ impl super::Client {
 
         // Send the request
         let has_body = body.is_some();
-        let (response_future, mut send_stream) = sender
-            .send_request(req, !has_body)
-            .map_err(Error::Http2)?;
+        let (response_future, mut send_stream) =
+            sender.send_request(req, !has_body).map_err(Error::Http2)?;
 
         if let Some(body_bytes) = body {
             send_stream
@@ -280,7 +276,8 @@ impl super::Client {
         );
 
         // Estimate bytes_sent
-        let req_headers_vec: Vec<(String, String)> = req.headers()
+        let req_headers_vec: Vec<(String, String)> = req
+            .headers()
             .iter()
             .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
             .collect();
@@ -289,12 +286,13 @@ impl super::Client {
         let bytes_sent = req_header_size + body_len;
 
         let has_body = body.is_some();
-        let (response_future, mut send_stream) = sender
-            .send_request(req, !has_body)
-            .map_err(Error::Http2)?;
+        let (response_future, mut send_stream) =
+            sender.send_request(req, !has_body).map_err(Error::Http2)?;
 
         if let Some(body_bytes) = body {
-            send_stream.send_data(body_bytes.into(), true).map_err(Error::Http2)?;
+            send_stream
+                .send_data(body_bytes.into(), true)
+                .map_err(Error::Http2)?;
         }
 
         let response = tokio::time::timeout(self.timeout, response_future)
@@ -317,7 +315,8 @@ impl super::Client {
         // Track header bytes + request bytes immediately
         let bytes_received_counter = self.bytes_received_counter();
         bytes_received_counter.fetch_add(resp_header_size, std::sync::atomic::Ordering::Relaxed);
-        self.bytes_sent_counter().fetch_add(bytes_sent, std::sync::atomic::Ordering::Relaxed);
+        self.bytes_sent_counter()
+            .fetch_add(bytes_sent, std::sync::atomic::Ordering::Relaxed);
 
         tokio::spawn(async move {
             while let Some(chunk) = recv_stream.data().await {
@@ -387,12 +386,12 @@ impl super::Client {
         }
 
         // Estimate bytes_sent for raw headers
-        let bytes_sent = estimate_headers_size(raw_headers) + body.as_ref().map(|b| b.len() as u64).unwrap_or(0);
+        let bytes_sent =
+            estimate_headers_size(raw_headers) + body.as_ref().map(|b| b.len() as u64).unwrap_or(0);
 
         let has_body = body.is_some();
-        let (response_future, mut send_stream) = sender
-            .send_request(req, !has_body)
-            .map_err(Error::Http2)?;
+        let (response_future, mut send_stream) =
+            sender.send_request(req, !has_body).map_err(Error::Http2)?;
 
         if let Some(body_bytes) = body {
             send_stream

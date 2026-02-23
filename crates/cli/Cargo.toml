@@ -9,6 +9,9 @@ license.workspace = true
 name = "koon"
 path = "src/main.rs"
 
+[lints]
+workspace = true
+
 [dependencies]
 koon-core = { path = "../core", features = ["doh"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }

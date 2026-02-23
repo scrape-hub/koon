@@ -338,13 +338,19 @@ mod tests {
     #[test]
     fn test_compute_fetch_site_same_origin() {
         let url: Uri = "https://api.example.com/v1/data".parse().unwrap();
-        assert_eq!(compute_fetch_site(&url, "https://api.example.com"), "same-origin");
+        assert_eq!(
+            compute_fetch_site(&url, "https://api.example.com"),
+            "same-origin"
+        );
     }
 
     #[test]
     fn test_compute_fetch_site_same_site() {
         let url: Uri = "https://api.example.com/v1/data".parse().unwrap();
-        assert_eq!(compute_fetch_site(&url, "https://www.example.com"), "same-site");
+        assert_eq!(
+            compute_fetch_site(&url, "https://www.example.com"),
+            "same-site"
+        );
     }
 
     #[test]
@@ -504,9 +510,10 @@ mod tests {
             ("origin".into(), "https://shop.example.com".into()),
             ("referer".into(), "https://shop.example.com/".into()),
         ];
-        let extra_headers = vec![
-            ("content-type".into(), "application/x-www-form-urlencoded".into()),
-        ];
+        let extra_headers = vec![(
+            "content-type".into(),
+            "application/x-www-form-urlencoded".into(),
+        )];
         let url: Uri = "https://api.example.com/v1/token".parse().unwrap();
 
         let headers = build_request_headers(
@@ -526,27 +533,15 @@ mod tests {
             "application/x-www-form-urlencoded"
         );
         // custom_headers must also be present
-        assert_eq!(
-            headers.get("origin").unwrap(),
-            "https://shop.example.com"
-        );
-        assert_eq!(
-            headers.get("referer").unwrap(),
-            "https://shop.example.com/"
-        );
+        assert_eq!(headers.get("origin").unwrap(), "https://shop.example.com");
+        assert_eq!(headers.get("referer").unwrap(), "https://shop.example.com/");
     }
 
     #[test]
     fn test_extra_headers_override_custom() {
-        let profile_headers = vec![
-            ("accept".into(), "text/html".into()),
-        ];
-        let custom_headers = vec![
-            ("content-type".into(), "text/plain".into()),
-        ];
-        let extra_headers = vec![
-            ("content-type".into(), "application/json".into()),
-        ];
+        let profile_headers = vec![("accept".into(), "text/html".into())];
+        let custom_headers = vec![("content-type".into(), "text/plain".into())];
+        let extra_headers = vec![("content-type".into(), "application/json".into())];
 
         let headers = build_request_headers(
             &profile_headers,
@@ -579,7 +574,10 @@ mod tests {
         let h1 = build_request_headers(
             &profile_headers,
             &[
-                ("content-type".into(), "application/x-www-form-urlencoded".into()),
+                (
+                    "content-type".into(),
+                    "application/x-www-form-urlencoded".into(),
+                ),
                 ("origin".into(), "https://shop.example.com".into()),
                 ("referer".into(), "https://shop.example.com/".into()),
             ],
@@ -596,7 +594,10 @@ mod tests {
             &profile_headers,
             &[],
             &[
-                ("content-type".into(), "application/x-www-form-urlencoded".into()),
+                (
+                    "content-type".into(),
+                    "application/x-www-form-urlencoded".into(),
+                ),
                 ("origin".into(), "https://shop.example.com".into()),
                 ("referer".into(), "https://shop.example.com/".into()),
             ],
@@ -614,9 +615,10 @@ mod tests {
                 ("origin".into(), "https://shop.example.com".into()),
                 ("referer".into(), "https://shop.example.com/".into()),
             ],
-            &[
-                ("content-type".into(), "application/x-www-form-urlencoded".into()),
-            ],
+            &[(
+                "content-type".into(),
+                "application/x-www-form-urlencoded".into(),
+            )],
             None,
             &[],
             None,
@@ -630,14 +632,8 @@ mod tests {
                 variant.get("content-type").unwrap(),
                 "application/x-www-form-urlencoded",
             );
-            assert_eq!(
-                variant.get("origin").unwrap(),
-                "https://shop.example.com",
-            );
-            assert_eq!(
-                variant.get("referer").unwrap(),
-                "https://shop.example.com/",
-            );
+            assert_eq!(variant.get("origin").unwrap(), "https://shop.example.com",);
+            assert_eq!(variant.get("referer").unwrap(), "https://shop.example.com/",);
             assert!(variant.get("accept").is_some());
             assert!(variant.get("user-agent").is_some());
         }

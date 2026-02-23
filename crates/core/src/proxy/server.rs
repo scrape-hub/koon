@@ -137,9 +137,7 @@ impl ProxyServer {
 
 /// Default CA directory: ~/.koon/ca/
 fn dirs_default_ca_dir() -> String {
-    if let Some(home) = std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-    {
+    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
         let mut path = PathBuf::from(home);
         path.push(".koon");
         path.push("ca");
@@ -332,17 +330,13 @@ async fn handle_connect(
 
                 let response = match header_mode {
                     HeaderMode::Impersonate => {
-                        let method: http::Method = proxy_req
-                            .method
-                            .parse()
-                            .unwrap_or(http::Method::GET);
+                        let method: http::Method =
+                            proxy_req.method.parse().unwrap_or(http::Method::GET);
                         client.request(method, &url, proxy_req.body).await
                     }
                     HeaderMode::Passthrough => {
-                        let method: http::Method = proxy_req
-                            .method
-                            .parse()
-                            .unwrap_or(http::Method::GET);
+                        let method: http::Method =
+                            proxy_req.method.parse().unwrap_or(http::Method::GET);
                         client
                             .request_with_raw_headers(
                                 method,

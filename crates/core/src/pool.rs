@@ -72,7 +72,12 @@ impl ConnectionPool {
     }
 
     /// Try to get an existing H2 connection for the given origin.
-    pub fn try_get_h2(&self, host: &str, port: u16, proxy_index: Option<usize>) -> Option<SendRequest<Bytes>> {
+    pub fn try_get_h2(
+        &self,
+        host: &str,
+        port: u16,
+        proxy_index: Option<usize>,
+    ) -> Option<SendRequest<Bytes>> {
         let key = PoolKey {
             host: host.to_string(),
             port,
@@ -96,7 +101,12 @@ impl ConnectionPool {
 
     /// Try to take an existing H1.1 connection for the given origin.
     /// Unlike H2, H1.1 connections are taken (removed) from the pool since they are not multiplexed.
-    pub fn try_take_h1(&self, host: &str, port: u16, proxy_index: Option<usize>) -> Option<SslStream<TcpStream>> {
+    pub fn try_take_h1(
+        &self,
+        host: &str,
+        port: u16,
+        proxy_index: Option<usize>,
+    ) -> Option<SslStream<TcpStream>> {
         let key = PoolKey {
             host: host.to_string(),
             port,
@@ -125,7 +135,13 @@ impl ConnectionPool {
     }
 
     /// Store an H2 connection in the pool.
-    pub fn insert_h2(&self, host: &str, port: u16, proxy_index: Option<usize>, sender: SendRequest<Bytes>) {
+    pub fn insert_h2(
+        &self,
+        host: &str,
+        port: u16,
+        proxy_index: Option<usize>,
+        sender: SendRequest<Bytes>,
+    ) {
         let key = PoolKey {
             host: host.to_string(),
             port,
@@ -144,7 +160,13 @@ impl ConnectionPool {
     }
 
     /// Store an H1.1 connection in the pool for keep-alive reuse.
-    pub fn insert_h1(&self, host: &str, port: u16, proxy_index: Option<usize>, stream: SslStream<TcpStream>) {
+    pub fn insert_h1(
+        &self,
+        host: &str,
+        port: u16,
+        proxy_index: Option<usize>,
+        stream: SslStream<TcpStream>,
+    ) {
         let key = PoolKey {
             host: host.to_string(),
             port,

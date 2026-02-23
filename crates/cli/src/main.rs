@@ -1,8 +1,7 @@
 use clap::{Parser, Subcommand};
 use http::Method;
 use koon_core::{
-    dns::DohResolver, BrowserProfile, Client, HeaderMode,
-    ProxyServer, ProxyServerConfig,
+    BrowserProfile, Client, HeaderMode, ProxyServer, ProxyServerConfig, dns::DohResolver,
 };
 use serde_json::json;
 use std::collections::HashMap;
@@ -175,7 +174,13 @@ fn list_browsers() {
 
     println!("\n  Safari (15.6-18.3, macOS only):");
     println!("    safari              Safari latest (18.3)");
-    for (tag, ver) in [("156", "15.6"), ("160", "16.0"), ("170", "17.0"), ("180", "18.0"), ("183", "18.3")] {
+    for (tag, ver) in [
+        ("156", "15.6"),
+        ("160", "16.0"),
+        ("170", "17.0"),
+        ("180", "18.0"),
+        ("183", "18.3"),
+    ] {
         println!("    safari{tag}           Safari {ver} (macOS)");
     }
 
@@ -212,7 +217,10 @@ fn load_profile(browser: &str, profile_json: &Option<String>) -> Result<BrowserP
 }
 
 async fn run_request(cli: Cli) -> Result<(), String> {
-    let url = cli.url.as_deref().ok_or("No URL provided. Use --help for usage.")?;
+    let url = cli
+        .url
+        .as_deref()
+        .ok_or("No URL provided. Use --help for usage.")?;
 
     let mut profile = load_profile(&cli.browser, &cli.profile_json)?;
     if cli.randomize {
@@ -228,7 +236,9 @@ async fn run_request(cli: Cli) -> Result<(), String> {
         .session_resumption(!cli.no_session_resumption);
 
     if let Some(ref proxy_url) = cli.proxy {
-        builder = builder.proxy(proxy_url).map_err(|e| format!("Invalid proxy: {e}"))?;
+        builder = builder
+            .proxy(proxy_url)
+            .map_err(|e| format!("Invalid proxy: {e}"))?;
     }
 
     let extra_headers = parse_headers(&cli.headers);
@@ -240,12 +250,18 @@ async fn run_request(cli: Cli) -> Result<(), String> {
         let resolver = match doh_provider.as_str() {
             "cloudflare" => DohResolver::with_cloudflare(),
             "google" => DohResolver::with_google(),
-            _ => return Err(format!("Unknown DoH provider: '{doh_provider}'. Use 'cloudflare' or 'google'.")),
+            _ => {
+                return Err(format!(
+                    "Unknown DoH provider: '{doh_provider}'. Use 'cloudflare' or 'google'."
+                ));
+            }
         };
         builder = builder.doh(resolver.map_err(|e| format!("DoH init failed: {e}"))?);
     }
 
-    let client = builder.build().map_err(|e| format!("Client build failed: {e}"))?;
+    let client = builder
+        .build()
+        .map_err(|e| format!("Client build failed: {e}"))?;
 
     // Load session if requested
     if let Some(ref path) = cli.load_session {
@@ -258,10 +274,10 @@ async fn run_request(cli: Cli) -> Result<(), String> {
     }
 
     // Determine method
-    let method_str = cli
-        .method
-        .as_deref()
-        .unwrap_or(if cli.data.is_some() { "POST" } else { "GET" });
+    let method_str =
+        cli.method
+            .as_deref()
+            .unwrap_or(if cli.data.is_some() { "POST" } else { "GET" });
     let method = Method::from_bytes(method_str.to_uppercase().as_bytes())
         .map_err(|_| format!("Invalid HTTP method: '{method_str}'"))?;
 
@@ -303,10 +319,13 @@ async fn run_request(cli: Cli) -> Result<(), String> {
     // Output
     if cli.json_output {
         let headers_map: HashMap<&str, Vec<&str>> =
-            response.headers.iter().fold(HashMap::new(), |mut map, (k, v)| {
-                map.entry(k.as_str()).or_default().push(v.as_str());
-                map
-            });
+            response
+                .headers
+                .iter()
+                .fold(HashMap::new(), |mut map, (k, v)| {
+                    map.entry(k.as_str()).or_default().push(v.as_str());
+                    map
+                });
         let body_text = String::from_utf8_lossy(&response.body);
         let output = json!({
             "status": response.status,
@@ -362,7 +381,7 @@ async fn run_proxy(
         _ => {
             return Err(format!(
                 "Unknown header-mode: '{header_mode}'. Use 'impersonate' or 'passthrough'."
-            ))
+            ));
         }
     };
 

@@ -55,10 +55,7 @@ fn serialize_expires<S: serde::Serializer>(
 ) -> Result<S::Ok, S::Error> {
     match time {
         Some(t) => {
-            let secs = t
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
+            let secs = t.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
             serializer.serialize_some(&secs)
         }
         None => serializer.serialize_none(),
@@ -229,7 +226,9 @@ fn parse_set_cookie(
         } else if let Some(val) = lower.strip_prefix("domain=") {
             domain = val.trim().trim_start_matches('.').to_string();
             domain_explicit = true;
-        } else if let Some(val) = part.strip_prefix("path=").or_else(|| part.strip_prefix("Path="))
+        } else if let Some(val) = part
+            .strip_prefix("path=")
+            .or_else(|| part.strip_prefix("Path="))
         {
             path = val.trim().to_string();
         } else if let Some(val) = lower.strip_prefix("max-age=") {
@@ -538,10 +537,7 @@ mod tests {
         // Cookie without explicit Domain → host_only = true
         jar.store_from_response(
             &url,
-            &[(
-                "set-cookie".to_string(),
-                "hostonly=yes; Path=/".to_string(),
-            )],
+            &[("set-cookie".to_string(), "hostonly=yes; Path=/".to_string())],
         );
 
         // Should match exact host
@@ -576,14 +572,17 @@ mod tests {
             parse_set_cookie("b=2; Path=/; SameSite=Lax", "example.com", "/", true).unwrap();
         assert_eq!(cookie_lax.same_site, SameSite::Lax);
 
-        let cookie_none =
-            parse_set_cookie("c=3; Path=/; SameSite=None; Secure", "example.com", "/", true)
-                .unwrap();
+        let cookie_none = parse_set_cookie(
+            "c=3; Path=/; SameSite=None; Secure",
+            "example.com",
+            "/",
+            true,
+        )
+        .unwrap();
         assert_eq!(cookie_none.same_site, SameSite::None);
 
         // Default should be Lax
-        let cookie_default =
-            parse_set_cookie("d=4; Path=/", "example.com", "/", true).unwrap();
+        let cookie_default = parse_set_cookie("d=4; Path=/", "example.com", "/", true).unwrap();
         assert_eq!(cookie_default.same_site, SameSite::Lax);
 
         // Verify cookies are stored and retrievable

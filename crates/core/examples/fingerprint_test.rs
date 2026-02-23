@@ -1,5 +1,5 @@
-use koon_core::profile::Chrome;
 use koon_core::Client;
+use koon_core::profile::Chrome;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -74,12 +74,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let h1_client = Client::builder(Chrome::v145_windows()).build()?;
     let h1_resp = h1_client.get("https://httpbin.org/get").await?;
-    println!("httpbin.org response: status={} version={}", h1_resp.status, h1_resp.version);
+    println!(
+        "httpbin.org response: status={} version={}",
+        h1_resp.status, h1_resp.version
+    );
     assert_eq!(h1_resp.status, 200);
     println!("Protocol negotiated: {}", h1_resp.version);
 
     let body = String::from_utf8_lossy(&h1_resp.body);
-    assert!(body.contains("\"url\""), "Response should contain url field");
+    assert!(
+        body.contains("\"url\""),
+        "Response should contain url field"
+    );
     println!("Response body valid: contains URL field");
 
     // === Test 6: WebSocket (wss://) ===

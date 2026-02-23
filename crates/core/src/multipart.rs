@@ -120,9 +120,7 @@ impl Multipart {
                         )
                         .as_bytes(),
                     );
-                    body.extend_from_slice(
-                        format!("Content-Type: {content_type}\r\n").as_bytes(),
-                    );
+                    body.extend_from_slice(format!("Content-Type: {content_type}\r\n").as_bytes());
                     body.extend_from_slice(b"\r\n");
                     body.extend_from_slice(data);
                 }
@@ -166,9 +164,7 @@ mod tests {
 
     #[test]
     fn test_text_field_encoding() {
-        let (body, _ct) = Multipart::new()
-            .text("field1", "value1")
-            .build();
+        let (body, _ct) = Multipart::new().text("field1", "value1").build();
         let body_str = String::from_utf8(body).unwrap();
         assert!(body_str.contains("Content-Disposition: form-data; name=\"field1\""));
         assert!(body_str.contains("\r\n\r\nvalue1\r\n"));

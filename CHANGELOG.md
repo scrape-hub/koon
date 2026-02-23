@@ -23,6 +23,7 @@ All notable changes to koon will be documented in this file.
   - R: `Koon$new("chrome", on_request = function(m, u) ..., on_response = function(s, u, h) ...)`
     (R hooks fire once per call, not per redirect — R is single-threaded)
   - Rust: `Client::builder(profile).on_request(|m, u| ...).on_response(|s, u, h| ...).build()`
+- **CI: Format check + workspace lints**: `cargo fmt --check` in CI pipeline, workspace-level clippy configuration via `[workspace.lints.clippy]`
 - **Proxy Rotation**: Round-robin rotation over multiple proxy URLs
   - Each request picks the next proxy in order, cycling back to the first
   - Proxy-aware connection pool: each proxy gets its own connections per origin

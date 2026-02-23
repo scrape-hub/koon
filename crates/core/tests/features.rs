@@ -18,20 +18,54 @@ fn assert_profile_roundtrips(name: &str, profile: &BrowserProfile) {
     let restored = BrowserProfile::from_json(&json)
         .unwrap_or_else(|e| panic!("{name}: deserialize failed: {e}"));
 
-    assert_eq!(profile.tls.cipher_list, restored.tls.cipher_list, "{name}: cipher_list");
+    assert_eq!(
+        profile.tls.cipher_list, restored.tls.cipher_list,
+        "{name}: cipher_list"
+    );
     assert_eq!(profile.tls.curves, restored.tls.curves, "{name}: curves");
     assert_eq!(profile.tls.sigalgs, restored.tls.sigalgs, "{name}: sigalgs");
     assert_eq!(profile.tls.grease, restored.tls.grease, "{name}: grease");
     assert_eq!(profile.tls.alpn, restored.tls.alpn, "{name}: alpn");
-    assert_eq!(profile.tls.preserve_tls13_cipher_order, restored.tls.preserve_tls13_cipher_order, "{name}: preserve_tls13_cipher_order");
-    assert_eq!(profile.tls.record_size_limit, restored.tls.record_size_limit, "{name}: record_size_limit");
-    assert_eq!(profile.tls.pre_shared_key, restored.tls.pre_shared_key, "{name}: pre_shared_key");
-    assert_eq!(profile.http2.settings_order, restored.http2.settings_order, "{name}: settings_order");
-    assert_eq!(profile.http2.pseudo_header_order, restored.http2.pseudo_header_order, "{name}: pseudo_header_order");
-    assert_eq!(profile.http2.initial_window_size, restored.http2.initial_window_size, "{name}: initial_window_size");
-    assert_eq!(profile.quic.is_some(), restored.quic.is_some(), "{name}: quic presence");
-    assert_eq!(profile.headers.len(), restored.headers.len(), "{name}: headers count");
-    for (i, ((k1, v1), (k2, v2))) in profile.headers.iter().zip(restored.headers.iter()).enumerate() {
+    assert_eq!(
+        profile.tls.preserve_tls13_cipher_order, restored.tls.preserve_tls13_cipher_order,
+        "{name}: preserve_tls13_cipher_order"
+    );
+    assert_eq!(
+        profile.tls.record_size_limit, restored.tls.record_size_limit,
+        "{name}: record_size_limit"
+    );
+    assert_eq!(
+        profile.tls.pre_shared_key, restored.tls.pre_shared_key,
+        "{name}: pre_shared_key"
+    );
+    assert_eq!(
+        profile.http2.settings_order, restored.http2.settings_order,
+        "{name}: settings_order"
+    );
+    assert_eq!(
+        profile.http2.pseudo_header_order, restored.http2.pseudo_header_order,
+        "{name}: pseudo_header_order"
+    );
+    assert_eq!(
+        profile.http2.initial_window_size, restored.http2.initial_window_size,
+        "{name}: initial_window_size"
+    );
+    assert_eq!(
+        profile.quic.is_some(),
+        restored.quic.is_some(),
+        "{name}: quic presence"
+    );
+    assert_eq!(
+        profile.headers.len(),
+        restored.headers.len(),
+        "{name}: headers count"
+    );
+    for (i, ((k1, v1), (k2, v2))) in profile
+        .headers
+        .iter()
+        .zip(restored.headers.iter())
+        .enumerate()
+    {
         assert_eq!(k1, k2, "{name}: header key mismatch at index {i}");
         assert_eq!(v1, v2, "{name}: header value mismatch at index {i}");
     }
@@ -174,7 +208,10 @@ fn test_randomization_jitters_h2_windows() {
             let diff = (original.http2.initial_window_size as i64
                 - randomized.http2.initial_window_size as i64)
                 .unsigned_abs();
-            assert!(diff <= 32768, "Window jitter should be within ±32KB, got {diff}");
+            assert!(
+                diff <= 32768,
+                "Window jitter should be within ±32KB, got {diff}"
+            );
         }
     }
 
@@ -202,7 +239,10 @@ fn test_randomization_firefox_no_ua_change() {
         .find(|(k, _)| k == "user-agent")
         .map(|(_, v)| v.as_str());
 
-    assert_eq!(orig_ua, rand_ua, "Firefox UA should not change on randomize");
+    assert_eq!(
+        orig_ua, rand_ua,
+        "Firefox UA should not change on randomize"
+    );
 }
 
 // ============================================================
@@ -243,10 +283,9 @@ fn test_firefox_tls13_cipher_order() {
     );
     // Firefox/NSS order: AES_128 → CHACHA20 → AES_256
     assert!(
-        profile
-            .tls
-            .cipher_list
-            .starts_with("TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_256_GCM_SHA384"),
+        profile.tls.cipher_list.starts_with(
+            "TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_256_GCM_SHA384"
+        ),
         "Firefox cipher order should be AES_128→CHACHA20→AES_256"
     );
 }
@@ -314,8 +353,7 @@ fn test_client_builder_options() {
 
 #[test]
 fn test_client_builder_invalid_proxy() {
-    let result = Client::builder(Chrome::latest())
-        .proxy("not-a-valid-url");
+    let result = Client::builder(Chrome::latest()).proxy("not-a-valid-url");
     assert!(result.is_err(), "Invalid proxy URL should error");
 }
 
@@ -351,7 +389,10 @@ fn test_multipart_builder() {
     let body_str = String::from_utf8_lossy(&body);
     assert!(body_str.contains("field1"), "Body should contain field1");
     assert!(body_str.contains("value1"), "Body should contain value1");
-    assert!(body_str.contains("test.txt"), "Body should contain filename");
+    assert!(
+        body_str.contains("test.txt"),
+        "Body should contain filename"
+    );
     assert!(
         body_str.contains("hello world"),
         "Body should contain file data"
@@ -383,7 +424,10 @@ fn test_cookie_jar_json_roundtrip() {
         &url,
         &[
             ("set-cookie".into(), "name=value; Path=/; Secure".into()),
-            ("set-cookie".into(), "session=abc123; Path=/; HttpOnly".into()),
+            (
+                "set-cookie".into(),
+                "session=abc123; Path=/; HttpOnly".into(),
+            ),
         ],
     );
 
@@ -427,15 +471,21 @@ async fn assert_decompression(encoding: &str, key: &str) {
 
 #[tokio::test]
 #[ignore]
-async fn test_decompression_gzip() { assert_decompression("gzip", "gzipped").await; }
+async fn test_decompression_gzip() {
+    assert_decompression("gzip", "gzipped").await;
+}
 
 #[tokio::test]
 #[ignore]
-async fn test_decompression_deflate() { assert_decompression("deflate", "deflated").await; }
+async fn test_decompression_deflate() {
+    assert_decompression("deflate", "deflated").await;
+}
 
 #[tokio::test]
 #[ignore]
-async fn test_decompression_brotli() { assert_decompression("brotli", "brotli").await; }
+async fn test_decompression_brotli() {
+    assert_decompression("brotli", "brotli").await;
+}
 
 // ============================================================
 // Redirect Following (integration, network required)
@@ -467,10 +517,7 @@ async fn test_redirect_disabled() {
         .build()
         .unwrap();
 
-    let resp = client
-        .get("https://httpbin.org/redirect/1")
-        .await
-        .unwrap();
+    let resp = client.get("https://httpbin.org/redirect/1").await.unwrap();
     assert_eq!(resp.status, 302, "Should get 302 without following");
 }
 
@@ -532,10 +579,7 @@ async fn test_redirect_302_post_to_get() {
         .unwrap();
 
     assert_eq!(resp.status, 200);
-    assert!(
-        resp.url.contains("/get"),
-        "302 POST should redirect to GET"
-    );
+    assert!(resp.url.contains("/get"), "302 POST should redirect to GET");
 }
 
 // ============================================================
@@ -655,7 +699,13 @@ async fn test_session_resumption_disabled() {
     let session = client.save_session().unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&session).unwrap();
     let tls = parsed.get("tls_sessions");
-    let is_empty = tls.is_none() || tls.unwrap().is_null() || tls.unwrap().as_object().map(|m| m.is_empty()).unwrap_or(false);
+    let is_empty = tls.is_none()
+        || tls.unwrap().is_null()
+        || tls
+            .unwrap()
+            .as_object()
+            .map(|m| m.is_empty())
+            .unwrap_or(false);
     assert!(
         is_empty,
         "TLS sessions should be empty when resumption disabled, got: {session}"
@@ -677,10 +727,7 @@ async fn test_streaming_collect() {
 
     assert_eq!(streaming.status, 200);
     assert!(!streaming.version.is_empty(), "Version should be set");
-    assert!(
-        streaming.url.contains("httpbin.org"),
-        "URL should be set"
-    );
+    assert!(streaming.url.contains("httpbin.org"), "URL should be set");
 
     let body = streaming.collect_body().await.unwrap();
     assert!(!body.is_empty(), "Body should not be empty");
@@ -697,11 +744,7 @@ async fn test_streaming_collect() {
 async fn test_streaming_chunks() {
     let client = Client::new(Chrome::latest()).unwrap();
     let mut streaming = client
-        .request_streaming(
-            http::Method::GET,
-            "https://httpbin.org/bytes/10000",
-            None,
-        )
+        .request_streaming(http::Method::GET, "https://httpbin.org/bytes/10000", None)
         .await
         .unwrap();
 
@@ -727,9 +770,7 @@ async fn test_streaming_chunks() {
 #[ignore]
 async fn test_custom_headers() {
     let client = Client::builder(Chrome::latest())
-        .headers(vec![
-            ("X-Custom-Test".into(), "koon-value-123".into()),
-        ])
+        .headers(vec![("X-Custom-Test".into(), "koon-value-123".into())])
         .build()
         .unwrap();
 
@@ -784,10 +825,7 @@ async fn test_http_get() {
 async fn test_http_post_with_body() {
     let client = Client::new(Chrome::latest()).unwrap();
     let resp = client
-        .post(
-            "https://httpbin.org/post",
-            Some(b"hello world".to_vec()),
-        )
+        .post("https://httpbin.org/post", Some(b"hello world".to_vec()))
         .await
         .unwrap();
     assert_eq!(resp.status, 200);
@@ -821,10 +859,7 @@ async fn test_http_delete() {
 async fn test_http_patch() {
     let client = Client::new(Chrome::latest()).unwrap();
     let resp = client
-        .patch(
-            "https://httpbin.org/patch",
-            Some(b"patch data".to_vec()),
-        )
+        .patch("https://httpbin.org/patch", Some(b"patch data".to_vec()))
         .await
         .unwrap();
     assert_eq!(resp.status, 200);
@@ -847,14 +882,12 @@ async fn test_http_head() {
 #[ignore]
 async fn test_multipart_post() {
     let client = Client::new(Chrome::latest()).unwrap();
-    let multipart = Multipart::new()
-        .text("username", "koon_test")
-        .file(
-            "upload",
-            "test.txt",
-            "text/plain",
-            b"file content here".to_vec(),
-        );
+    let multipart = Multipart::new().text("username", "koon_test").file(
+        "upload",
+        "test.txt",
+        "text/plain",
+        b"file content here".to_vec(),
+    );
 
     let resp = client
         .post_multipart("https://httpbin.org/post", multipart)
@@ -976,20 +1009,29 @@ async fn assert_browser_ua(profile: BrowserProfile, name: &str, ua_marker: &str)
     let resp = client.get("https://httpbin.org/headers").await.unwrap();
     assert_eq!(resp.status, 200, "{name}: expected 200");
     let body = String::from_utf8_lossy(&resp.body);
-    assert!(body.contains(ua_marker), "{name}: UA should contain '{ua_marker}', got: {body}");
+    assert!(
+        body.contains(ua_marker),
+        "{name}: UA should contain '{ua_marker}', got: {body}"
+    );
 }
 
 #[tokio::test]
 #[ignore]
-async fn test_firefox_profile_request() { assert_browser_ua(Firefox::latest(), "Firefox", "Firefox").await; }
+async fn test_firefox_profile_request() {
+    assert_browser_ua(Firefox::latest(), "Firefox", "Firefox").await;
+}
 
 #[tokio::test]
 #[ignore]
-async fn test_edge_profile_request() { assert_browser_ua(Edge::latest(), "Edge", "Edg/").await; }
+async fn test_edge_profile_request() {
+    assert_browser_ua(Edge::latest(), "Edge", "Edg/").await;
+}
 
 #[tokio::test]
 #[ignore]
-async fn test_opera_profile_request() { assert_browser_ua(Opera::latest(), "Opera", "OPR/").await; }
+async fn test_opera_profile_request() {
+    assert_browser_ua(Opera::latest(), "Opera", "OPR/").await;
+}
 
 #[tokio::test]
 #[ignore]
@@ -1062,10 +1104,7 @@ async fn test_doh_cloudflare_httpbin() {
 #[ignore]
 async fn test_websocket_echo() {
     let client = Client::new(Chrome::latest()).unwrap();
-    let mut ws = client
-        .websocket("wss://echo.websocket.org")
-        .await
-        .unwrap();
+    let mut ws = client.websocket("wss://echo.websocket.org").await.unwrap();
 
     // echo.websocket.org sends a welcome message first — consume it
     let welcome = ws.receive().await.unwrap();
@@ -1115,16 +1154,10 @@ async fn test_proxy_server_start_shutdown() {
         server.url().starts_with("http://127.0.0.1:"),
         "URL should be valid"
     );
-    assert!(
-        server.ca_cert_path().exists(),
-        "CA cert file should exist"
-    );
+    assert!(server.ca_cert_path().exists(), "CA cert file should exist");
 
     let pem = server.ca_cert_pem().unwrap();
-    assert!(
-        !pem.is_empty(),
-        "CA cert PEM should not be empty"
-    );
+    assert!(!pem.is_empty(), "CA cert PEM should not be empty");
     let pem_str = String::from_utf8_lossy(&pem);
     assert!(
         pem_str.contains("BEGIN CERTIFICATE"),
@@ -1237,9 +1270,5 @@ async fn test_large_response() {
         .await
         .unwrap();
     assert_eq!(resp.status, 200);
-    assert_eq!(
-        resp.body.len(),
-        102400,
-        "Should receive exactly 100KB"
-    );
+    assert_eq!(resp.body.len(), 102400, "Should receive exactly 100KB");
 }

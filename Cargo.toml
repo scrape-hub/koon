@@ -21,6 +21,9 @@ edition = "2024"
 rust-version = "1.85"
 license = "MIT"
 
+[workspace.lints.clippy]
+type_complexity = "allow"
+
 [profile.release]
 strip = true
 opt-level = "z"

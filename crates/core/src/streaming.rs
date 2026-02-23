@@ -1,5 +1,5 @@
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use tokio::sync::mpsc;
 
@@ -67,7 +67,8 @@ impl StreamingResponse {
     pub async fn next_chunk(&mut self) -> Option<Result<Vec<u8>, Error>> {
         let result = self.body_rx.recv().await;
         if let Some(Ok(ref data)) = result {
-            self.bytes_received_counter.fetch_add(data.len() as u64, Ordering::Relaxed);
+            self.bytes_received_counter
+                .fetch_add(data.len() as u64, Ordering::Relaxed);
         }
         result
     }
@@ -78,7 +79,8 @@ impl StreamingResponse {
         let mut body = Vec::new();
         while let Some(chunk) = self.body_rx.recv().await {
             let data = chunk?;
-            self.bytes_received_counter.fetch_add(data.len() as u64, Ordering::Relaxed);
+            self.bytes_received_counter
+                .fetch_add(data.len() as u64, Ordering::Relaxed);
             body.extend_from_slice(&data);
         }
         Ok(body)

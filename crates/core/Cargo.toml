@@ -76,5 +76,8 @@ thiserror = "2"
 smallvec = "1"
 pin-project-lite = "0.2"
 
+[lints]
+workspace = true
+
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }

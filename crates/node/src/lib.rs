@@ -1,11 +1,11 @@
-use napi::bindgen_prelude::*;
-use napi::threadsafe_function::{ThreadsafeFunction, ThreadSafeCallContext, ErrorStrategy};
-use napi::NapiRaw;
-use napi_derive::napi;
 use koon_core::dns::DohResolver;
 use koon_core::multipart::Multipart;
 use koon_core::profile::BrowserProfile;
 use koon_core::{Client, HeaderMode, ProxyServer, ProxyServerConfig};
+use napi::NapiRaw;
+use napi::bindgen_prelude::*;
+use napi::threadsafe_function::{ErrorStrategy, ThreadSafeCallContext, ThreadsafeFunction};
+use napi_derive::napi;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -23,129 +23,316 @@ use tokio::time::timeout as tokio_timeout;
 pub enum Browser {
     // Chrome
     Chrome,
-    Chrome131, Chrome131Windows, Chrome131Macos, Chrome131Linux,
-    Chrome132, Chrome132Windows, Chrome132Macos, Chrome132Linux,
-    Chrome133, Chrome133Windows, Chrome133Macos, Chrome133Linux,
-    Chrome134, Chrome134Windows, Chrome134Macos, Chrome134Linux,
-    Chrome135, Chrome135Windows, Chrome135Macos, Chrome135Linux,
-    Chrome136, Chrome136Windows, Chrome136Macos, Chrome136Linux,
-    Chrome137, Chrome137Windows, Chrome137Macos, Chrome137Linux,
-    Chrome138, Chrome138Windows, Chrome138Macos, Chrome138Linux,
-    Chrome139, Chrome139Windows, Chrome139Macos, Chrome139Linux,
-    Chrome140, Chrome140Windows, Chrome140Macos, Chrome140Linux,
-    Chrome141, Chrome141Windows, Chrome141Macos, Chrome141Linux,
-    Chrome142, Chrome142Windows, Chrome142Macos, Chrome142Linux,
-    Chrome143, Chrome143Windows, Chrome143Macos, Chrome143Linux,
-    Chrome144, Chrome144Windows, Chrome144Macos, Chrome144Linux,
-    Chrome145, Chrome145Windows, Chrome145Macos, Chrome145Linux,
+    Chrome131,
+    Chrome131Windows,
+    Chrome131Macos,
+    Chrome131Linux,
+    Chrome132,
+    Chrome132Windows,
+    Chrome132Macos,
+    Chrome132Linux,
+    Chrome133,
+    Chrome133Windows,
+    Chrome133Macos,
+    Chrome133Linux,
+    Chrome134,
+    Chrome134Windows,
+    Chrome134Macos,
+    Chrome134Linux,
+    Chrome135,
+    Chrome135Windows,
+    Chrome135Macos,
+    Chrome135Linux,
+    Chrome136,
+    Chrome136Windows,
+    Chrome136Macos,
+    Chrome136Linux,
+    Chrome137,
+    Chrome137Windows,
+    Chrome137Macos,
+    Chrome137Linux,
+    Chrome138,
+    Chrome138Windows,
+    Chrome138Macos,
+    Chrome138Linux,
+    Chrome139,
+    Chrome139Windows,
+    Chrome139Macos,
+    Chrome139Linux,
+    Chrome140,
+    Chrome140Windows,
+    Chrome140Macos,
+    Chrome140Linux,
+    Chrome141,
+    Chrome141Windows,
+    Chrome141Macos,
+    Chrome141Linux,
+    Chrome142,
+    Chrome142Windows,
+    Chrome142Macos,
+    Chrome142Linux,
+    Chrome143,
+    Chrome143Windows,
+    Chrome143Macos,
+    Chrome143Linux,
+    Chrome144,
+    Chrome144Windows,
+    Chrome144Macos,
+    Chrome144Linux,
+    Chrome145,
+    Chrome145Windows,
+    Chrome145Macos,
+    Chrome145Linux,
     // Firefox
     Firefox,
-    Firefox135, Firefox135Windows, Firefox135Macos, Firefox135Linux,
-    Firefox136, Firefox136Windows, Firefox136Macos, Firefox136Linux,
-    Firefox137, Firefox137Windows, Firefox137Macos, Firefox137Linux,
-    Firefox138, Firefox138Windows, Firefox138Macos, Firefox138Linux,
-    Firefox139, Firefox139Windows, Firefox139Macos, Firefox139Linux,
-    Firefox140, Firefox140Windows, Firefox140Macos, Firefox140Linux,
-    Firefox141, Firefox141Windows, Firefox141Macos, Firefox141Linux,
-    Firefox142, Firefox142Windows, Firefox142Macos, Firefox142Linux,
-    Firefox143, Firefox143Windows, Firefox143Macos, Firefox143Linux,
-    Firefox144, Firefox144Windows, Firefox144Macos, Firefox144Linux,
-    Firefox145, Firefox145Windows, Firefox145Macos, Firefox145Linux,
-    Firefox146, Firefox146Windows, Firefox146Macos, Firefox146Linux,
-    Firefox147, Firefox147Windows, Firefox147Macos, Firefox147Linux,
+    Firefox135,
+    Firefox135Windows,
+    Firefox135Macos,
+    Firefox135Linux,
+    Firefox136,
+    Firefox136Windows,
+    Firefox136Macos,
+    Firefox136Linux,
+    Firefox137,
+    Firefox137Windows,
+    Firefox137Macos,
+    Firefox137Linux,
+    Firefox138,
+    Firefox138Windows,
+    Firefox138Macos,
+    Firefox138Linux,
+    Firefox139,
+    Firefox139Windows,
+    Firefox139Macos,
+    Firefox139Linux,
+    Firefox140,
+    Firefox140Windows,
+    Firefox140Macos,
+    Firefox140Linux,
+    Firefox141,
+    Firefox141Windows,
+    Firefox141Macos,
+    Firefox141Linux,
+    Firefox142,
+    Firefox142Windows,
+    Firefox142Macos,
+    Firefox142Linux,
+    Firefox143,
+    Firefox143Windows,
+    Firefox143Macos,
+    Firefox143Linux,
+    Firefox144,
+    Firefox144Windows,
+    Firefox144Macos,
+    Firefox144Linux,
+    Firefox145,
+    Firefox145Windows,
+    Firefox145Macos,
+    Firefox145Linux,
+    Firefox146,
+    Firefox146Windows,
+    Firefox146Macos,
+    Firefox146Linux,
+    Firefox147,
+    Firefox147Windows,
+    Firefox147Macos,
+    Firefox147Linux,
     // Safari
     Safari,
-    Safari156, Safari156Macos,
-    Safari160, Safari160Macos,
-    Safari170, Safari170Macos,
-    Safari180, Safari180Macos,
-    Safari183, Safari183Macos,
+    Safari156,
+    Safari156Macos,
+    Safari160,
+    Safari160Macos,
+    Safari170,
+    Safari170Macos,
+    Safari180,
+    Safari180Macos,
+    Safari183,
+    Safari183Macos,
     // Opera
     Opera,
-    Opera124, Opera124Windows, Opera124Macos, Opera124Linux,
-    Opera125, Opera125Windows, Opera125Macos, Opera125Linux,
-    Opera126, Opera126Windows, Opera126Macos, Opera126Linux,
-    Opera127, Opera127Windows, Opera127Macos, Opera127Linux,
+    Opera124,
+    Opera124Windows,
+    Opera124Macos,
+    Opera124Linux,
+    Opera125,
+    Opera125Windows,
+    Opera125Macos,
+    Opera125Linux,
+    Opera126,
+    Opera126Windows,
+    Opera126Macos,
+    Opera126Linux,
+    Opera127,
+    Opera127Windows,
+    Opera127Macos,
+    Opera127Linux,
     // Edge
     Edge,
-    Edge131, Edge131Windows, Edge131Macos,
-    Edge132, Edge132Windows, Edge132Macos,
-    Edge133, Edge133Windows, Edge133Macos,
-    Edge134, Edge134Windows, Edge134Macos,
-    Edge135, Edge135Windows, Edge135Macos,
-    Edge136, Edge136Windows, Edge136Macos,
-    Edge137, Edge137Windows, Edge137Macos,
-    Edge138, Edge138Windows, Edge138Macos,
-    Edge139, Edge139Windows, Edge139Macos,
-    Edge140, Edge140Windows, Edge140Macos,
-    Edge141, Edge141Windows, Edge141Macos,
-    Edge142, Edge142Windows, Edge142Macos,
-    Edge143, Edge143Windows, Edge143Macos,
-    Edge144, Edge144Windows, Edge144Macos,
-    Edge145, Edge145Windows, Edge145Macos,
+    Edge131,
+    Edge131Windows,
+    Edge131Macos,
+    Edge132,
+    Edge132Windows,
+    Edge132Macos,
+    Edge133,
+    Edge133Windows,
+    Edge133Macos,
+    Edge134,
+    Edge134Windows,
+    Edge134Macos,
+    Edge135,
+    Edge135Windows,
+    Edge135Macos,
+    Edge136,
+    Edge136Windows,
+    Edge136Macos,
+    Edge137,
+    Edge137Windows,
+    Edge137Macos,
+    Edge138,
+    Edge138Windows,
+    Edge138Macos,
+    Edge139,
+    Edge139Windows,
+    Edge139Macos,
+    Edge140,
+    Edge140Windows,
+    Edge140Macos,
+    Edge141,
+    Edge141Windows,
+    Edge141Macos,
+    Edge142,
+    Edge142Windows,
+    Edge142Macos,
+    Edge143,
+    Edge143Windows,
+    Edge143Macos,
+    Edge144,
+    Edge144Windows,
+    Edge144Macos,
+    Edge145,
+    Edge145Windows,
+    Edge145Macos,
 }
 
 /// Convert a Browser enum variant to its napi lowercase string representation.
 fn browser_to_name(browser: &Browser) -> &'static str {
     match browser {
         Browser::Chrome => "chrome",
-        Browser::Chrome131 => "chrome131", Browser::Chrome131Windows => "chrome131windows",
-        Browser::Chrome131Macos => "chrome131macos", Browser::Chrome131Linux => "chrome131linux",
-        Browser::Chrome132 => "chrome132", Browser::Chrome132Windows => "chrome132windows",
-        Browser::Chrome132Macos => "chrome132macos", Browser::Chrome132Linux => "chrome132linux",
-        Browser::Chrome133 => "chrome133", Browser::Chrome133Windows => "chrome133windows",
-        Browser::Chrome133Macos => "chrome133macos", Browser::Chrome133Linux => "chrome133linux",
-        Browser::Chrome134 => "chrome134", Browser::Chrome134Windows => "chrome134windows",
-        Browser::Chrome134Macos => "chrome134macos", Browser::Chrome134Linux => "chrome134linux",
-        Browser::Chrome135 => "chrome135", Browser::Chrome135Windows => "chrome135windows",
-        Browser::Chrome135Macos => "chrome135macos", Browser::Chrome135Linux => "chrome135linux",
-        Browser::Chrome136 => "chrome136", Browser::Chrome136Windows => "chrome136windows",
-        Browser::Chrome136Macos => "chrome136macos", Browser::Chrome136Linux => "chrome136linux",
-        Browser::Chrome137 => "chrome137", Browser::Chrome137Windows => "chrome137windows",
-        Browser::Chrome137Macos => "chrome137macos", Browser::Chrome137Linux => "chrome137linux",
-        Browser::Chrome138 => "chrome138", Browser::Chrome138Windows => "chrome138windows",
-        Browser::Chrome138Macos => "chrome138macos", Browser::Chrome138Linux => "chrome138linux",
-        Browser::Chrome139 => "chrome139", Browser::Chrome139Windows => "chrome139windows",
-        Browser::Chrome139Macos => "chrome139macos", Browser::Chrome139Linux => "chrome139linux",
-        Browser::Chrome140 => "chrome140", Browser::Chrome140Windows => "chrome140windows",
-        Browser::Chrome140Macos => "chrome140macos", Browser::Chrome140Linux => "chrome140linux",
-        Browser::Chrome141 => "chrome141", Browser::Chrome141Windows => "chrome141windows",
-        Browser::Chrome141Macos => "chrome141macos", Browser::Chrome141Linux => "chrome141linux",
-        Browser::Chrome142 => "chrome142", Browser::Chrome142Windows => "chrome142windows",
-        Browser::Chrome142Macos => "chrome142macos", Browser::Chrome142Linux => "chrome142linux",
-        Browser::Chrome143 => "chrome143", Browser::Chrome143Windows => "chrome143windows",
-        Browser::Chrome143Macos => "chrome143macos", Browser::Chrome143Linux => "chrome143linux",
-        Browser::Chrome144 => "chrome144", Browser::Chrome144Windows => "chrome144windows",
-        Browser::Chrome144Macos => "chrome144macos", Browser::Chrome144Linux => "chrome144linux",
-        Browser::Chrome145 => "chrome145", Browser::Chrome145Windows => "chrome145windows",
-        Browser::Chrome145Macos => "chrome145macos", Browser::Chrome145Linux => "chrome145linux",
+        Browser::Chrome131 => "chrome131",
+        Browser::Chrome131Windows => "chrome131windows",
+        Browser::Chrome131Macos => "chrome131macos",
+        Browser::Chrome131Linux => "chrome131linux",
+        Browser::Chrome132 => "chrome132",
+        Browser::Chrome132Windows => "chrome132windows",
+        Browser::Chrome132Macos => "chrome132macos",
+        Browser::Chrome132Linux => "chrome132linux",
+        Browser::Chrome133 => "chrome133",
+        Browser::Chrome133Windows => "chrome133windows",
+        Browser::Chrome133Macos => "chrome133macos",
+        Browser::Chrome133Linux => "chrome133linux",
+        Browser::Chrome134 => "chrome134",
+        Browser::Chrome134Windows => "chrome134windows",
+        Browser::Chrome134Macos => "chrome134macos",
+        Browser::Chrome134Linux => "chrome134linux",
+        Browser::Chrome135 => "chrome135",
+        Browser::Chrome135Windows => "chrome135windows",
+        Browser::Chrome135Macos => "chrome135macos",
+        Browser::Chrome135Linux => "chrome135linux",
+        Browser::Chrome136 => "chrome136",
+        Browser::Chrome136Windows => "chrome136windows",
+        Browser::Chrome136Macos => "chrome136macos",
+        Browser::Chrome136Linux => "chrome136linux",
+        Browser::Chrome137 => "chrome137",
+        Browser::Chrome137Windows => "chrome137windows",
+        Browser::Chrome137Macos => "chrome137macos",
+        Browser::Chrome137Linux => "chrome137linux",
+        Browser::Chrome138 => "chrome138",
+        Browser::Chrome138Windows => "chrome138windows",
+        Browser::Chrome138Macos => "chrome138macos",
+        Browser::Chrome138Linux => "chrome138linux",
+        Browser::Chrome139 => "chrome139",
+        Browser::Chrome139Windows => "chrome139windows",
+        Browser::Chrome139Macos => "chrome139macos",
+        Browser::Chrome139Linux => "chrome139linux",
+        Browser::Chrome140 => "chrome140",
+        Browser::Chrome140Windows => "chrome140windows",
+        Browser::Chrome140Macos => "chrome140macos",
+        Browser::Chrome140Linux => "chrome140linux",
+        Browser::Chrome141 => "chrome141",
+        Browser::Chrome141Windows => "chrome141windows",
+        Browser::Chrome141Macos => "chrome141macos",
+        Browser::Chrome141Linux => "chrome141linux",
+        Browser::Chrome142 => "chrome142",
+        Browser::Chrome142Windows => "chrome142windows",
+        Browser::Chrome142Macos => "chrome142macos",
+        Browser::Chrome142Linux => "chrome142linux",
+        Browser::Chrome143 => "chrome143",
+        Browser::Chrome143Windows => "chrome143windows",
+        Browser::Chrome143Macos => "chrome143macos",
+        Browser::Chrome143Linux => "chrome143linux",
+        Browser::Chrome144 => "chrome144",
+        Browser::Chrome144Windows => "chrome144windows",
+        Browser::Chrome144Macos => "chrome144macos",
+        Browser::Chrome144Linux => "chrome144linux",
+        Browser::Chrome145 => "chrome145",
+        Browser::Chrome145Windows => "chrome145windows",
+        Browser::Chrome145Macos => "chrome145macos",
+        Browser::Chrome145Linux => "chrome145linux",
         Browser::Firefox => "firefox",
-        Browser::Firefox135 => "firefox135", Browser::Firefox135Windows => "firefox135windows",
-        Browser::Firefox135Macos => "firefox135macos", Browser::Firefox135Linux => "firefox135linux",
-        Browser::Firefox136 => "firefox136", Browser::Firefox136Windows => "firefox136windows",
-        Browser::Firefox136Macos => "firefox136macos", Browser::Firefox136Linux => "firefox136linux",
-        Browser::Firefox137 => "firefox137", Browser::Firefox137Windows => "firefox137windows",
-        Browser::Firefox137Macos => "firefox137macos", Browser::Firefox137Linux => "firefox137linux",
-        Browser::Firefox138 => "firefox138", Browser::Firefox138Windows => "firefox138windows",
-        Browser::Firefox138Macos => "firefox138macos", Browser::Firefox138Linux => "firefox138linux",
-        Browser::Firefox139 => "firefox139", Browser::Firefox139Windows => "firefox139windows",
-        Browser::Firefox139Macos => "firefox139macos", Browser::Firefox139Linux => "firefox139linux",
-        Browser::Firefox140 => "firefox140", Browser::Firefox140Windows => "firefox140windows",
-        Browser::Firefox140Macos => "firefox140macos", Browser::Firefox140Linux => "firefox140linux",
-        Browser::Firefox141 => "firefox141", Browser::Firefox141Windows => "firefox141windows",
-        Browser::Firefox141Macos => "firefox141macos", Browser::Firefox141Linux => "firefox141linux",
-        Browser::Firefox142 => "firefox142", Browser::Firefox142Windows => "firefox142windows",
-        Browser::Firefox142Macos => "firefox142macos", Browser::Firefox142Linux => "firefox142linux",
-        Browser::Firefox143 => "firefox143", Browser::Firefox143Windows => "firefox143windows",
-        Browser::Firefox143Macos => "firefox143macos", Browser::Firefox143Linux => "firefox143linux",
-        Browser::Firefox144 => "firefox144", Browser::Firefox144Windows => "firefox144windows",
-        Browser::Firefox144Macos => "firefox144macos", Browser::Firefox144Linux => "firefox144linux",
-        Browser::Firefox145 => "firefox145", Browser::Firefox145Windows => "firefox145windows",
-        Browser::Firefox145Macos => "firefox145macos", Browser::Firefox145Linux => "firefox145linux",
-        Browser::Firefox146 => "firefox146", Browser::Firefox146Windows => "firefox146windows",
-        Browser::Firefox146Macos => "firefox146macos", Browser::Firefox146Linux => "firefox146linux",
-        Browser::Firefox147 => "firefox147", Browser::Firefox147Windows => "firefox147windows",
-        Browser::Firefox147Macos => "firefox147macos", Browser::Firefox147Linux => "firefox147linux",
+        Browser::Firefox135 => "firefox135",
+        Browser::Firefox135Windows => "firefox135windows",
+        Browser::Firefox135Macos => "firefox135macos",
+        Browser::Firefox135Linux => "firefox135linux",
+        Browser::Firefox136 => "firefox136",
+        Browser::Firefox136Windows => "firefox136windows",
+        Browser::Firefox136Macos => "firefox136macos",
+        Browser::Firefox136Linux => "firefox136linux",
+        Browser::Firefox137 => "firefox137",
+        Browser::Firefox137Windows => "firefox137windows",
+        Browser::Firefox137Macos => "firefox137macos",
+        Browser::Firefox137Linux => "firefox137linux",
+        Browser::Firefox138 => "firefox138",
+        Browser::Firefox138Windows => "firefox138windows",
+        Browser::Firefox138Macos => "firefox138macos",
+        Browser::Firefox138Linux => "firefox138linux",
+        Browser::Firefox139 => "firefox139",
+        Browser::Firefox139Windows => "firefox139windows",
+        Browser::Firefox139Macos => "firefox139macos",
+        Browser::Firefox139Linux => "firefox139linux",
+        Browser::Firefox140 => "firefox140",
+        Browser::Firefox140Windows => "firefox140windows",
+        Browser::Firefox140Macos => "firefox140macos",
+        Browser::Firefox140Linux => "firefox140linux",
+        Browser::Firefox141 => "firefox141",
+        Browser::Firefox141Windows => "firefox141windows",
+        Browser::Firefox141Macos => "firefox141macos",
+        Browser::Firefox141Linux => "firefox141linux",
+        Browser::Firefox142 => "firefox142",
+        Browser::Firefox142Windows => "firefox142windows",
+        Browser::Firefox142Macos => "firefox142macos",
+        Browser::Firefox142Linux => "firefox142linux",
+        Browser::Firefox143 => "firefox143",
+        Browser::Firefox143Windows => "firefox143windows",
+        Browser::Firefox143Macos => "firefox143macos",
+        Browser::Firefox143Linux => "firefox143linux",
+        Browser::Firefox144 => "firefox144",
+        Browser::Firefox144Windows => "firefox144windows",
+        Browser::Firefox144Macos => "firefox144macos",
+        Browser::Firefox144Linux => "firefox144linux",
+        Browser::Firefox145 => "firefox145",
+        Browser::Firefox145Windows => "firefox145windows",
+        Browser::Firefox145Macos => "firefox145macos",
+        Browser::Firefox145Linux => "firefox145linux",
+        Browser::Firefox146 => "firefox146",
+        Browser::Firefox146Windows => "firefox146windows",
+        Browser::Firefox146Macos => "firefox146macos",
+        Browser::Firefox146Linux => "firefox146linux",
+        Browser::Firefox147 => "firefox147",
+        Browser::Firefox147Windows => "firefox147windows",
+        Browser::Firefox147Macos => "firefox147macos",
+        Browser::Firefox147Linux => "firefox147linux",
         Browser::Safari => "safari",
         Browser::Safari156 | Browser::Safari156Macos => "safari156",
         Browser::Safari160 | Browser::Safari160Macos => "safari160",
@@ -153,37 +340,74 @@ fn browser_to_name(browser: &Browser) -> &'static str {
         Browser::Safari180 | Browser::Safari180Macos => "safari180",
         Browser::Safari183 | Browser::Safari183Macos => "safari183",
         Browser::Opera => "opera",
-        Browser::Opera124 => "opera124", Browser::Opera124Windows => "opera124windows",
-        Browser::Opera124Macos => "opera124macos", Browser::Opera124Linux => "opera124linux",
-        Browser::Opera125 => "opera125", Browser::Opera125Windows => "opera125windows",
-        Browser::Opera125Macos => "opera125macos", Browser::Opera125Linux => "opera125linux",
-        Browser::Opera126 => "opera126", Browser::Opera126Windows => "opera126windows",
-        Browser::Opera126Macos => "opera126macos", Browser::Opera126Linux => "opera126linux",
-        Browser::Opera127 => "opera127", Browser::Opera127Windows => "opera127windows",
-        Browser::Opera127Macos => "opera127macos", Browser::Opera127Linux => "opera127linux",
+        Browser::Opera124 => "opera124",
+        Browser::Opera124Windows => "opera124windows",
+        Browser::Opera124Macos => "opera124macos",
+        Browser::Opera124Linux => "opera124linux",
+        Browser::Opera125 => "opera125",
+        Browser::Opera125Windows => "opera125windows",
+        Browser::Opera125Macos => "opera125macos",
+        Browser::Opera125Linux => "opera125linux",
+        Browser::Opera126 => "opera126",
+        Browser::Opera126Windows => "opera126windows",
+        Browser::Opera126Macos => "opera126macos",
+        Browser::Opera126Linux => "opera126linux",
+        Browser::Opera127 => "opera127",
+        Browser::Opera127Windows => "opera127windows",
+        Browser::Opera127Macos => "opera127macos",
+        Browser::Opera127Linux => "opera127linux",
         Browser::Edge => "edge",
-        Browser::Edge131 => "edge131", Browser::Edge131Windows => "edge131windows", Browser::Edge131Macos => "edge131macos",
-        Browser::Edge132 => "edge132", Browser::Edge132Windows => "edge132windows", Browser::Edge132Macos => "edge132macos",
-        Browser::Edge133 => "edge133", Browser::Edge133Windows => "edge133windows", Browser::Edge133Macos => "edge133macos",
-        Browser::Edge134 => "edge134", Browser::Edge134Windows => "edge134windows", Browser::Edge134Macos => "edge134macos",
-        Browser::Edge135 => "edge135", Browser::Edge135Windows => "edge135windows", Browser::Edge135Macos => "edge135macos",
-        Browser::Edge136 => "edge136", Browser::Edge136Windows => "edge136windows", Browser::Edge136Macos => "edge136macos",
-        Browser::Edge137 => "edge137", Browser::Edge137Windows => "edge137windows", Browser::Edge137Macos => "edge137macos",
-        Browser::Edge138 => "edge138", Browser::Edge138Windows => "edge138windows", Browser::Edge138Macos => "edge138macos",
-        Browser::Edge139 => "edge139", Browser::Edge139Windows => "edge139windows", Browser::Edge139Macos => "edge139macos",
-        Browser::Edge140 => "edge140", Browser::Edge140Windows => "edge140windows", Browser::Edge140Macos => "edge140macos",
-        Browser::Edge141 => "edge141", Browser::Edge141Windows => "edge141windows", Browser::Edge141Macos => "edge141macos",
-        Browser::Edge142 => "edge142", Browser::Edge142Windows => "edge142windows", Browser::Edge142Macos => "edge142macos",
-        Browser::Edge143 => "edge143", Browser::Edge143Windows => "edge143windows", Browser::Edge143Macos => "edge143macos",
-        Browser::Edge144 => "edge144", Browser::Edge144Windows => "edge144windows", Browser::Edge144Macos => "edge144macos",
-        Browser::Edge145 => "edge145", Browser::Edge145Windows => "edge145windows", Browser::Edge145Macos => "edge145macos",
+        Browser::Edge131 => "edge131",
+        Browser::Edge131Windows => "edge131windows",
+        Browser::Edge131Macos => "edge131macos",
+        Browser::Edge132 => "edge132",
+        Browser::Edge132Windows => "edge132windows",
+        Browser::Edge132Macos => "edge132macos",
+        Browser::Edge133 => "edge133",
+        Browser::Edge133Windows => "edge133windows",
+        Browser::Edge133Macos => "edge133macos",
+        Browser::Edge134 => "edge134",
+        Browser::Edge134Windows => "edge134windows",
+        Browser::Edge134Macos => "edge134macos",
+        Browser::Edge135 => "edge135",
+        Browser::Edge135Windows => "edge135windows",
+        Browser::Edge135Macos => "edge135macos",
+        Browser::Edge136 => "edge136",
+        Browser::Edge136Windows => "edge136windows",
+        Browser::Edge136Macos => "edge136macos",
+        Browser::Edge137 => "edge137",
+        Browser::Edge137Windows => "edge137windows",
+        Browser::Edge137Macos => "edge137macos",
+        Browser::Edge138 => "edge138",
+        Browser::Edge138Windows => "edge138windows",
+        Browser::Edge138Macos => "edge138macos",
+        Browser::Edge139 => "edge139",
+        Browser::Edge139Windows => "edge139windows",
+        Browser::Edge139Macos => "edge139macos",
+        Browser::Edge140 => "edge140",
+        Browser::Edge140Windows => "edge140windows",
+        Browser::Edge140Macos => "edge140macos",
+        Browser::Edge141 => "edge141",
+        Browser::Edge141Windows => "edge141windows",
+        Browser::Edge141Macos => "edge141macos",
+        Browser::Edge142 => "edge142",
+        Browser::Edge142Windows => "edge142windows",
+        Browser::Edge142Macos => "edge142macos",
+        Browser::Edge143 => "edge143",
+        Browser::Edge143Windows => "edge143windows",
+        Browser::Edge143Macos => "edge143macos",
+        Browser::Edge144 => "edge144",
+        Browser::Edge144Windows => "edge144windows",
+        Browser::Edge144Macos => "edge144macos",
+        Browser::Edge145 => "edge145",
+        Browser::Edge145Windows => "edge145windows",
+        Browser::Edge145Macos => "edge145macos",
     }
 }
 
 /// Resolve a Browser enum to a BrowserProfile via core's resolve().
 fn resolve_browser(browser: &Browser) -> Result<BrowserProfile> {
-    BrowserProfile::resolve(browser_to_name(browser))
-        .map_err(napi::Error::from_reason)
+    BrowserProfile::resolve(browser_to_name(browser)).map_err(napi::Error::from_reason)
 }
 
 /// Options for creating a Koon client.
@@ -449,9 +673,8 @@ impl Koon {
         };
 
         let mut profile = if let Some(ref json) = opts.profile_json {
-            BrowserProfile::from_json(json).map_err(|e| {
-                napi::Error::from_reason(format!("Invalid profile JSON: {e}"))
-            })?
+            BrowserProfile::from_json(json)
+                .map_err(|e| napi::Error::from_reason(format!("Invalid profile JSON: {e}")))?
         } else {
             match opts.browser {
                 Some(ref b) => resolve_browser(b)?,
@@ -469,11 +692,8 @@ impl Koon {
 
         let timeout = Duration::from_millis(opts.timeout.unwrap_or(30000) as u64);
 
-        let custom_headers: Vec<(String, String)> = opts
-            .headers
-            .unwrap_or_default()
-            .into_iter()
-            .collect();
+        let custom_headers: Vec<(String, String)> =
+            opts.headers.unwrap_or_default().into_iter().collect();
 
         let mut builder = Client::builder(profile)
             .timeout(timeout)
@@ -485,13 +705,13 @@ impl Koon {
 
         if let Some(ref proxy_urls) = opts.proxies {
             let refs: Vec<&str> = proxy_urls.iter().map(|s| s.as_str()).collect();
-            builder = builder.proxies(&refs).map_err(|e| {
-                napi::Error::from_reason(format!("Invalid proxies: {e}"))
-            })?;
+            builder = builder
+                .proxies(&refs)
+                .map_err(|e| napi::Error::from_reason(format!("Invalid proxies: {e}")))?;
         } else if let Some(ref proxy_url) = opts.proxy {
-            builder = builder.proxy(proxy_url).map_err(|e| {
-                napi::Error::from_reason(format!("Invalid proxy: {e}"))
-            })?;
+            builder = builder
+                .proxy(proxy_url)
+                .map_err(|e| napi::Error::from_reason(format!("Invalid proxy: {e}")))?;
         }
 
         if let Some(ref doh_provider) = opts.doh {
@@ -521,26 +741,32 @@ impl Koon {
             if let Ok(val) = obj.get_named_property::<napi::JsUnknown>("onRequest") {
                 if val.get_type()? == napi::ValueType::Function {
                     let js_fn = unsafe { val.cast::<JsFunction>() };
-                    let tsfn = js_fn
-                        .create_threadsafe_function(0, |ctx: ThreadSafeCallContext<(String, String)>| {
+                    let tsfn = js_fn.create_threadsafe_function(
+                        0,
+                        |ctx: ThreadSafeCallContext<(String, String)>| {
                             let method = ctx.env.create_string(&ctx.value.0)?;
                             let url = ctx.env.create_string(&ctx.value.1)?;
                             Ok(vec![method, url])
-                        })?;
-                    let tsfn: Arc<ThreadsafeFunction<(String, String), ErrorStrategy::Fatal>> = Arc::new(tsfn);
+                        },
+                    )?;
+                    let tsfn: Arc<ThreadsafeFunction<(String, String), ErrorStrategy::Fatal>> =
+                        Arc::new(tsfn);
                     builder = builder.on_request(move |method: &str, url: &str| {
-                        tsfn.call((method.to_string(), url.to_string()), napi::threadsafe_function::ThreadsafeFunctionCallMode::NonBlocking);
+                        tsfn.call(
+                            (method.to_string(), url.to_string()),
+                            napi::threadsafe_function::ThreadsafeFunctionCallMode::NonBlocking,
+                        );
                     });
                 }
             }
 
             // Check if onResponse is a function (not undefined/null)
-            #[allow(clippy::type_complexity)]
             if let Ok(val) = obj.get_named_property::<napi::JsUnknown>("onResponse") {
                 if val.get_type()? == napi::ValueType::Function {
                     let js_fn = unsafe { val.cast::<JsFunction>() };
-                    let tsfn = js_fn
-                        .create_threadsafe_function(0, |ctx: ThreadSafeCallContext<(u16, String, Vec<(String, String)>)>| {
+                    let tsfn = js_fn.create_threadsafe_function(
+                        0,
+                        |ctx: ThreadSafeCallContext<(u16, String, Vec<(String, String)>)>| {
                             let status = ctx.env.create_uint32(ctx.value.0 as u32)?;
                             let url = ctx.env.create_string(&ctx.value.1)?;
                             let mut arr = ctx.env.create_array_with_length(ctx.value.2.len())?;
@@ -550,19 +776,34 @@ impl Koon {
                                 obj.set_named_property("value", ctx.env.create_string(value)?)?;
                                 arr.set_element(i as u32, obj)?;
                             }
-                            Ok(vec![status.into_unknown(), url.into_unknown(), arr.coerce_to_object()?.into_unknown()])
-                        })?;
-                    let tsfn: Arc<ThreadsafeFunction<(u16, String, Vec<(String, String)>), ErrorStrategy::Fatal>> = Arc::new(tsfn);
-                    builder = builder.on_response(move |status: u16, url: &str, headers: &[(String, String)]| {
-                        tsfn.call((status, url.to_string(), headers.to_vec()), napi::threadsafe_function::ThreadsafeFunctionCallMode::NonBlocking);
-                    });
+                            Ok(vec![
+                                status.into_unknown(),
+                                url.into_unknown(),
+                                arr.coerce_to_object()?.into_unknown(),
+                            ])
+                        },
+                    )?;
+                    let tsfn: Arc<
+                        ThreadsafeFunction<
+                            (u16, String, Vec<(String, String)>),
+                            ErrorStrategy::Fatal,
+                        >,
+                    > = Arc::new(tsfn);
+                    builder = builder.on_response(
+                        move |status: u16, url: &str, headers: &[(String, String)]| {
+                            tsfn.call(
+                                (status, url.to_string(), headers.to_vec()),
+                                napi::threadsafe_function::ThreadsafeFunctionCallMode::NonBlocking,
+                            );
+                        },
+                    );
                 }
             }
         }
 
-        let client = builder.build().map_err(|e| {
-            napi::Error::from_reason(format!("Failed to create client: {e}"))
-        })?;
+        let client = builder
+            .build()
+            .map_err(|e| napi::Error::from_reason(format!("Failed to create client: {e}")))?;
 
         Ok(Koon { client })
     }
@@ -571,44 +812,72 @@ impl Koon {
     /// Useful for customizing and reloading profiles.
     #[napi]
     pub fn export_profile(&self) -> Result<String> {
-        self.client.profile().to_json_pretty().map_err(|e| {
-            napi::Error::from_reason(format!("Failed to export profile: {e}"))
-        })
+        self.client
+            .profile()
+            .to_json_pretty()
+            .map_err(|e| napi::Error::from_reason(format!("Failed to export profile: {e}")))
     }
 
     /// Perform an HTTP GET request.
     #[napi]
-    pub async fn get(&self, url: String, options: Option<KoonRequestOptions>) -> Result<KoonResponse> {
+    pub async fn get(
+        &self,
+        url: String,
+        options: Option<KoonRequestOptions>,
+    ) -> Result<KoonResponse> {
         self.request("GET".to_string(), url, None, options).await
     }
 
     /// Perform an HTTP POST request.
     #[napi]
-    pub async fn post(&self, url: String, body: Option<Buffer>, options: Option<KoonRequestOptions>) -> Result<KoonResponse> {
+    pub async fn post(
+        &self,
+        url: String,
+        body: Option<Buffer>,
+        options: Option<KoonRequestOptions>,
+    ) -> Result<KoonResponse> {
         self.request("POST".to_string(), url, body, options).await
     }
 
     /// Perform an HTTP PUT request.
     #[napi]
-    pub async fn put(&self, url: String, body: Option<Buffer>, options: Option<KoonRequestOptions>) -> Result<KoonResponse> {
+    pub async fn put(
+        &self,
+        url: String,
+        body: Option<Buffer>,
+        options: Option<KoonRequestOptions>,
+    ) -> Result<KoonResponse> {
         self.request("PUT".to_string(), url, body, options).await
     }
 
     /// Perform an HTTP DELETE request.
     #[napi]
-    pub async fn delete(&self, url: String, options: Option<KoonRequestOptions>) -> Result<KoonResponse> {
+    pub async fn delete(
+        &self,
+        url: String,
+        options: Option<KoonRequestOptions>,
+    ) -> Result<KoonResponse> {
         self.request("DELETE".to_string(), url, None, options).await
     }
 
     /// Perform an HTTP PATCH request.
     #[napi]
-    pub async fn patch(&self, url: String, body: Option<Buffer>, options: Option<KoonRequestOptions>) -> Result<KoonResponse> {
+    pub async fn patch(
+        &self,
+        url: String,
+        body: Option<Buffer>,
+        options: Option<KoonRequestOptions>,
+    ) -> Result<KoonResponse> {
         self.request("PATCH".to_string(), url, body, options).await
     }
 
     /// Perform an HTTP HEAD request.
     #[napi]
-    pub async fn head(&self, url: String, options: Option<KoonRequestOptions>) -> Result<KoonResponse> {
+    pub async fn head(
+        &self,
+        url: String,
+        options: Option<KoonRequestOptions>,
+    ) -> Result<KoonResponse> {
         self.request("HEAD".to_string(), url, None, options).await
     }
 
@@ -621,18 +890,18 @@ impl Koon {
         body: Option<Buffer>,
         options: Option<KoonRequestOptions>,
     ) -> Result<KoonResponse> {
-        let method = method.parse().map_err(|_| {
-            napi::Error::from_reason(format!("Invalid HTTP method: {method}"))
-        })?;
+        let method = method
+            .parse()
+            .map_err(|_| napi::Error::from_reason(format!("Invalid HTTP method: {method}")))?;
 
         let body_bytes = body.map(|b| b.to_vec());
         let opts = options.unwrap_or_default();
-        let extra_headers: Vec<(String, String)> = opts.headers
-            .unwrap_or_default()
-            .into_iter()
-            .collect();
+        let extra_headers: Vec<(String, String)> =
+            opts.headers.unwrap_or_default().into_iter().collect();
 
-        let future = self.client.request_with_headers(method, &url, body_bytes, extra_headers);
+        let future = self
+            .client
+            .request_with_headers(method, &url, body_bytes, extra_headers);
 
         let response = if let Some(timeout_ms) = opts.timeout {
             tokio_timeout(Duration::from_millis(timeout_ms as u64), future)
@@ -640,7 +909,8 @@ impl Koon {
                 .map_err(|_| napi::Error::from_reason("Request timed out"))?
                 .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?
         } else {
-            future.await
+            future
+                .await
                 .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?
         };
 
@@ -669,7 +939,9 @@ impl Koon {
                 mp = mp.file(
                     field.name,
                     field.filename.unwrap_or_else(|| "file".to_string()),
-                    field.content_type.unwrap_or_else(|| "application/octet-stream".to_string()),
+                    field
+                        .content_type
+                        .unwrap_or_else(|| "application/octet-stream".to_string()),
                     file_data.to_vec(),
                 );
             } else if let Some(value) = field.value {
@@ -679,14 +951,16 @@ impl Koon {
 
         let (body, content_type) = mp.build();
         let opts = options.unwrap_or_default();
-        let mut extra_headers: Vec<(String, String)> = opts.headers
-            .unwrap_or_default()
-            .into_iter()
-            .collect();
+        let mut extra_headers: Vec<(String, String)> =
+            opts.headers.unwrap_or_default().into_iter().collect();
         extra_headers.push(("content-type".into(), content_type));
 
-        let future = self.client
-            .request_with_headers("POST".parse().unwrap(), &url, Some(body), extra_headers);
+        let future = self.client.request_with_headers(
+            "POST".parse().unwrap(),
+            &url,
+            Some(body),
+            extra_headers,
+        );
 
         let response = if let Some(timeout_ms) = opts.timeout {
             tokio_timeout(Duration::from_millis(timeout_ms as u64), future)
@@ -694,7 +968,8 @@ impl Koon {
                 .map_err(|_| napi::Error::from_reason("Request timed out"))?
                 .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?
         } else {
-            future.await
+            future
+                .await
                 .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?
         };
 
@@ -721,18 +996,17 @@ impl Koon {
         body: Option<Buffer>,
         options: Option<KoonRequestOptions>,
     ) -> Result<KoonStreamingResponse> {
-        let method = method.parse().map_err(|_| {
-            napi::Error::from_reason(format!("Invalid HTTP method: {method}"))
-        })?;
+        let method = method
+            .parse()
+            .map_err(|_| napi::Error::from_reason(format!("Invalid HTTP method: {method}")))?;
         let body_bytes = body.map(|b| b.to_vec());
         let opts = options.unwrap_or_default();
-        let extra_headers: Vec<(String, String)> = opts.headers
-            .unwrap_or_default()
-            .into_iter()
-            .collect();
+        let extra_headers: Vec<(String, String)> =
+            opts.headers.unwrap_or_default().into_iter().collect();
 
-        let future = self.client
-            .request_streaming_with_headers(method, &url, body_bytes, extra_headers);
+        let future =
+            self.client
+                .request_streaming_with_headers(method, &url, body_bytes, extra_headers);
 
         let resp = if let Some(timeout_ms) = opts.timeout {
             tokio_timeout(Duration::from_millis(timeout_ms as u64), future)
@@ -740,7 +1014,8 @@ impl Koon {
                 .map_err(|_| napi::Error::from_reason("Request timed out"))?
                 .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?
         } else {
-            future.await
+            future
+                .await
                 .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?
         };
 
@@ -843,10 +1118,8 @@ impl Koon {
         url: String,
         headers: Option<HashMap<String, String>>,
     ) -> Result<KoonWebSocket> {
-        let extra_headers: Vec<(String, String)> = headers
-            .unwrap_or_default()
-            .into_iter()
-            .collect();
+        let extra_headers: Vec<(String, String)> =
+            headers.unwrap_or_default().into_iter().collect();
 
         let ws = self
             .client
@@ -907,7 +1180,10 @@ impl KoonStreamingResponse {
     #[napi]
     pub fn bytes_received(&self) -> u32 {
         let guard = self.inner.blocking_lock();
-        guard.as_ref().map(|r| r.bytes_received() as u32).unwrap_or(0)
+        guard
+            .as_ref()
+            .map(|r| r.bytes_received() as u32)
+            .unwrap_or(0)
     }
 
     /// Get the next body chunk. Returns null when the body is complete.
@@ -1088,9 +1364,8 @@ impl KoonProxy {
         let opts = options.unwrap_or_default();
 
         let mut profile = if let Some(ref json) = opts.profile_json {
-            BrowserProfile::from_json(json).map_err(|e| {
-                napi::Error::from_reason(format!("Invalid profile JSON: {e}"))
-            })?
+            BrowserProfile::from_json(json)
+                .map_err(|e| napi::Error::from_reason(format!("Invalid profile JSON: {e}")))?
         } else {
             match opts.browser {
                 Some(ref b) => resolve_browser(b)?,
@@ -1108,7 +1383,9 @@ impl KoonProxy {
         };
 
         let config = ProxyServerConfig {
-            listen_addr: opts.listen_addr.unwrap_or_else(|| "127.0.0.1:0".to_string()),
+            listen_addr: opts
+                .listen_addr
+                .unwrap_or_else(|| "127.0.0.1:0".to_string()),
             profile,
             header_mode,
             ca_dir: opts.ca_dir,

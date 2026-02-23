@@ -18,7 +18,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
 
       - name: Install Go
         uses: actions/setup-go@v5
@@ -35,8 +35,11 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
-      - name: Run tests
-        run: cargo test
+      - name: Check formatting
+        run: cargo fmt --check
 
       - name: Run clippy
         run: cargo clippy --workspace -- -D warnings
+
+      - name: Run tests
+        run: cargo test

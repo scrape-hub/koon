@@ -18,7 +18,9 @@ impl super::Client {
         body: Option<Vec<u8>>,
         extra_headers: Vec<(String, String)>,
     ) -> Result<HttpResponse, Error> {
-        let mut current_url: Uri = url.parse().map_err(|_| Error::Url(url::ParseError::EmptyHost))?;
+        let mut current_url: Uri = url
+            .parse()
+            .map_err(|_| Error::Url(url::ParseError::EmptyHost))?;
         let mut current_method = method;
         let mut current_body = body;
         let mut redirect_count: u32 = 0;
@@ -118,7 +120,11 @@ impl super::Client {
             .ok_or(Error::ConnectionFailed("No host in URL".into()))?;
         let port = uri
             .port_u16()
-            .unwrap_or(if uri.scheme_str() == Some("https") { 443 } else { 80 });
+            .unwrap_or(if uri.scheme_str() == Some("https") {
+                443
+            } else {
+                80
+            });
         let is_https = uri.scheme_str() == Some("https");
 
         if !is_https {
@@ -156,7 +162,14 @@ impl super::Client {
         // 2. Try cached H2 connection from pool
         if let Some(mut sender) = self.pool.try_get_h2(host, port, proxy_idx) {
             match self
-                .send_on_h2(&mut sender, method.clone(), uri, body.clone(), cookie_header, extra_headers)
+                .send_on_h2(
+                    &mut sender,
+                    method.clone(),
+                    uri,
+                    body.clone(),
+                    cookie_header,
+                    extra_headers,
+                )
                 .await
             {
                 Ok(response) => return Ok(response),
@@ -165,7 +178,17 @@ impl super::Client {
                     // GOAWAY: retry on a fresh connection
                     if e.is_h2_goaway() {
                         return self
-                            .new_connection_request(method, uri, body, cookie_header, host, port, extra_headers, proxy_idx, proxy_ref)
+                            .new_connection_request(
+                                method,
+                                uri,
+                                body,
+                                cookie_header,
+                                host,
+                                port,
+                                extra_headers,
+                                proxy_idx,
+                                proxy_ref,
+                            )
                             .await;
                     }
                 }
@@ -175,7 +198,14 @@ impl super::Client {
         // 3. Try cached H1.1 connection from pool
         if let Some(mut stream) = self.pool.try_take_h1(host, port, proxy_idx) {
             if let Ok((response, keep_alive)) = self
-                .send_on_h1(&mut stream, method.clone(), uri, body.clone(), cookie_header, extra_headers)
+                .send_on_h1(
+                    &mut stream,
+                    method.clone(),
+                    uri,
+                    body.clone(),
+                    cookie_header,
+                    extra_headers,
+                )
                 .await
             {
                 if keep_alive {
@@ -185,8 +215,18 @@ impl super::Client {
             }
         }
 
-        self.new_connection_request(method, uri, body, cookie_header, host, port, extra_headers, proxy_idx, proxy_ref)
-            .await
+        self.new_connection_request(
+            method,
+            uri,
+            body,
+            cookie_header,
+            host,
+            port,
+            extra_headers,
+            proxy_idx,
+            proxy_ref,
+        )
+        .await
     }
 
     /// Open a new connection (H3 or TCP→TLS→H2/H1) and send a request.
@@ -214,7 +254,17 @@ impl super::Client {
         };
 
         if let Some(h3_port) = h3_port {
-            match self.try_h3_connection(host, h3_port, method.clone(), uri, body.clone(), cookie_header).await {
+            match self
+                .try_h3_connection(
+                    host,
+                    h3_port,
+                    method.clone(),
+                    uri,
+                    body.clone(),
+                    cookie_header,
+                )
+                .await
+            {
                 Ok(response) => {
                     let response = self.decompress_response(response)?;
                     return Ok(response);
@@ -274,7 +324,8 @@ impl super::Client {
         url: &str,
         body: Option<Vec<u8>>,
     ) -> Result<StreamingResponse, Error> {
-        self.request_streaming_with_headers(method, url, body, Vec::new()).await
+        self.request_streaming_with_headers(method, url, body, Vec::new())
+            .await
     }
 
     /// Perform a streaming HTTP request with additional per-request headers.
@@ -285,14 +336,20 @@ impl super::Client {
         body: Option<Vec<u8>>,
         extra_headers: Vec<(String, String)>,
     ) -> Result<StreamingResponse, Error> {
-        let uri: Uri = url.parse().map_err(|_| Error::Url(url::ParseError::EmptyHost))?;
+        let uri: Uri = url
+            .parse()
+            .map_err(|_| Error::Url(url::ParseError::EmptyHost))?;
 
         let host = uri
             .host()
             .ok_or(Error::ConnectionFailed("No host in URL".into()))?;
         let port = uri
             .port_u16()
-            .unwrap_or(if uri.scheme_str() == Some("https") { 443 } else { 80 });
+            .unwrap_or(if uri.scheme_str() == Some("https") {
+                443
+            } else {
+                80
+            });
         let is_https = uri.scheme_str() == Some("https");
 
         if !is_https {
@@ -314,7 +371,14 @@ impl super::Client {
         // Try pooled H2 connection first
         if let Some(mut sender) = self.pool.try_get_h2(host, port, proxy_idx) {
             match self
-                .send_on_h2_streaming(&mut sender, method.clone(), &uri, body.clone(), cookie_header.as_deref(), &extra_headers)
+                .send_on_h2_streaming(
+                    &mut sender,
+                    method.clone(),
+                    &uri,
+                    body.clone(),
+                    cookie_header.as_deref(),
+                    &extra_headers,
+                )
                 .await
             {
                 Ok(resp) => {
@@ -344,14 +408,29 @@ impl super::Client {
         if is_h2 {
             let mut sender = self.h2_handshake(tls_stream).await?;
             let resp = self
-                .send_on_h2_streaming(&mut sender, method, &uri, body, cookie_header.as_deref(), &extra_headers)
+                .send_on_h2_streaming(
+                    &mut sender,
+                    method,
+                    &uri,
+                    body,
+                    cookie_header.as_deref(),
+                    &extra_headers,
+                )
                 .await?;
             // Fire on_response hook
             self.fire_on_response(resp.status, url, &resp.headers);
             self.pool.insert_h2(host, port, proxy_idx, sender);
             Ok(resp)
         } else {
-            let resp = self.send_on_h1_streaming(tls_stream, method, &uri, body, cookie_header.as_deref(), &extra_headers)
+            let resp = self
+                .send_on_h1_streaming(
+                    tls_stream,
+                    method,
+                    &uri,
+                    body,
+                    cookie_header.as_deref(),
+                    &extra_headers,
+                )
                 .await?;
             // Fire on_response hook
             self.fire_on_response(resp.status, url, &resp.headers);
@@ -383,7 +462,11 @@ impl super::Client {
             .ok_or(Error::ConnectionFailed("No host in URL".into()))?;
         let port = uri
             .port_u16()
-            .unwrap_or(if uri.scheme_str() == Some("https") { 443 } else { 80 });
+            .unwrap_or(if uri.scheme_str() == Some("https") {
+                443
+            } else {
+                80
+            });
         let is_https = uri.scheme_str() == Some("https");
 
         if !is_https {
@@ -397,7 +480,13 @@ impl super::Client {
         // Try pooled H2 connection first
         if let Some(mut sender) = self.pool.try_get_h2(host, port, proxy_idx) {
             match self
-                .send_on_h2_raw(&mut sender, method.clone(), &uri, body.clone(), &raw_headers)
+                .send_on_h2_raw(
+                    &mut sender,
+                    method.clone(),
+                    &uri,
+                    body.clone(),
+                    &raw_headers,
+                )
                 .await
             {
                 Ok(response) => {

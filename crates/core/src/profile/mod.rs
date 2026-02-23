@@ -174,7 +174,10 @@ impl BrowserProfile {
     fn randomize_user_agent(&mut self, rng: &mut impl Rng) {
         // Find user-agent header and detect Chrome/Edge pattern
         let ua_idx = self.headers.iter().position(|(k, _)| k == "user-agent");
-        let ua_idx = match ua_idx { Some(i) => i, None => return };
+        let ua_idx = match ua_idx {
+            Some(i) => i,
+            None => return,
+        };
 
         let ua = &self.headers[ua_idx].1;
 
@@ -183,8 +186,12 @@ impl BrowserProfile {
         if let Some(chrome_pos) = ua.find("Chrome/") {
             let after = &ua[chrome_pos + 7..];
             // Parse "MAJOR.0.BUILD.PATCH"
-            let parts: Vec<&str> = after.split(|c: char| !c.is_ascii_digit() && c != '.')
-                .next().unwrap_or("").split('.').collect();
+            let parts: Vec<&str> = after
+                .split(|c: char| !c.is_ascii_digit() && c != '.')
+                .next()
+                .unwrap_or("")
+                .split('.')
+                .collect();
             if parts.len() >= 4 {
                 let major = parts[0];
                 let build: u32 = rng.random_range(6778..=6810);
@@ -203,7 +210,11 @@ impl BrowserProfile {
     }
 
     fn randomize_accept_language(&mut self, rng: &mut impl Rng) {
-        if let Some(idx) = self.headers.iter().position(|(k, _)| k == "accept-language") {
+        if let Some(idx) = self
+            .headers
+            .iter()
+            .position(|(k, _)| k == "accept-language")
+        {
             let val = &self.headers[idx].1;
             // Replace q=0.9 or q=0.5 with random jitter
             let new_val = val

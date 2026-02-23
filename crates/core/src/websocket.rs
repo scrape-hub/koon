@@ -81,11 +81,9 @@ impl WebSocket {
     /// Close the WebSocket connection with an optional close code and reason.
     pub async fn close(&mut self, code: Option<u16>, reason: Option<String>) -> Result<(), Error> {
         use futures_util::SinkExt;
-        let close_frame = code.map(|c| {
-            tungstenite::protocol::CloseFrame {
-                code: tungstenite::protocol::frame::coding::CloseCode::from(c),
-                reason: reason.unwrap_or_default().into(),
-            }
+        let close_frame = code.map(|c| tungstenite::protocol::CloseFrame {
+            code: tungstenite::protocol::frame::coding::CloseCode::from(c),
+            reason: reason.unwrap_or_default().into(),
         });
         self.inner
             .send(tungstenite::Message::Close(close_frame))
@@ -141,10 +139,9 @@ pub(crate) async fn connect(
     http1::write_request(&mut stream, &Method::GET, uri, &upgrade_headers, None).await?;
 
     // 4. Read response headers (stop at \r\n\r\n, no body)
-    let upgrade_resp =
-        tokio::time::timeout(timeout, http1::read_response_headers(&mut stream))
-            .await
-            .map_err(|_| Error::Timeout)??;
+    let upgrade_resp = tokio::time::timeout(timeout, http1::read_response_headers(&mut stream))
+        .await
+        .map_err(|_| Error::Timeout)??;
 
     // 5. Validate 101 status
     if upgrade_resp.status != 101 {
@@ -161,9 +158,7 @@ pub(crate) async fn connect(
         .iter()
         .find(|(k, _)| k == "sec-websocket-accept")
         .map(|(_, v)| v.as_str())
-        .ok_or_else(|| {
-            Error::ConnectionFailed("Missing Sec-WebSocket-Accept header".into())
-        })?;
+        .ok_or_else(|| Error::ConnectionFailed("Missing Sec-WebSocket-Accept header".into()))?;
 
     if actual_accept != expected_accept {
         return Err(Error::ConnectionFailed(format!(

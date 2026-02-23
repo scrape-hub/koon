@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuicConfig {
     // === QUIC Transport Parameters (RFC 9000) ===
-
     /// Connection-level flow control limit.
     pub initial_max_data: u64,
     /// Stream-level flow control limit for locally-initiated bidirectional streams.
@@ -36,7 +35,6 @@ pub struct QuicConfig {
     pub grease_quic_bit: bool,
 
     // === HTTP/3 SETTINGS (RFC 9114) ===
-
     /// QPACK dynamic table capacity.
     pub qpack_max_table_capacity: u64,
     /// Maximum number of streams that can be blocked on QPACK.

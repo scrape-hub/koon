@@ -51,17 +51,17 @@ pub struct SessionExport {
 
 impl super::Client {
     /// Decompress an HTTP/3 response body.
-    pub(super) fn decompress_response(&self, response: HttpResponse) -> Result<HttpResponse, Error> {
+    pub(super) fn decompress_response(
+        &self,
+        response: HttpResponse,
+    ) -> Result<HttpResponse, Error> {
         let content_encoding = response
             .headers
             .iter()
             .find(|(k, _)| k == "content-encoding")
             .map(|(_, v)| v.as_str());
         let body = decompress_body(response.body, content_encoding)?;
-        Ok(HttpResponse {
-            body,
-            ..response
-        })
+        Ok(HttpResponse { body, ..response })
     }
 }
 

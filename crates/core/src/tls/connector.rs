@@ -214,7 +214,9 @@ impl TlsConnector {
         // Session resumption: set cached session before handshake
         if let Some(cache) = session_cache {
             if let Some(session) = cache.get(host) {
-                unsafe { ssl.set_session(&session)?; }
+                unsafe {
+                    ssl.set_session(&session)?;
+                }
             }
         }
 
@@ -227,9 +229,7 @@ impl TlsConnector {
 /// Uses the `webpki-root-certs` crate (same approach as wreq) which embeds
 /// Mozilla's trusted root CA bundle. This works reliably on all platforms,
 /// unlike BoringSSL's `set_default_verify_paths()` which fails on Windows.
-fn load_root_certs(
-    builder: &mut boring2::ssl::SslConnectorBuilder,
-) -> Result<(), Error> {
+fn load_root_certs(builder: &mut boring2::ssl::SslConnectorBuilder) -> Result<(), Error> {
     use boring2::x509::X509;
     use boring2::x509::store::X509StoreBuilder;
 

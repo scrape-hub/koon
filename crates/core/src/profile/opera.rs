@@ -1,5 +1,7 @@
-use super::chrome::{chrome_http2, chrome_quic, chromium_headers, chromium_sec_ch_ua, chromium_tls, chromium_ua};
 use super::BrowserProfile;
+use super::chrome::{
+    chrome_http2, chrome_quic, chromium_headers, chromium_sec_ch_ua, chromium_tls, chromium_ua,
+};
 
 /// Opera browser profile factory.
 ///
@@ -10,24 +12,48 @@ pub struct Opera;
 
 impl Opera {
     // ========== Opera 124 (Chromium 140) ==========
-    pub fn v124_windows() -> BrowserProfile { opera_profile(124, 140, Os::Windows) }
-    pub fn v124_macos() -> BrowserProfile { opera_profile(124, 140, Os::MacOS) }
-    pub fn v124_linux() -> BrowserProfile { opera_profile(124, 140, Os::Linux) }
+    pub fn v124_windows() -> BrowserProfile {
+        opera_profile(124, 140, Os::Windows)
+    }
+    pub fn v124_macos() -> BrowserProfile {
+        opera_profile(124, 140, Os::MacOS)
+    }
+    pub fn v124_linux() -> BrowserProfile {
+        opera_profile(124, 140, Os::Linux)
+    }
 
     // ========== Opera 125 (Chromium 141) ==========
-    pub fn v125_windows() -> BrowserProfile { opera_profile(125, 141, Os::Windows) }
-    pub fn v125_macos() -> BrowserProfile { opera_profile(125, 141, Os::MacOS) }
-    pub fn v125_linux() -> BrowserProfile { opera_profile(125, 141, Os::Linux) }
+    pub fn v125_windows() -> BrowserProfile {
+        opera_profile(125, 141, Os::Windows)
+    }
+    pub fn v125_macos() -> BrowserProfile {
+        opera_profile(125, 141, Os::MacOS)
+    }
+    pub fn v125_linux() -> BrowserProfile {
+        opera_profile(125, 141, Os::Linux)
+    }
 
     // ========== Opera 126 (Chromium 142) ==========
-    pub fn v126_windows() -> BrowserProfile { opera_profile(126, 142, Os::Windows) }
-    pub fn v126_macos() -> BrowserProfile { opera_profile(126, 142, Os::MacOS) }
-    pub fn v126_linux() -> BrowserProfile { opera_profile(126, 142, Os::Linux) }
+    pub fn v126_windows() -> BrowserProfile {
+        opera_profile(126, 142, Os::Windows)
+    }
+    pub fn v126_macos() -> BrowserProfile {
+        opera_profile(126, 142, Os::MacOS)
+    }
+    pub fn v126_linux() -> BrowserProfile {
+        opera_profile(126, 142, Os::Linux)
+    }
 
     // ========== Opera 127 (Chromium 143) ==========
-    pub fn v127_windows() -> BrowserProfile { opera_profile(127, 143, Os::Windows) }
-    pub fn v127_macos() -> BrowserProfile { opera_profile(127, 143, Os::MacOS) }
-    pub fn v127_linux() -> BrowserProfile { opera_profile(127, 143, Os::Linux) }
+    pub fn v127_windows() -> BrowserProfile {
+        opera_profile(127, 143, Os::Windows)
+    }
+    pub fn v127_macos() -> BrowserProfile {
+        opera_profile(127, 143, Os::MacOS)
+    }
+    pub fn v127_linux() -> BrowserProfile {
+        opera_profile(127, 143, Os::Linux)
+    }
 
     /// Latest Opera profile (currently v127 on Windows).
     pub fn latest() -> BrowserProfile {
@@ -44,7 +70,7 @@ impl Opera {
             _ => {
                 return Err(format!(
                     "Unsupported Opera version: {major}. Supported: 124-127"
-                ))
+                ));
             }
         };
         let os = match os {
