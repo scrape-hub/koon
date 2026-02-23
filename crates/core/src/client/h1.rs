@@ -73,6 +73,7 @@ impl super::Client {
             bytes_received,
             tls_resumed: false,
             connection_reused: false,
+            remote_address: None,
         };
 
         Ok((response, keep_alive))
@@ -150,6 +151,7 @@ impl super::Client {
             rx,
             bytes_sent,
             bytes_received_counter,
+            None,
         ))
     }
 
@@ -224,6 +226,7 @@ impl super::Client {
             bytes_received,
             tls_resumed: false,
             connection_reused: false,
+            remote_address: None,
         };
 
         Ok((response, keep_alive))

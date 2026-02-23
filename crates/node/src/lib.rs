@@ -636,6 +636,7 @@ pub struct KoonResponse {
     bytes_received_val: u32,
     tls_resumed_val: bool,
     connection_reused_val: bool,
+    remote_address_val: Option<String>,
 }
 
 #[napi]
@@ -728,6 +729,12 @@ impl KoonResponse {
     pub fn connection_reused(&self) -> bool {
         self.connection_reused_val
     }
+
+    /// Remote IP address of the peer (e.g. "1.2.3.4" or "::1"), or null for H3/QUIC.
+    #[napi(getter)]
+    pub fn remote_address(&self) -> Option<String> {
+        self.remote_address_val.clone()
+    }
 }
 
 /// A field in a multipart/form-data request.
@@ -769,6 +776,7 @@ fn response_to_napi(response: koon_core::HttpResponse) -> KoonResponse {
         bytes_received_val: response.bytes_received as u32,
         tls_resumed_val: response.tls_resumed,
         connection_reused_val: response.connection_reused,
+        remote_address_val: response.remote_address,
     }
 }
 
@@ -1279,12 +1287,14 @@ impl Koon {
             .collect();
 
         let bytes_sent = resp.bytes_sent() as u32;
+        let remote_addr = resp.remote_address.clone();
         Ok(KoonStreamingResponse {
             status_val: resp.status as u32,
             headers_val: headers,
             version_val: resp.version.clone(),
             url_val: resp.url.clone(),
             bytes_sent_val: bytes_sent,
+            remote_address_val: remote_addr,
             inner: tokio::sync::Mutex::new(Some(resp)),
         })
     }
@@ -1399,6 +1409,7 @@ pub struct KoonStreamingResponse {
     version_val: String,
     url_val: String,
     bytes_sent_val: u32,
+    remote_address_val: Option<String>,
 }
 
 #[napi]
@@ -1431,6 +1442,12 @@ impl KoonStreamingResponse {
     #[napi(getter)]
     pub fn bytes_sent(&self) -> u32 {
         self.bytes_sent_val
+    }
+
+    /// Remote IP address of the peer (e.g. "1.2.3.4" or "::1"), or null for H3/QUIC.
+    #[napi(getter)]
+    pub fn remote_address(&self) -> Option<String> {
+        self.remote_address_val.clone()
     }
 
     /// Approximate bytes received so far (headers + body chunks consumed).

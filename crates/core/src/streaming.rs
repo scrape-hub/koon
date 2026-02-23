@@ -27,6 +27,8 @@ pub struct StreamingResponse {
     bytes_sent_val: u64,
     /// Shared counter for bytes received (incremented as chunks arrive).
     bytes_received_counter: Arc<AtomicU64>,
+    /// Remote IP address of the peer.
+    pub remote_address: Option<String>,
 }
 
 impl StreamingResponse {
@@ -39,6 +41,7 @@ impl StreamingResponse {
         body_rx: mpsc::Receiver<Result<Vec<u8>, Error>>,
         bytes_sent: u64,
         bytes_received_counter: Arc<AtomicU64>,
+        remote_address: Option<String>,
     ) -> Self {
         StreamingResponse {
             status,
@@ -48,6 +51,7 @@ impl StreamingResponse {
             body_rx,
             bytes_sent_val: bytes_sent,
             bytes_received_counter,
+            remote_address,
         }
     }
 

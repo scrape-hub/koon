@@ -25,6 +25,8 @@ pub struct HttpResponse {
     pub tls_resumed: bool,
     /// Whether an existing pooled connection was reused.
     pub connection_reused: bool,
+    /// Remote IP address of the peer (e.g. "1.2.3.4" or "::1"). None for H3/QUIC.
+    pub remote_address: Option<String>,
 }
 
 /// Estimate the serialized size of HTTP headers.

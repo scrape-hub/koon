@@ -88,6 +88,8 @@ export class KoonResponse {
   readonly tlsResumed: boolean;
   /** Whether an existing pooled connection was reused. */
   readonly connectionReused: boolean;
+  /** Remote IP address of the peer (e.g. "1.2.3.4" or "::1"), or null for H3/QUIC. */
+  readonly remoteAddress: string | null;
 
   /** Decode response body as UTF-8 string. */
   text(): string;
@@ -166,6 +168,8 @@ export class KoonStreamingResponse {
   readonly url: string;
   /** Approximate bytes sent for this request. */
   readonly bytesSent: number;
+  /** Remote IP address of the peer, or null for H3/QUIC. */
+  readonly remoteAddress: string | null;
 
   /** Approximate bytes received so far (headers + body chunks consumed). */
   bytesReceived(): number;

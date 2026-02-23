@@ -38,7 +38,7 @@ impl super::Client {
         .await?;
 
         // Store H3 connection in pool (H3 is only used without proxy)
-        self.pool.insert_h3(host, h3_port, None, send_request);
+        self.pool.insert_h3(host, h3_port, None, send_request, None);
 
         Ok(response)
     }

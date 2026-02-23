@@ -180,7 +180,7 @@ impl super::Client {
         let (proxy_idx, proxy_ref) = self.select_proxy();
 
         // 1. Try cached H3 connection from pool
-        if let Some(mut sender) = self.pool.try_get_h3(host, port, proxy_idx) {
+        if let Some((mut sender, pool_addr)) = self.pool.try_get_h3(host, port, proxy_idx) {
             match http3::send_request(
                 &mut sender,
                 method.clone(),
@@ -195,6 +195,7 @@ impl super::Client {
                 Ok(response) => {
                     let mut response = self.decompress_response(response)?;
                     response.connection_reused = true;
+                    response.remote_address = pool_addr;
                     return Ok(response);
                 }
                 Err(_) => {
@@ -204,7 +205,7 @@ impl super::Client {
         }
 
         // 2. Try cached H2 connection from pool
-        if let Some(mut sender) = self.pool.try_get_h2(host, port, proxy_idx) {
+        if let Some((mut sender, pool_addr)) = self.pool.try_get_h2(host, port, proxy_idx) {
             match self
                 .send_on_h2(
                     &mut sender,
@@ -218,6 +219,7 @@ impl super::Client {
             {
                 Ok(mut response) => {
                     response.connection_reused = true;
+                    response.remote_address = pool_addr;
                     return Ok(response);
                 }
                 Err(e) => {
@@ -243,7 +245,7 @@ impl super::Client {
         }
 
         // 3. Try cached H1.1 connection from pool
-        if let Some(mut stream) = self.pool.try_take_h1(host, port, proxy_idx) {
+        if let Some((mut stream, pool_addr)) = self.pool.try_take_h1(host, port, proxy_idx) {
             if let Ok((mut response, keep_alive)) = self
                 .send_on_h1(
                     &mut stream,
@@ -256,9 +258,11 @@ impl super::Client {
                 .await
             {
                 if keep_alive {
-                    self.pool.insert_h1(host, port, proxy_idx, stream);
+                    self.pool
+                        .insert_h1(host, port, proxy_idx, stream, pool_addr.clone());
                 }
                 response.connection_reused = true;
+                response.remote_address = pool_addr;
                 return Ok(response);
             }
         }
@@ -326,6 +330,7 @@ impl super::Client {
 
         // 5. New connection: TCP → TLS → H2/H1
         let tcp = self.connect_tcp_via(host, port, proxy).await?;
+        let peer_addr = tcp.peer_addr().ok().map(|a| a.ip().to_string());
         let tls_stream = self.tls_connect(tcp, host, port).await?;
 
         let alpn = tls_stream.ssl().selected_alpn_protocol();
@@ -337,7 +342,8 @@ impl super::Client {
             let response = self
                 .send_on_h2(&mut sender, method, uri, body, cookie_header, extra_headers)
                 .await?;
-            self.pool.insert_h2(host, port, proxy_idx, sender);
+            self.pool
+                .insert_h2(host, port, proxy_idx, sender, peer_addr.clone());
             response
         } else {
             let mut stream = tls_stream;
@@ -345,12 +351,14 @@ impl super::Client {
                 .send_on_h1(&mut stream, method, uri, body, cookie_header, extra_headers)
                 .await?;
             if keep_alive {
-                self.pool.insert_h1(host, port, proxy_idx, stream);
+                self.pool
+                    .insert_h1(host, port, proxy_idx, stream, peer_addr.clone());
             }
             response
         };
 
         response.tls_resumed = tls_resumed;
+        response.remote_address = peer_addr;
 
         // Parse Alt-Svc header for future H3 discovery
         if !has_proxy && has_quic {
@@ -448,7 +456,7 @@ impl super::Client {
         let (proxy_idx, proxy_ref) = self.select_proxy();
 
         // Try pooled H2 connection first
-        if let Some(mut sender) = self.pool.try_get_h2(host, port, proxy_idx) {
+        if let Some((mut sender, pool_addr)) = self.pool.try_get_h2(host, port, proxy_idx) {
             match self
                 .send_on_h2_streaming(
                     &mut sender,
@@ -460,11 +468,13 @@ impl super::Client {
                 )
                 .await
             {
-                Ok(resp) => {
+                Ok(mut resp) => {
+                    resp.remote_address = pool_addr.clone();
                     // Fire on_response hook
                     self.fire_on_response(resp.status, url, &resp.headers);
                     // Keep H2 connection in pool (it's multiplexed)
-                    self.pool.insert_h2(host, port, proxy_idx, sender);
+                    self.pool
+                        .insert_h2(host, port, proxy_idx, sender, pool_addr);
                     return Ok(resp);
                 }
                 Err(e) => {
@@ -479,6 +489,7 @@ impl super::Client {
 
         // New connection: TCP → TLS → H2/H1
         let tcp = self.connect_tcp_via(host, port, proxy_ref).await?;
+        let peer_addr = tcp.peer_addr().ok().map(|a| a.ip().to_string());
         let tls_stream = self.tls_connect(tcp, host, port).await?;
 
         let alpn = tls_stream.ssl().selected_alpn_protocol();
@@ -486,7 +497,7 @@ impl super::Client {
 
         if is_h2 {
             let mut sender = self.h2_handshake(tls_stream).await?;
-            let resp = self
+            let mut resp = self
                 .send_on_h2_streaming(
                     &mut sender,
                     method,
@@ -496,12 +507,14 @@ impl super::Client {
                     &extra_headers,
                 )
                 .await?;
+            resp.remote_address = peer_addr.clone();
             // Fire on_response hook
             self.fire_on_response(resp.status, url, &resp.headers);
-            self.pool.insert_h2(host, port, proxy_idx, sender);
+            self.pool
+                .insert_h2(host, port, proxy_idx, sender, peer_addr);
             Ok(resp)
         } else {
-            let resp = self
+            let mut resp = self
                 .send_on_h1_streaming(
                     tls_stream,
                     method,
@@ -511,6 +524,7 @@ impl super::Client {
                     &extra_headers,
                 )
                 .await?;
+            resp.remote_address = peer_addr;
             // Fire on_response hook
             self.fire_on_response(resp.status, url, &resp.headers);
             Ok(resp)
@@ -557,7 +571,7 @@ impl super::Client {
         let (proxy_idx, proxy_ref) = self.select_proxy();
 
         // Try pooled H2 connection first
-        if let Some(mut sender) = self.pool.try_get_h2(host, port, proxy_idx) {
+        if let Some((mut sender, pool_addr)) = self.pool.try_get_h2(host, port, proxy_idx) {
             match self
                 .send_on_h2_raw(
                     &mut sender,
@@ -570,9 +584,11 @@ impl super::Client {
             {
                 Ok(mut response) => {
                     response.connection_reused = true;
+                    response.remote_address = pool_addr.clone();
                     // Fire on_response hook
                     self.fire_on_response(response.status, url, &response.headers);
-                    self.pool.insert_h2(host, port, proxy_idx, sender);
+                    self.pool
+                        .insert_h2(host, port, proxy_idx, sender, pool_addr);
                     return Ok(response);
                 }
                 Err(e) => {
@@ -586,6 +602,7 @@ impl super::Client {
 
         // New connection
         let tcp = self.connect_tcp_via(host, port, proxy_ref).await?;
+        let peer_addr = tcp.peer_addr().ok().map(|a| a.ip().to_string());
         let tls_stream = self.tls_connect(tcp, host, port).await?;
 
         let alpn = tls_stream.ssl().selected_alpn_protocol();
@@ -597,7 +614,8 @@ impl super::Client {
             let response = self
                 .send_on_h2_raw(&mut sender, method, &uri, body, &raw_headers)
                 .await?;
-            self.pool.insert_h2(host, port, proxy_idx, sender);
+            self.pool
+                .insert_h2(host, port, proxy_idx, sender, peer_addr.clone());
             response
         } else {
             let mut stream = tls_stream;
@@ -605,12 +623,14 @@ impl super::Client {
                 .send_on_h1_raw(&mut stream, method, &uri, body, &raw_headers)
                 .await?;
             if keep_alive {
-                self.pool.insert_h1(host, port, proxy_idx, stream);
+                self.pool
+                    .insert_h1(host, port, proxy_idx, stream, peer_addr.clone());
             }
             response
         };
 
         response.tls_resumed = tls_resumed;
+        response.remote_address = peer_addr;
 
         // Track bandwidth
         self.track_bytes(response.bytes_sent, response.bytes_received);

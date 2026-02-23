@@ -137,6 +137,7 @@ pub(crate) async fn send_request(
         bytes_received,
         tls_resumed: false,
         connection_reused: false,
+        remote_address: None,
     })
 }
 

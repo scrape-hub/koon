@@ -559,12 +559,14 @@ impl Koon {
                 .map_err(to_koon_err)?;
 
             let bytes_sent = resp.bytes_sent();
+            let remote_addr = resp.remote_address.clone();
             Ok(KoonStreamingResponse {
                 status: resp.status,
                 headers_vec: resp.headers.clone(),
                 version: resp.version.clone(),
                 url: resp.url.clone(),
                 bytes_sent,
+                remote_address: remote_addr,
                 inner: Arc::new(tokio::sync::Mutex::new(Some(resp))),
             })
         })
@@ -619,6 +621,9 @@ struct KoonResponse {
     /// Whether an existing pooled connection was reused.
     #[pyo3(get)]
     connection_reused: bool,
+    /// Remote IP address of the peer (e.g. "1.2.3.4" or "::1"), or None for H3/QUIC.
+    #[pyo3(get)]
+    remote_address: Option<String>,
 }
 
 impl KoonResponse {
@@ -633,6 +638,7 @@ impl KoonResponse {
             bytes_received: resp.bytes_received,
             tls_resumed: resp.tls_resumed,
             connection_reused: resp.connection_reused,
+            remote_address: resp.remote_address,
         }
     }
 }
@@ -706,6 +712,9 @@ struct KoonStreamingResponse {
     /// Approximate bytes sent for this request.
     #[pyo3(get)]
     bytes_sent: u64,
+    /// Remote IP address of the peer.
+    #[pyo3(get)]
+    remote_address: Option<String>,
     inner: Arc<tokio::sync::Mutex<Option<koon_core::StreamingResponse>>>,
 }
 

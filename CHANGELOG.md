@@ -2,6 +2,11 @@
 
 All notable changes to koon will be documented in this file.
 
+## [0.5.2] - 2026-02-23
+
+### Added
+- **`remoteAddress` on Response**: All responses (buffered + streaming) now expose `remoteAddress` — the peer IP address (e.g. `"1.2.3.4"` or `"::1"`). Available on Node.js (`response.remoteAddress`), Python (`response.remote_address`), and R (`resp$remote_address`). Returns `null`/`None`/`NULL` for HTTP/3 (QUIC). Useful for proxy users to verify exit IP without extra requests.
+
 ## [0.5.1] - 2026-02-23
 
 ### Fixed

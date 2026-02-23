@@ -15,6 +15,11 @@ fn response_to_list(resp: koon_core::HttpResponse) -> List {
     let header_values: Vec<String> = resp.headers.iter().map(|(_, v)| v.clone()).collect();
     let headers_df = data_frame!(name = header_names, value = header_values);
 
+    let remote_address: Robj = match resp.remote_address {
+        Some(ref addr) => addr.into(),
+        None => ().into(),
+    };
+
     list!(
         status = resp.status as i32,
         ok = ok,
@@ -26,7 +31,8 @@ fn response_to_list(resp: koon_core::HttpResponse) -> List {
         bytes_sent = resp.bytes_sent as f64,
         bytes_received = resp.bytes_received as f64,
         tls_resumed = resp.tls_resumed,
-        connection_reused = resp.connection_reused
+        connection_reused = resp.connection_reused,
+        remote_address = remote_address
     )
 }
 

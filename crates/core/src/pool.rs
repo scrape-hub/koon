@@ -27,6 +27,7 @@ enum PoolEntry {
 struct TimedEntry {
     entry: PoolEntry,
     inserted_at: Instant,
+    peer_addr: Option<String>,
 }
 
 /// Thread-safe connection pool supporting HTTP/2, HTTP/1.1, and HTTP/3.
@@ -77,7 +78,7 @@ impl ConnectionPool {
         host: &str,
         port: u16,
         proxy_index: Option<usize>,
-    ) -> Option<SendRequest<Bytes>> {
+    ) -> Option<(SendRequest<Bytes>, Option<String>)> {
         let key = PoolKey {
             host: host.to_string(),
             port,
@@ -87,7 +88,9 @@ impl ConnectionPool {
         match conns.get(&key) {
             Some(timed) if Instant::now().duration_since(timed.inserted_at) < self.ttl => {
                 match &timed.entry {
-                    PoolEntry::Http2(sender) => Some(sender.clone()),
+                    PoolEntry::Http2(sender) => {
+                        Some((sender.clone(), timed.peer_addr.clone()))
+                    }
                     _ => None,
                 }
             }
@@ -106,7 +109,7 @@ impl ConnectionPool {
         host: &str,
         port: u16,
         proxy_index: Option<usize>,
-    ) -> Option<SslStream<TcpStream>> {
+    ) -> Option<(SslStream<TcpStream>, Option<String>)> {
         let key = PoolKey {
             host: host.to_string(),
             port,
@@ -119,8 +122,9 @@ impl ConnectionPool {
                     PoolEntry::Http11(_) => match conns.remove(&key) {
                         Some(TimedEntry {
                             entry: PoolEntry::Http11(stream),
+                            peer_addr,
                             ..
-                        }) => Some(stream),
+                        }) => Some((stream, peer_addr)),
                         _ => None,
                     },
                     _ => None,
@@ -141,6 +145,7 @@ impl ConnectionPool {
         port: u16,
         proxy_index: Option<usize>,
         sender: SendRequest<Bytes>,
+        peer_addr: Option<String>,
     ) {
         let key = PoolKey {
             host: host.to_string(),
@@ -155,6 +160,7 @@ impl ConnectionPool {
             TimedEntry {
                 entry: PoolEntry::Http2(sender),
                 inserted_at: Instant::now(),
+                peer_addr,
             },
         );
     }
@@ -166,6 +172,7 @@ impl ConnectionPool {
         port: u16,
         proxy_index: Option<usize>,
         stream: SslStream<TcpStream>,
+        peer_addr: Option<String>,
     ) {
         let key = PoolKey {
             host: host.to_string(),
@@ -180,6 +187,7 @@ impl ConnectionPool {
             TimedEntry {
                 entry: PoolEntry::Http11(stream),
                 inserted_at: Instant::now(),
+                peer_addr,
             },
         );
     }
@@ -190,7 +198,7 @@ impl ConnectionPool {
         host: &str,
         port: u16,
         proxy_index: Option<usize>,
-    ) -> Option<h3::client::SendRequest<h3_quinn::OpenStreams, Bytes>> {
+    ) -> Option<(h3::client::SendRequest<h3_quinn::OpenStreams, Bytes>, Option<String>)> {
         let key = PoolKey {
             host: host.to_string(),
             port,
@@ -200,7 +208,9 @@ impl ConnectionPool {
         match conns.get(&key) {
             Some(timed) if Instant::now().duration_since(timed.inserted_at) < self.ttl => {
                 match &timed.entry {
-                    PoolEntry::Http3(sender) => Some(sender.clone()),
+                    PoolEntry::Http3(sender) => {
+                        Some((sender.clone(), timed.peer_addr.clone()))
+                    }
                     _ => None,
                 }
             }
@@ -219,6 +229,7 @@ impl ConnectionPool {
         port: u16,
         proxy_index: Option<usize>,
         sender: h3::client::SendRequest<h3_quinn::OpenStreams, Bytes>,
+        peer_addr: Option<String>,
     ) {
         let key = PoolKey {
             host: host.to_string(),
@@ -233,6 +244,7 @@ impl ConnectionPool {
             TimedEntry {
                 entry: PoolEntry::Http3(sender),
                 inserted_at: Instant::now(),
+                peer_addr,
             },
         );
     }
