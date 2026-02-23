@@ -11,7 +11,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # ─── Node.js + CLI binaries (5 platforms) ───────────────────────────
+  # ─── Node.js + CLI binaries ─────────────────────────────────────────
   build:
     strategy:
       fail-fast: false
@@ -35,18 +35,19 @@ jobs:
             cli-file: koon-aarch64-unknown-linux-gnu
             lib-prefix: lib
             lib-ext: so
-          - target: x86_64-apple-darwin
-            runner: macos-15
-            node-file: koon.darwin-x64.node
-            cli-file: koon-x86_64-apple-darwin
-            lib-prefix: lib
-            lib-ext: dylib
-          - target: aarch64-apple-darwin
-            runner: macos-14
-            node-file: koon.darwin-arm64.node
-            cli-file: koon-aarch64-apple-darwin
-            lib-prefix: lib
-            lib-ext: dylib
+          # macOS builds commented out to save CI minutes — re-enable when needed
+          # - target: x86_64-apple-darwin
+          #   runner: macos-15
+          #   node-file: koon.darwin-x64.node
+          #   cli-file: koon-x86_64-apple-darwin
+          #   lib-prefix: lib
+          #   lib-ext: dylib
+          # - target: aarch64-apple-darwin
+          #   runner: macos-14
+          #   node-file: koon.darwin-arm64.node
+          #   cli-file: koon-aarch64-apple-darwin
+          #   lib-prefix: lib
+          #   lib-ext: dylib
 
     runs-on: ${{ matrix.runner }}
     steps:
@@ -146,7 +147,7 @@ jobs:
           name: cli-${{ matrix.target }}
           path: ${{ matrix.cli-file }}
 
-  # ─── Python wheels (5 platforms) ────────────────────────────────────
+  # ─── Python wheels ─────────────────────────────────────────────────
   build-python:
     strategy:
       fail-fast: false
@@ -158,10 +159,11 @@ jobs:
             runner: ubuntu-latest
           - target: aarch64-unknown-linux-gnu
             runner: ubuntu-latest
-          - target: x86_64-apple-darwin
-            runner: macos-15
-          - target: aarch64-apple-darwin
-            runner: macos-14
+          # macOS builds commented out to save CI minutes — re-enable when needed
+          # - target: x86_64-apple-darwin
+          #   runner: macos-15
+          # - target: aarch64-apple-darwin
+          #   runner: macos-14
 
     runs-on: ${{ matrix.runner }}
     steps:
@@ -339,6 +341,11 @@ jobs:
 
       - name: List binaries
         run: ls -la cli-binaries/
+
+      - name: Delete existing release (if re-releasing)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release delete ${{ github.ref_name }} --yes --cleanup-tag=false 2>/dev/null || true
 
       - name: Create GitHub Release
         env:
