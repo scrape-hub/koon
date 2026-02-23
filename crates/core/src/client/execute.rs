@@ -118,8 +118,11 @@ impl super::Client {
             ));
         }
 
+        // Select proxy once for this request (rotation picks the next one)
+        let (proxy_idx, proxy_ref) = self.select_proxy();
+
         // 1. Try cached H3 connection from pool
-        if let Some(mut sender) = self.pool.try_get_h3(host, port) {
+        if let Some(mut sender) = self.pool.try_get_h3(host, port, proxy_idx) {
             match http3::send_request(
                 &mut sender,
                 method.clone(),
@@ -136,24 +139,24 @@ impl super::Client {
                     return Ok(response);
                 }
                 Err(_) => {
-                    self.pool.remove(host, port);
+                    self.pool.remove(host, port, proxy_idx);
                 }
             }
         }
 
         // 2. Try cached H2 connection from pool
-        if let Some(mut sender) = self.pool.try_get_h2(host, port) {
+        if let Some(mut sender) = self.pool.try_get_h2(host, port, proxy_idx) {
             match self
                 .send_on_h2(&mut sender, method.clone(), uri, body.clone(), cookie_header, extra_headers)
                 .await
             {
                 Ok(response) => return Ok(response),
                 Err(e) => {
-                    self.pool.remove(host, port);
+                    self.pool.remove(host, port, proxy_idx);
                     // GOAWAY: retry on a fresh connection
                     if e.is_h2_goaway() {
                         return self
-                            .new_connection_request(method, uri, body, cookie_header, host, port, extra_headers)
+                            .new_connection_request(method, uri, body, cookie_header, host, port, extra_headers, proxy_idx, proxy_ref)
                             .await;
                     }
                 }
@@ -161,19 +164,19 @@ impl super::Client {
         }
 
         // 3. Try cached H1.1 connection from pool
-        if let Some(mut stream) = self.pool.try_take_h1(host, port) {
+        if let Some(mut stream) = self.pool.try_take_h1(host, port, proxy_idx) {
             if let Ok((response, keep_alive)) = self
                 .send_on_h1(&mut stream, method.clone(), uri, body.clone(), cookie_header, extra_headers)
                 .await
             {
                 if keep_alive {
-                    self.pool.insert_h1(host, port, stream);
+                    self.pool.insert_h1(host, port, proxy_idx, stream);
                 }
                 return Ok(response);
             }
         }
 
-        self.new_connection_request(method, uri, body, cookie_header, host, port, extra_headers)
+        self.new_connection_request(method, uri, body, cookie_header, host, port, extra_headers, proxy_idx, proxy_ref)
             .await
     }
 
@@ -189,9 +192,11 @@ impl super::Client {
         host: &str,
         port: u16,
         extra_headers: &[(String, String)],
+        proxy_idx: Option<usize>,
+        proxy: Option<&crate::proxy::ProxyConfig>,
     ) -> Result<HttpResponse, Error> {
         // 4. Try HTTP/3 if: no proxy, profile has QuicConfig, and Alt-Svc cache says H3 is available
-        let has_proxy = self.proxy.is_some();
+        let has_proxy = proxy.is_some();
         let has_quic = self.profile.quic.is_some();
         let h3_port = if !has_proxy && has_quic {
             self.get_alt_svc_h3_port(host, port)
@@ -213,7 +218,7 @@ impl super::Client {
         }
 
         // 5. New connection: TCP → TLS → H2/H1
-        let tcp = self.connect_tcp(host, port).await?;
+        let tcp = self.connect_tcp_via(host, port, proxy).await?;
         let tls_stream = self.tls_connect(tcp, host, port).await?;
 
         let alpn = tls_stream.ssl().selected_alpn_protocol();
@@ -224,7 +229,7 @@ impl super::Client {
             let response = self
                 .send_on_h2(&mut sender, method, uri, body, cookie_header, extra_headers)
                 .await?;
-            self.pool.insert_h2(host, port, sender);
+            self.pool.insert_h2(host, port, proxy_idx, sender);
             response
         } else {
             let mut stream = tls_stream;
@@ -232,7 +237,7 @@ impl super::Client {
                 .send_on_h1(&mut stream, method, uri, body, cookie_header, extra_headers)
                 .await?;
             if keep_alive {
-                self.pool.insert_h1(host, port, stream);
+                self.pool.insert_h1(host, port, proxy_idx, stream);
             }
             response
         };
@@ -292,19 +297,21 @@ impl super::Client {
             .as_ref()
             .and_then(|jar| jar.lock().unwrap().cookie_header(&uri));
 
+        let (proxy_idx, proxy_ref) = self.select_proxy();
+
         // Try pooled H2 connection first
-        if let Some(mut sender) = self.pool.try_get_h2(host, port) {
+        if let Some(mut sender) = self.pool.try_get_h2(host, port, proxy_idx) {
             match self
                 .send_on_h2_streaming(&mut sender, method.clone(), &uri, body.clone(), cookie_header.as_deref(), &extra_headers)
                 .await
             {
                 Ok(resp) => {
                     // Keep H2 connection in pool (it's multiplexed)
-                    self.pool.insert_h2(host, port, sender);
+                    self.pool.insert_h2(host, port, proxy_idx, sender);
                     return Ok(resp);
                 }
                 Err(e) => {
-                    self.pool.remove(host, port);
+                    self.pool.remove(host, port, proxy_idx);
                     if !e.is_h2_goaway() {
                         return Err(e);
                     }
@@ -314,7 +321,7 @@ impl super::Client {
         }
 
         // New connection: TCP → TLS → H2/H1
-        let tcp = self.connect_tcp(host, port).await?;
+        let tcp = self.connect_tcp_via(host, port, proxy_ref).await?;
         let tls_stream = self.tls_connect(tcp, host, port).await?;
 
         let alpn = tls_stream.ssl().selected_alpn_protocol();
@@ -325,7 +332,7 @@ impl super::Client {
             let resp = self
                 .send_on_h2_streaming(&mut sender, method, &uri, body, cookie_header.as_deref(), &extra_headers)
                 .await?;
-            self.pool.insert_h2(host, port, sender);
+            self.pool.insert_h2(host, port, proxy_idx, sender);
             Ok(resp)
         } else {
             self.send_on_h1_streaming(tls_stream, method, &uri, body, cookie_header.as_deref(), &extra_headers)
@@ -363,18 +370,20 @@ impl super::Client {
             ));
         }
 
+        let (proxy_idx, proxy_ref) = self.select_proxy();
+
         // Try pooled H2 connection first
-        if let Some(mut sender) = self.pool.try_get_h2(host, port) {
+        if let Some(mut sender) = self.pool.try_get_h2(host, port, proxy_idx) {
             match self
                 .send_on_h2_raw(&mut sender, method.clone(), &uri, body.clone(), &raw_headers)
                 .await
             {
                 Ok(response) => {
-                    self.pool.insert_h2(host, port, sender);
+                    self.pool.insert_h2(host, port, proxy_idx, sender);
                     return Ok(response);
                 }
                 Err(e) => {
-                    self.pool.remove(host, port);
+                    self.pool.remove(host, port, proxy_idx);
                     if !e.is_h2_goaway() {
                         return Err(e);
                     }
@@ -383,7 +392,7 @@ impl super::Client {
         }
 
         // New connection
-        let tcp = self.connect_tcp(host, port).await?;
+        let tcp = self.connect_tcp_via(host, port, proxy_ref).await?;
         let tls_stream = self.tls_connect(tcp, host, port).await?;
 
         let alpn = tls_stream.ssl().selected_alpn_protocol();
@@ -394,7 +403,7 @@ impl super::Client {
             let response = self
                 .send_on_h2_raw(&mut sender, method, &uri, body, &raw_headers)
                 .await?;
-            self.pool.insert_h2(host, port, sender);
+            self.pool.insert_h2(host, port, proxy_idx, sender);
             Ok(response)
         } else {
             let mut stream = tls_stream;
@@ -402,7 +411,7 @@ impl super::Client {
                 .send_on_h1_raw(&mut stream, method, &uri, body, &raw_headers)
                 .await?;
             if keep_alive {
-                self.pool.insert_h1(host, port, stream);
+                self.pool.insert_h1(host, port, proxy_idx, stream);
             }
             Ok(response)
         }

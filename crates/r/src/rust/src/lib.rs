@@ -62,12 +62,14 @@ impl Koon {
     /// @param browser Character string specifying the browser profile
     ///   (e.g. "chrome145", "firefox147", "safari183").
     /// @param proxy Optional proxy URL (e.g. "socks5://127.0.0.1:1080").
+    /// @param proxies Optional character vector of proxy URLs for round-robin rotation.
+    ///   Takes priority over `proxy`.
     /// @param timeout Request timeout in milliseconds (default: 30000).
     /// @param randomize Logical; randomize fingerprint slightly (default: FALSE).
     /// @param headers Optional named character vector of custom headers.
     /// @param local_address Optional local IP address to bind outgoing connections to.
     /// @return A new Koon client object.
-    fn new(browser: &str, proxy: Nullable<String>, timeout: Nullable<i32>, randomize: Nullable<bool>, headers: Robj, local_address: Nullable<String>) -> Self {
+    fn new(browser: &str, proxy: Nullable<String>, proxies: Robj, timeout: Nullable<i32>, randomize: Nullable<bool>, headers: Robj, local_address: Nullable<String>) -> Self {
         let mut profile = BrowserProfile::resolve(browser)
             .unwrap_or_else(|e| panic!("Unknown browser profile '{}': {}", browser, e));
 
@@ -90,7 +92,14 @@ impl Koon {
             .cookie_jar(true)
             .session_resumption(true);
 
-        if let NotNull(proxy_url) = proxy {
+        if !proxies.is_null() {
+            if let Some(urls) = proxies.as_str_vector() {
+                let refs: Vec<&str> = urls.iter().copied().collect();
+                builder = builder
+                    .proxies(&refs)
+                    .unwrap_or_else(|e| panic!("Invalid proxies: {}", e));
+            }
+        } else if let NotNull(proxy_url) = proxy {
             builder = builder
                 .proxy(&proxy_url)
                 .unwrap_or_else(|e| panic!("Invalid proxy URL '{}': {}", proxy_url, e));

@@ -107,7 +107,8 @@ impl super::Client {
                                 .unwrap()
                                 .insert((host.to_string(), port), entry);
                             // Evict existing H2/H1 pool entry so next request tries H3
-                            self.pool.remove(host, port);
+                            // Alt-Svc is only used without proxy, so proxy_index is None
+                            self.pool.remove(host, port, None);
                             return;
                         }
                     }

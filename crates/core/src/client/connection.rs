@@ -36,9 +36,22 @@ impl super::Client {
     }
 
     /// Establish TCP connection, optionally through a proxy.
+    /// Uses `select_proxy()` to pick the proxy (rotation > single > none).
     /// When DoH is enabled, resolves hostname via encrypted DNS first.
     pub(super) async fn connect_tcp(&self, host: &str, port: u16) -> Result<TcpStream, Error> {
-        match &self.proxy {
+        let (_idx, proxy) = self.select_proxy();
+        self.connect_tcp_via(host, port, proxy).await
+    }
+
+    /// Establish TCP connection through an explicitly specified proxy (or direct).
+    /// Called by `execute_single_request` which pre-selects the proxy for the request.
+    pub(super) async fn connect_tcp_via(
+        &self,
+        host: &str,
+        port: u16,
+        proxy: Option<&crate::proxy::ProxyConfig>,
+    ) -> Result<TcpStream, Error> {
+        match proxy {
             None => {
                 #[cfg(feature = "doh")]
                 if let Some(resolver) = &self.doh_resolver {

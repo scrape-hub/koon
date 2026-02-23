@@ -200,6 +200,10 @@ pub struct KoonOptions {
     /// Supports authentication: socks5://user:pass@host:port
     pub proxy: Option<String>,
 
+    /// Array of proxy URLs for round-robin rotation.
+    /// Each request uses the next proxy in order. Takes priority over `proxy`.
+    pub proxies: Option<Vec<String>>,
+
     /// Request timeout in milliseconds.
     /// @default 30000
     pub timeout: Option<u32>,
@@ -449,7 +453,12 @@ impl Koon {
             .cookie_jar(opts.cookie_jar.unwrap_or(true))
             .session_resumption(opts.session_resumption.unwrap_or(true));
 
-        if let Some(ref proxy_url) = opts.proxy {
+        if let Some(ref proxy_urls) = opts.proxies {
+            let refs: Vec<&str> = proxy_urls.iter().map(|s| s.as_str()).collect();
+            builder = builder.proxies(&refs).map_err(|e| {
+                napi::Error::from_reason(format!("Invalid proxies: {e}"))
+            })?;
+        } else if let Some(ref proxy_url) = opts.proxy {
             builder = builder.proxy(proxy_url).map_err(|e| {
                 napi::Error::from_reason(format!("Invalid proxy: {e}"))
             })?;

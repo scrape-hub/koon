@@ -67,13 +67,15 @@ impl Koon {
     ///     session_resumption: Enable TLS session resumption.
     ///     doh: DNS-over-HTTPS provider ("cloudflare" or "google").
     ///     local_address: Bind outgoing connections to a specific local IP address.
+    ///     proxies: List of proxy URLs for round-robin rotation (takes priority over `proxy`).
     #[new]
-    #[pyo3(signature = (browser="chrome", *, profile_json=None, proxy=None, timeout=30000, ignore_tls_errors=false, headers=None, follow_redirects=true, max_redirects=10, cookie_jar=true, randomize=false, session_resumption=true, doh=None, local_address=None))]
+    #[pyo3(signature = (browser="chrome", *, profile_json=None, proxy=None, proxies=None, timeout=30000, ignore_tls_errors=false, headers=None, follow_redirects=true, max_redirects=10, cookie_jar=true, randomize=false, session_resumption=true, doh=None, local_address=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         browser: &str,
         profile_json: Option<&str>,
         proxy: Option<&str>,
+        proxies: Option<Vec<String>>,
         timeout: u32,
         ignore_tls_errors: bool,
         headers: Option<HashMap<String, String>>,
@@ -110,7 +112,10 @@ impl Koon {
             .cookie_jar(cookie_jar)
             .session_resumption(session_resumption);
 
-        if let Some(proxy_url) = proxy {
+        if let Some(proxy_urls) = proxies {
+            let refs: Vec<&str> = proxy_urls.iter().map(|s| s.as_str()).collect();
+            builder = builder.proxies(&refs).map_err(to_py_err)?;
+        } else if let Some(proxy_url) = proxy {
             builder = builder.proxy(proxy_url).map_err(to_py_err)?;
         }
 

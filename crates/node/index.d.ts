@@ -21,6 +21,8 @@ export interface KoonOptions {
   profileJson?: string;
   /** Proxy URL (http://, socks5://). */
   proxy?: string;
+  /** Array of proxy URLs for round-robin rotation. Takes priority over `proxy`. */
+  proxies?: string[];
   /** Request timeout in milliseconds. Default: 30000. */
   timeout?: number;
   /** Skip TLS certificate verification. */

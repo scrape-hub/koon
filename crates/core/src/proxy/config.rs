@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
 use url::Url;
 
 /// Proxy configuration for outbound HTTP requests.
@@ -76,5 +77,52 @@ impl ProxyConfig {
             ProxyKind::Https => 443,
             ProxyKind::Socks5 => 1080,
         })
+    }
+}
+
+/// Round-robin proxy rotation over multiple proxy URLs.
+///
+/// Each call to [`next()`](ProxyRotation::next) returns the next proxy in
+/// the list, cycling back to the beginning after the last one.
+/// Thread-safe via `AtomicUsize` (lock-free).
+pub struct ProxyRotation {
+    proxies: Vec<ProxyConfig>,
+    index: AtomicUsize,
+}
+
+impl std::fmt::Debug for ProxyRotation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProxyRotation")
+            .field("proxies", &self.proxies)
+            .field("index", &self.index.load(Ordering::Relaxed))
+            .finish()
+    }
+}
+
+impl ProxyRotation {
+    /// Create a new proxy rotation from a slice of proxy URL strings.
+    ///
+    /// Returns an error if the slice is empty or any URL is invalid.
+    pub fn new(proxy_urls: &[&str]) -> Result<Self, crate::Error> {
+        if proxy_urls.is_empty() {
+            return Err(crate::Error::Proxy(
+                "Proxy rotation requires at least one proxy URL".into(),
+            ));
+        }
+        let proxies: Result<Vec<ProxyConfig>, _> =
+            proxy_urls.iter().map(|url| ProxyConfig::parse(url)).collect();
+        Ok(ProxyRotation {
+            proxies: proxies?,
+            index: AtomicUsize::new(0),
+        })
+    }
+
+    /// Return the next proxy in round-robin order.
+    ///
+    /// Returns `(index, &ProxyConfig)` where `index` is used as the
+    /// pool key discriminator so each proxy gets its own connections.
+    pub fn next(&self) -> (usize, &ProxyConfig) {
+        let idx = self.index.fetch_add(1, Ordering::Relaxed) % self.proxies.len();
+        (idx, &self.proxies[idx])
     }
 }

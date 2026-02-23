@@ -25,7 +25,7 @@ use crate::error::Error;
 use crate::multipart::Multipart;
 use crate::pool::ConnectionPool;
 use crate::profile::BrowserProfile;
-use crate::proxy::ProxyConfig;
+use crate::proxy::{ProxyConfig, ProxyRotation};
 use crate::tls::{SessionCache, TlsConnector};
 use crate::websocket::{self, WebSocket};
 
@@ -33,6 +33,7 @@ use crate::websocket::{self, WebSocket};
 pub struct ClientBuilder {
     profile: BrowserProfile,
     proxy: Option<ProxyConfig>,
+    proxy_rotation: Option<ProxyRotation>,
     timeout: Duration,
     custom_headers: Vec<(String, String)>,
     follow_redirects: bool,
@@ -49,6 +50,7 @@ impl ClientBuilder {
         ClientBuilder {
             profile,
             proxy: None,
+            proxy_rotation: None,
             timeout: Duration::from_secs(30),
             custom_headers: Vec::new(),
             follow_redirects: true,
@@ -61,9 +63,18 @@ impl ClientBuilder {
         }
     }
 
-    /// Set a proxy for all requests.
+    /// Set a single proxy for all requests.
     pub fn proxy(mut self, proxy_url: &str) -> Result<Self, Error> {
         self.proxy = Some(ProxyConfig::parse(proxy_url)?);
+        Ok(self)
+    }
+
+    /// Set multiple proxies for round-robin rotation.
+    ///
+    /// Each request picks the next proxy in order, cycling back to the first.
+    /// Takes priority over [`proxy()`](ClientBuilder::proxy) if both are set.
+    pub fn proxies(mut self, proxy_urls: &[&str]) -> Result<Self, Error> {
+        self.proxy_rotation = Some(ProxyRotation::new(proxy_urls)?);
         Ok(self)
     }
 
@@ -137,6 +148,7 @@ impl ClientBuilder {
             profile: self.profile,
             tls_connector,
             proxy: self.proxy,
+            proxy_rotation: self.proxy_rotation,
             timeout: self.timeout,
             custom_headers: self.custom_headers,
             follow_redirects: self.follow_redirects,
@@ -161,6 +173,7 @@ pub struct Client {
     profile: BrowserProfile,
     tls_connector: SslConnector,
     proxy: Option<ProxyConfig>,
+    proxy_rotation: Option<ProxyRotation>,
     timeout: Duration,
     custom_headers: Vec<(String, String)>,
     follow_redirects: bool,
@@ -187,6 +200,21 @@ impl Client {
     pub fn profile(&self) -> &BrowserProfile {
         &self.profile
     }
+
+    /// Select proxy for this request: rotation > single > none.
+    ///
+    /// Returns `(proxy_index, proxy_config)`. The index is used as pool key
+    /// discriminator so each proxy gets its own set of connections.
+    pub(super) fn select_proxy(&self) -> (Option<usize>, Option<&ProxyConfig>) {
+        if let Some(rotation) = &self.proxy_rotation {
+            let (idx, proxy) = rotation.next();
+            (Some(idx), Some(proxy))
+        } else {
+            (None, self.proxy.as_ref())
+        }
+    }
+
+
 
     /// Create a new client with default settings (redirects on, cookies on).
     pub fn new(profile: BrowserProfile) -> Result<Self, Error> {

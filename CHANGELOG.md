@@ -5,6 +5,14 @@ All notable changes to koon will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Proxy Rotation**: Round-robin rotation over multiple proxy URLs
+  - Each request picks the next proxy in order, cycling back to the first
+  - Proxy-aware connection pool: each proxy gets its own connections per origin
+  - `proxies` takes priority over `proxy` when both are set
+  - Node.js: `new Koon({ proxies: ['socks5://a:1080', 'socks5://b:1080'] })`
+  - Python: `Koon("chrome", proxies=["socks5://a:1080", "socks5://b:1080"])`
+  - R: `Koon$new("chrome", proxies = c("socks5://a:1080", "socks5://b:1080"))`
+  - Rust: `Client::builder(profile).proxies(&["socks5://a:1080", "socks5://b:1080"]).build()`
 - **Local Address Binding**: Bind outgoing TCP connections to a specific local IP address
   - Useful for servers with multiple IPs or IP rotation without a proxy
   - Node.js: `new Koon({ localAddress: '192.168.1.100' })`

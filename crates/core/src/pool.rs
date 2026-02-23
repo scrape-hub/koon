@@ -7,11 +7,13 @@ use http2::client::SendRequest;
 use tokio::net::TcpStream;
 use tokio_boring2::SslStream;
 
-/// Pool key: one connection per origin (host + port), like a real browser.
+/// Pool key: one connection per origin (host + port) + proxy index.
+/// When proxy rotation is active, each proxy gets its own connections per origin.
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
 struct PoolKey {
     host: String,
     port: u16,
+    proxy_index: Option<usize>,
 }
 
 /// A cached connection to an origin — H2, H1.1, or H3.
@@ -70,10 +72,11 @@ impl ConnectionPool {
     }
 
     /// Try to get an existing H2 connection for the given origin.
-    pub fn try_get_h2(&self, host: &str, port: u16) -> Option<SendRequest<Bytes>> {
+    pub fn try_get_h2(&self, host: &str, port: u16, proxy_index: Option<usize>) -> Option<SendRequest<Bytes>> {
         let key = PoolKey {
             host: host.to_string(),
             port,
+            proxy_index,
         };
         let mut conns = self.connections.lock().unwrap();
         match conns.get(&key) {
@@ -93,10 +96,11 @@ impl ConnectionPool {
 
     /// Try to take an existing H1.1 connection for the given origin.
     /// Unlike H2, H1.1 connections are taken (removed) from the pool since they are not multiplexed.
-    pub fn try_take_h1(&self, host: &str, port: u16) -> Option<SslStream<TcpStream>> {
+    pub fn try_take_h1(&self, host: &str, port: u16, proxy_index: Option<usize>) -> Option<SslStream<TcpStream>> {
         let key = PoolKey {
             host: host.to_string(),
             port,
+            proxy_index,
         };
         let mut conns = self.connections.lock().unwrap();
         match conns.get(&key) {
@@ -121,10 +125,11 @@ impl ConnectionPool {
     }
 
     /// Store an H2 connection in the pool.
-    pub fn insert_h2(&self, host: &str, port: u16, sender: SendRequest<Bytes>) {
+    pub fn insert_h2(&self, host: &str, port: u16, proxy_index: Option<usize>, sender: SendRequest<Bytes>) {
         let key = PoolKey {
             host: host.to_string(),
             port,
+            proxy_index,
         };
         let mut conns = self.connections.lock().unwrap();
         Self::evict_expired(&mut conns, self.ttl);
@@ -139,10 +144,11 @@ impl ConnectionPool {
     }
 
     /// Store an H1.1 connection in the pool for keep-alive reuse.
-    pub fn insert_h1(&self, host: &str, port: u16, stream: SslStream<TcpStream>) {
+    pub fn insert_h1(&self, host: &str, port: u16, proxy_index: Option<usize>, stream: SslStream<TcpStream>) {
         let key = PoolKey {
             host: host.to_string(),
             port,
+            proxy_index,
         };
         let mut conns = self.connections.lock().unwrap();
         Self::evict_expired(&mut conns, self.ttl);
@@ -161,10 +167,12 @@ impl ConnectionPool {
         &self,
         host: &str,
         port: u16,
+        proxy_index: Option<usize>,
     ) -> Option<h3::client::SendRequest<h3_quinn::OpenStreams, Bytes>> {
         let key = PoolKey {
             host: host.to_string(),
             port,
+            proxy_index,
         };
         let mut conns = self.connections.lock().unwrap();
         match conns.get(&key) {
@@ -187,11 +195,13 @@ impl ConnectionPool {
         &self,
         host: &str,
         port: u16,
+        proxy_index: Option<usize>,
         sender: h3::client::SendRequest<h3_quinn::OpenStreams, Bytes>,
     ) {
         let key = PoolKey {
             host: host.to_string(),
             port,
+            proxy_index,
         };
         let mut conns = self.connections.lock().unwrap();
         Self::evict_expired(&mut conns, self.ttl);
@@ -206,10 +216,11 @@ impl ConnectionPool {
     }
 
     /// Remove a dead connection from the pool.
-    pub fn remove(&self, host: &str, port: u16) {
+    pub fn remove(&self, host: &str, port: u16, proxy_index: Option<usize>) {
         let key = PoolKey {
             host: host.to_string(),
             port,
+            proxy_index,
         };
         self.connections.lock().unwrap().remove(&key);
     }
