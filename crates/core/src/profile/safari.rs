@@ -69,24 +69,76 @@ impl Safari {
         }
     }
 
+    // ========== Safari iOS ==========
+    pub fn v16_0_ios() -> BrowserProfile {
+        BrowserProfile {
+            tls: safari_tls(),
+            http2: safari_http2_ios(),
+            quic: None,
+            headers: safari_headers_ios_pre_sec_fetch("16.0", "16_0"),
+        }
+    }
+
+    pub fn v17_0_ios() -> BrowserProfile {
+        BrowserProfile {
+            tls: safari_tls(),
+            http2: safari_http2_ios(),
+            quic: None,
+            headers: safari_headers_ios_v17("17.0", "17_0"),
+        }
+    }
+
+    pub fn v18_0_ios() -> BrowserProfile {
+        BrowserProfile {
+            tls: safari_tls(),
+            http2: safari_http2_ios(),
+            quic: None,
+            headers: safari_headers_ios_v18("18.0", "18_0"),
+        }
+    }
+
+    pub fn v18_3_ios() -> BrowserProfile {
+        BrowserProfile {
+            tls: safari_tls(),
+            http2: safari_http2_ios(),
+            quic: None,
+            headers: safari_headers_ios_v18("18.3", "18_3"),
+        }
+    }
+
     /// Latest Safari profile (currently v18.3 on macOS).
     pub fn latest() -> BrowserProfile {
         Self::v18_3_macos()
     }
 
+    /// Latest Safari Mobile profile (currently v18.3 on iOS).
+    pub fn latest_ios() -> BrowserProfile {
+        Self::v18_3_ios()
+    }
+
     /// Resolve a Safari profile by version string and optional OS.
-    /// Safari is macOS-only. Version can be "156", "15.6", "183", "18.3", etc.
+    /// Version can be "156", "15.6", "183", "18.3", etc.
     pub(super) fn resolve(version: &str, os: Option<&str>) -> Result<BrowserProfile, String> {
-        if matches!(os, Some("windows") | Some("linux")) {
-            return Err("Safari is only available on macOS".to_string());
+        if matches!(os, Some("windows") | Some("linux") | Some("android")) {
+            return Err("Safari is only available on macOS and iOS".to_string());
         }
-        match version {
-            "" => Ok(Self::latest()),
-            "156" | "15.6" => Ok(Self::v15_6_macos()),
-            "160" | "16.0" => Ok(Self::v16_0_macos()),
-            "170" | "17.0" => Ok(Self::v17_0_macos()),
-            "180" | "18.0" => Ok(Self::v18_0_macos()),
-            "183" | "18.3" => Ok(Self::v18_3_macos()),
+        let ios = matches!(os, Some("ios"));
+        match (version, ios) {
+            ("", false) => Ok(Self::latest()),
+            ("", true) => Ok(Self::latest_ios()),
+            ("156" | "15.6", false) => Ok(Self::v15_6_macos()),
+            ("160" | "16.0", false) => Ok(Self::v16_0_macos()),
+            ("160" | "16.0", true) => Ok(Self::v16_0_ios()),
+            ("170" | "17.0", false) => Ok(Self::v17_0_macos()),
+            ("170" | "17.0", true) => Ok(Self::v17_0_ios()),
+            ("180" | "18.0", false) => Ok(Self::v18_0_macos()),
+            ("180" | "18.0", true) => Ok(Self::v18_0_ios()),
+            ("183" | "18.3", false) => Ok(Self::v18_3_macos()),
+            ("183" | "18.3", true) => Ok(Self::v18_3_ios()),
+            ("156" | "15.6", true) => Err(
+                "Safari 15.6 iOS is not available. Supported iOS: 16.0, 17.0, 18.0, 18.3"
+                    .to_string(),
+            ),
             _ => Err(format!(
                 "Unsupported Safari version: '{version}'. Supported: 15.6, 16.0, 17.0, 18.0, 18.3"
             )),
@@ -208,11 +260,27 @@ fn safari_http2_2mb() -> Http2Config {
     }
 }
 
+// iOS Safari: 2MB initial window on all iOS versions.
+// Verified via wreq-util safari_ios_16_5, safari_ios_17_2, safari_ios_18_1_1.
+fn safari_http2_ios() -> Http2Config {
+    Http2Config {
+        initial_window_size: 2097152,
+        ..safari_http2_4mb()
+    }
+}
+
 // ========== Headers ==========
 
 fn safari_ua(version: &str) -> String {
     format!(
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/{version} Safari/605.1.15"
+    )
+}
+
+/// iOS Safari User-Agent. `os_version` uses underscore format (e.g. "18_3").
+fn safari_ua_ios(version: &str, os_version: &str) -> String {
+    format!(
+        "Mozilla/5.0 (iPhone; CPU iPhone OS {os_version} like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/{version} Mobile/15E148 Safari/604.1"
     )
 }
 
@@ -253,6 +321,57 @@ fn safari_headers_v18(version: &str) -> Vec<(String, String)> {
     vec![
         ("sec-fetch-dest".into(), "document".into()),
         ("user-agent".into(), safari_ua(version)),
+        ("upgrade-insecure-requests".into(), "1".into()),
+        (
+            "accept".into(),
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8".into(),
+        ),
+        ("sec-fetch-site".into(), "none".into()),
+        ("sec-fetch-mode".into(), "navigate".into()),
+        ("accept-language".into(), "en-US,en;q=0.9".into()),
+        ("priority".into(), "u=0, i".into()),
+        ("accept-encoding".into(), "gzip, deflate, br".into()),
+    ]
+}
+
+// ========== iOS Safari headers ==========
+
+/// iOS Safari 16.0: No Sec-Fetch headers, no Priority header.
+fn safari_headers_ios_pre_sec_fetch(version: &str, os_version: &str) -> Vec<(String, String)> {
+    vec![
+        ("user-agent".into(), safari_ua_ios(version, os_version)),
+        (
+            "accept".into(),
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8".into(),
+        ),
+        ("upgrade-insecure-requests".into(), "1".into()),
+        ("accept-language".into(), "en-US,en;q=0.9".into()),
+        ("accept-encoding".into(), "gzip, deflate, br".into()),
+    ]
+}
+
+/// iOS Safari 17.0: Sec-Fetch headers, no Priority.
+fn safari_headers_ios_v17(version: &str, os_version: &str) -> Vec<(String, String)> {
+    vec![
+        ("sec-fetch-dest".into(), "document".into()),
+        ("user-agent".into(), safari_ua_ios(version, os_version)),
+        ("upgrade-insecure-requests".into(), "1".into()),
+        (
+            "accept".into(),
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8".into(),
+        ),
+        ("sec-fetch-site".into(), "none".into()),
+        ("sec-fetch-mode".into(), "navigate".into()),
+        ("accept-language".into(), "en-US,en;q=0.9".into()),
+        ("accept-encoding".into(), "gzip, deflate, br".into()),
+    ]
+}
+
+/// iOS Safari 18.0+: Sec-Fetch + Priority.
+fn safari_headers_ios_v18(version: &str, os_version: &str) -> Vec<(String, String)> {
+    vec![
+        ("sec-fetch-dest".into(), "document".into()),
+        ("user-agent".into(), safari_ua_ios(version, os_version)),
         ("upgrade-insecure-requests".into(), "1".into()),
         (
             "accept".into(),

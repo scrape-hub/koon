@@ -87,15 +87,16 @@ All fingerprints are tested against hashes captured from real browsers. 10 integ
 
 ## Supported browsers
 
-| Browser | Versions | Profiles |
-|---------|----------|----------|
-| Chrome | 131 - 145 | 15 |
-| Firefox | 135 - 147 | 13 |
-| Safari | 15.6 - 18.3 | 11 |
-| Edge | 131 - 145 | 15 |
-| Opera | 124 - 127 | 4 |
+| Browser | Versions | Platforms | Profiles |
+|---------|----------|-----------|----------|
+| Chrome | 131 – 145 | Windows, macOS, Linux, Android | 60 |
+| Firefox | 135 – 147 | Windows, macOS, Linux, Android | 52 |
+| Safari | 15.6 – 18.3 | macOS, iOS | 15 |
+| Edge | 131 – 145 | Windows, macOS | 30 |
+| Opera | 124 – 127 | Windows, macOS, Linux | 12 |
+| OkHttp | 4, 5 | Android | 2 |
 
-Each profile includes Windows, macOS, and Linux user-agent variants (`chrome145-macos`, `firefox147-linux`, etc.). **134 profiles** total.
+**171 profiles** total. Desktop profiles include OS variants (`chrome145-macos`, `firefox147-linux`). Mobile profiles use `chrome-mobile145`, `safari-mobile183`, `firefox-mobile147`. OkHttp profiles use `okhttp4`, `okhttp5`.
 
 ## Features
 
@@ -122,6 +123,17 @@ Each profile includes Windows, macOS, and Linux user-agent variants (`chrome145-
 - **Custom redirect hook** — `onRedirect(status, url, headers) → bool` to intercept and stop redirects (captcha detection, geo-block handling)
 - **Automatic retry** — retry on transport errors (connection, TLS, timeout) with automatic proxy rotation
 - **Request hooks** — `onRequest`/`onResponse` observe-only callbacks for logging and debugging
+- **Proxy rotation** — round-robin over multiple proxy URLs, proxy-aware connection pool
+- **Bandwidth tracking** — per-request `bytesSent`/`bytesReceived` + cumulative counters on the client
+- **String body** — `post()`, `put()`, `patch()` accept strings directly (no `Buffer.from()` needed)
+- **User-Agent property** — `client.userAgent` exposes the profile UA for Puppeteer/Playwright sync
+- **Geo-locale matching** — `locale: 'fr-FR'` generates Accept-Language matching proxy geography
+- **Structured errors** — machine-readable `[CODE]` prefix on all errors (TIMEOUT, TLS_ERROR, PROXY_ERROR, etc.)
+- **Connection info** — `resp.tlsResumed` and `resp.connectionReused` for debugging connection behavior
+- **CONNECT proxy headers** — custom headers in the HTTP CONNECT tunnel (session IDs, geo-targeting for Bright Data, Oxylabs)
+- **IPv4/IPv6 toggle** — restrict DNS resolution to a specific IP version
+- **Mobile browser profiles** — Chrome Mobile (Android), Firefox Mobile (Android), Safari Mobile (iOS) with platform-specific TLS/H2 fingerprints
+- **OkHttp profiles** — Android app impersonation (OkHttp 4.x, 5.x) with Conscrypt TLS stack fingerprint
 
 ## Usage
 
@@ -138,6 +150,11 @@ const client = new Koon({
   localAddress: '192.168.1.100',      // optional: bind to specific IP
   randomize: true,                     // optional: slight fingerprint jitter
   retries: 3,                          // optional: retry on transport errors
+  locale: 'fr-FR',                     // optional: Accept-Language for proxy geo
+  ipVersion: 4,                        // optional: force IPv4 DNS resolution
+  proxyHeaders: {                      // optional: CONNECT tunnel headers
+    'X-Session-Id': 'abc123',
+  },
   onRedirect: (status, url, headers) => {
     return !url.includes('captcha');   // stop if redirect goes to captcha
   },
@@ -145,11 +162,14 @@ const client = new Koon({
 
 // HTTP methods
 const r1 = await client.get('https://httpbin.org/get');
-const r2 = await client.post('https://httpbin.org/post', Buffer.from('data'));
-const r3 = await client.put('https://httpbin.org/put', Buffer.from('data'));
+const r2 = await client.post('https://httpbin.org/post', 'data');
+const r3 = await client.put('https://httpbin.org/put', 'data');
 const r4 = await client.delete('https://httpbin.org/delete');
-const r5 = await client.patch('https://httpbin.org/patch', Buffer.from('data'));
+const r5 = await client.patch('https://httpbin.org/patch', 'data');
 const r6 = await client.head('https://httpbin.org/get');
+
+// User-Agent (useful for Puppeteer/Playwright sync)
+console.log(client.userAgent);  // "Mozilla/5.0 ... Chrome/145..."
 
 // Response
 console.log(r1.ok);                             // true (status 2xx)
@@ -158,6 +178,9 @@ console.log(r1.text());                         // body as UTF-8 string
 console.log(r1.json());                         // parsed JSON
 console.log(r1.header('content-type'));          // case-insensitive header lookup
 console.log(r1.body);                           // raw Buffer
+console.log(r1.tlsResumed);                     // TLS session was reused
+console.log(r1.connectionReused);               // pooled connection was reused
+console.log(r1.bytesSent, r1.bytesReceived);    // bandwidth per request
 
 // Per-request headers and timeout
 const r7 = await client.get('https://httpbin.org/get', {
@@ -217,23 +240,32 @@ async def main():
         headers={"X-Custom": "value"},
         local_address="192.168.1.100",
         retries=3,  # retry on transport errors
+        locale="fr-FR",  # Accept-Language for proxy geo
+        ip_version=4,  # force IPv4 DNS resolution
+        proxy_headers={"X-Session-Id": "abc123"},  # CONNECT tunnel headers
         on_redirect=lambda s, u, h: "captcha" not in u,  # stop on captcha redirect
     )
 
     # HTTP methods
     r = await client.get("https://httpbin.org/get")
-    r = await client.post("https://httpbin.org/post", b"data")
-    r = await client.put("https://httpbin.org/put", b"data")
+    r = await client.post("https://httpbin.org/post", "data")
+    r = await client.put("https://httpbin.org/put", "data")
     r = await client.delete("https://httpbin.org/delete")
-    r = await client.patch("https://httpbin.org/patch", b"data")
+    r = await client.patch("https://httpbin.org/patch", "data")
     r = await client.head("https://httpbin.org/get")
 
+    # User-Agent (useful for Puppeteer/Playwright sync)
+    print(client.user_agent)  # "Mozilla/5.0 ... Chrome/145..."
+
     # Response
-    print(r.ok)        # True (status 2xx)
-    print(r.status)    # 200
-    print(r.text)      # body as string (property)
-    print(r.json())    # parsed JSON
+    print(r.ok)                 # True (status 2xx)
+    print(r.status)             # 200
+    print(r.text)               # body as string (property)
+    print(r.json())             # parsed JSON
     print(r.header("content-type"))  # case-insensitive header lookup
+    print(r.tls_resumed)        # TLS session was reused
+    print(r.connection_reused)  # pooled connection was reused
+    print(r.bytes_sent, r.bytes_received)  # bandwidth per request
 
     # Per-request headers and timeout
     r = await client.get("https://httpbin.org/get",
@@ -286,14 +318,15 @@ library(koon)
 # Browser profile + options
 client <- Koon$new("chrome145", proxy = "socks5://127.0.0.1:1080", randomize = TRUE,
                     local_address = "192.168.1.100", retries = 3L,
+                    locale = "fr-FR", ip_version = 4L,
                     on_redirect = function(status, url, headers) !grepl("captcha", url))
 
 # HTTP methods (synchronous)
 resp <- client$get("https://httpbin.org/get")
-resp <- client$post("https://httpbin.org/post", charToRaw("data"))
-resp <- client$put("https://httpbin.org/put", charToRaw("data"))
+resp <- client$post("https://httpbin.org/post", "data")
+resp <- client$put("https://httpbin.org/put", "data")
 resp <- client$delete("https://httpbin.org/delete")
-resp <- client$patch("https://httpbin.org/patch", charToRaw("data"))
+resp <- client$patch("https://httpbin.org/patch", "data")
 resp <- client$head("https://httpbin.org/get")
 
 # Response
@@ -398,6 +431,8 @@ async fn main() -> Result<(), koon_core::Error> {
     let profile = BrowserProfile::resolve("chrome145")?;
     let client = Client::builder(profile)
         .max_retries(3)
+        .locale("fr-FR")
+        .ip_version(koon_core::IpVersion::V4)
         .on_redirect(|status, url, _headers| {
             !url.contains("captcha")
         })

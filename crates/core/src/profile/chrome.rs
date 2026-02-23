@@ -179,9 +179,19 @@ impl Chrome {
         chrome_profile(145, Os::Linux)
     }
 
+    // ========== Chrome Mobile (Android) — latest ==========
+    pub fn v145_android() -> BrowserProfile {
+        chrome_profile(145, Os::Android)
+    }
+
     /// Latest Chrome profile (currently v145 on Windows).
     pub fn latest() -> BrowserProfile {
         Self::v145_windows()
+    }
+
+    /// Latest Chrome Mobile profile (currently v145 on Android).
+    pub fn latest_android() -> BrowserProfile {
+        Self::v145_android()
     }
 
     /// Resolve a Chrome profile by version number and optional OS.
@@ -194,6 +204,7 @@ impl Chrome {
         let os = match os {
             Some("macos") => Os::MacOS,
             Some("linux") => Os::Linux,
+            Some("android") => Os::Android,
             _ => Os::Windows,
         };
         Ok(chrome_profile(major, os))
@@ -209,13 +220,19 @@ enum Os {
     Windows,
     MacOS,
     Linux,
+    Android,
 }
 
 // ========== Internal: Profile generator ==========
 
 fn chrome_profile(major: u32, os: Os) -> BrowserProfile {
+    let mut tls = chrome_tls(major);
+    if matches!(os, Os::Android) {
+        // Android Chrome: no post-quantum ML-KEM curve
+        tls.curves = Cow::Borrowed(CHROME_CURVES_ANDROID);
+    }
     BrowserProfile {
-        tls: chrome_tls(major),
+        tls,
         http2: chrome_http2(),
         quic: Some(chrome_quic()),
         headers: chrome_headers(major, os),
@@ -252,6 +269,10 @@ rsa_pss_rsae_sha512:\
 rsa_pkcs1_sha512";
 
 const CHROME_CURVES: &str = "X25519MLKEM768:X25519:P-256:P-384";
+
+// Android Chrome does NOT include X25519MLKEM768 (post-quantum not shipped on Android).
+// Verified via curl-impersonate Chrome 131 Android signature.
+const CHROME_CURVES_ANDROID: &str = "X25519:P-256:P-384";
 
 // Shared TLS config — only ALPS codepoint differs between Chrome ≤134 and ≥135.
 fn chrome_tls(major: u32) -> TlsConfig {
@@ -357,6 +378,10 @@ fn chrome_headers(major: u32, os: Os) -> Vec<(String, String)> {
         Os::Windows => ("\"Windows\"", format!("Chrome/{ver}.0.0.0 Safari/537.36")),
         Os::MacOS => ("\"macOS\"", format!("Chrome/{ver}.0.0.0 Safari/537.36")),
         Os::Linux => ("\"Linux\"", format!("Chrome/{ver}.0.0.0 Safari/537.36")),
+        Os::Android => (
+            "\"Android\"",
+            format!("Chrome/{ver}.0.0.0 Mobile Safari/537.36"),
+        ),
     };
 
     let user_agent = chromium_ua(platform, &ua_suffix);
@@ -370,9 +395,13 @@ pub(super) fn chromium_headers(
     platform: &str,
     user_agent: String,
 ) -> Vec<(String, String)> {
+    let mobile = platform == "\"Android\"";
     vec![
         ("sec-ch-ua".into(), sec_ch_ua),
-        ("sec-ch-ua-mobile".into(), "?0".into()),
+        (
+            "sec-ch-ua-mobile".into(),
+            if mobile { "?1" } else { "?0" }.into(),
+        ),
         ("sec-ch-ua-platform".into(), platform.into()),
         ("upgrade-insecure-requests".into(), "1".into()),
         ("user-agent".into(), user_agent),
@@ -393,6 +422,7 @@ pub(super) fn chromium_ua(platform: &str, suffix: &str) -> String {
         "\"Windows\"" => "Windows NT 10.0; Win64; x64",
         "\"macOS\"" => "Macintosh; Intel Mac OS X 10_15_7",
         "\"Linux\"" => "X11; Linux x86_64",
+        "\"Android\"" => "Linux; Android 10; K",
         _ => "Windows NT 10.0; Win64; x64",
     };
     format!("Mozilla/5.0 ({os_part}) AppleWebKit/537.36 (KHTML, like Gecko) {suffix}")

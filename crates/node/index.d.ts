@@ -1,4 +1,5 @@
 export type Browser =
+  // Desktop browsers
   | 'chrome' | 'chrome131' | 'chrome132' | 'chrome133' | 'chrome134' | 'chrome135'
   | 'chrome136' | 'chrome137' | 'chrome138' | 'chrome139' | 'chrome140'
   | 'chrome141' | 'chrome142' | 'chrome143' | 'chrome144' | 'chrome145'
@@ -11,8 +12,15 @@ export type Browser =
   | 'edge136' | 'edge137' | 'edge138' | 'edge139' | 'edge140'
   | 'edge141' | 'edge142' | 'edge143' | 'edge144' | 'edge145'
   | 'opera' | 'opera124' | 'opera125' | 'opera126' | 'opera127'
+  // Mobile browsers
+  | 'chrome-mobile' | `chrome-mobile${number}`
+  | 'safari-mobile' | `safari-mobile${string}`
+  | 'firefox-mobile' | `firefox-mobile${number}`
+  // OkHttp (Android apps)
+  | 'okhttp' | 'okhttp4' | 'okhttp5'
   // OS-specific variants
-  | `${string}-windows` | `${string}-macos` | `${string}-linux`;
+  | `${string}-windows` | `${string}-macos` | `${string}-linux`
+  | `${string}-android` | `${string}-ios`;
 
 export interface KoonOptions {
   /** Browser profile to impersonate. */

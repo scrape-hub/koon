@@ -22,7 +22,7 @@ pub use client::{
 pub use cookie::{Cookie, CookieJar, SameSite};
 pub use error::Error;
 pub use multipart::{Multipart, Part};
-pub use profile::{BrowserProfile, Chrome, Edge, Firefox, Opera, Safari};
+pub use profile::{BrowserProfile, Chrome, Edge, Firefox, OkHttp, Opera, Safari};
 pub use proxy::{CertAuthority, HeaderMode, ProxyRotation, ProxyServer, ProxyServerConfig};
 pub use quic::QuicConfig;
 pub use streaming::StreamingResponse;

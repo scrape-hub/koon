@@ -156,9 +156,19 @@ impl Firefox {
         firefox_profile(147, Os::Linux)
     }
 
+    // ========== Firefox Mobile (Android) — latest ==========
+    pub fn v147_android() -> BrowserProfile {
+        firefox_profile(147, Os::Android)
+    }
+
     /// Latest Firefox profile (currently v147 on Windows).
     pub fn latest() -> BrowserProfile {
         Self::v147_windows()
+    }
+
+    /// Latest Firefox Mobile profile (currently v147 on Android).
+    pub fn latest_android() -> BrowserProfile {
+        Self::v147_android()
     }
 
     /// Resolve a Firefox profile by version number and optional OS.
@@ -171,6 +181,7 @@ impl Firefox {
         let os = match os {
             Some("macos") => Os::MacOS,
             Some("linux") => Os::Linux,
+            Some("android") => Os::Android,
             _ => Os::Windows,
         };
         Ok(firefox_profile(major, os))
@@ -186,11 +197,20 @@ enum Os {
     Windows,
     MacOS,
     Linux,
+    Android,
 }
 
 // ========== Internal: Profile generator ==========
 
 fn firefox_profile(major: u32, os: Os) -> BrowserProfile {
+    if matches!(os, Os::Android) {
+        return BrowserProfile {
+            tls: firefox_tls_android(),
+            http2: firefox_http2_android(),
+            quic: Some(firefox_quic()),
+            headers: firefox_headers(major, os),
+        };
+    }
     BrowserProfile {
         tls: firefox_tls(),
         http2: firefox_http2(),
@@ -238,6 +258,10 @@ rsa_pkcs1_sha1";
 
 const FIREFOX_CURVES: &str = "X25519MLKEM768:X25519:P-256:P-384:P-521:ffdhe2048:ffdhe3072";
 
+// Firefox Android: no post-quantum ML-KEM (uses NSS without MLKEM support).
+// Verified via wreq-util FirefoxAndroid135 profile.
+const FIREFOX_CURVES_ANDROID: &str = "X25519:P-256:P-384:P-521:ffdhe2048:ffdhe3072";
+
 const FIREFOX_DC_SIGALGS: &str =
     "ecdsa_secp256r1_sha256:ecdsa_secp384r1_sha384:ecdsa_secp521r1_sha512:ecdsa_sha1";
 
@@ -272,6 +296,17 @@ fn firefox_tls() -> TlsConfig {
     }
 }
 
+// Firefox Android TLS: no ML-KEM, key_shares_limit=2, no SCT.
+// Verified via wreq-util FirefoxAndroid135 (tls_options!(5)).
+fn firefox_tls_android() -> TlsConfig {
+    TlsConfig {
+        curves: Cow::Borrowed(FIREFOX_CURVES_ANDROID),
+        key_shares_limit: Some(2),
+        signed_cert_timestamps: false,
+        ..firefox_tls()
+    }
+}
+
 // ========== HTTP/2 ==========
 
 fn firefox_http2() -> Http2Config {
@@ -301,6 +336,16 @@ fn firefox_http2() -> Http2Config {
         priorities: Vec::new(),
         no_rfc7540_priorities: None,
         enable_connect_protocol: None,
+    }
+}
+
+// Firefox Android H2: smaller header_table_size (4096) and initial_window_size (32768).
+// Verified via wreq-util FirefoxAndroid135 (http2_options!(4)).
+fn firefox_http2_android() -> Http2Config {
+    Http2Config {
+        header_table_size: Some(4096),
+        initial_window_size: 32768,
+        ..firefox_http2()
     }
 }
 
@@ -341,6 +386,9 @@ fn firefox_headers(major: u32, os: Os) -> Vec<(String, String)> {
         ),
         Os::Linux => {
             format!("Mozilla/5.0 (X11; Linux x86_64; rv:{ver}.0) Gecko/20100101 Firefox/{ver}.0")
+        }
+        Os::Android => {
+            format!("Mozilla/5.0 (Android 14; Mobile; rv:{ver}.0) Gecko/{ver}.0 Firefox/{ver}.0")
         }
     };
 

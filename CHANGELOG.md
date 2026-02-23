@@ -5,6 +5,22 @@ All notable changes to koon will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Mobile Browser Profiles**: Chrome Mobile (Android), Firefox Mobile (Android), Safari Mobile (iOS) with platform-specific fingerprints
+  - Chrome Mobile: same TLS as desktop except no X25519MLKEM768 (post-quantum) curve. `sec-ch-ua-mobile: ?1`, `sec-ch-ua-platform: "Android"`
+  - Firefox Mobile: different TLS (no ML-KEM, `key_shares_limit=2`, no SCT) and different H2 (`header_table_size=4096`, `initial_window_size=32768`)
+  - Safari Mobile (iOS): same TLS as desktop, but 2MB H2 initial window on all versions (desktop varies by version)
+  - Node.js: `new Koon({ browser: 'chrome-mobile145' })`, `'safari-mobile183'`, `'firefox-mobile147'`
+  - Python: `Koon("chrome-mobile145")`, `Koon("safari-mobile183")`, `Koon("firefox-mobile147")`
+  - R: `Koon$new("chrome-mobile145")`, `Koon$new("safari-mobile183")`
+  - Also available via OS suffix: `chrome145-android`, `safari183-ios`, `firefox147-android`
+- **OkHttp Profiles**: Android app impersonation (OkHttp 4.x, 5.x)
+  - Completely different TLS: no GREASE, no ALPS, no ECH, no extension permutation, no cert compression
+  - Curves: X25519, P-256, P-384 (no ML-KEM, no P-521, no ffdhe)
+  - H2: pseudo order m,p,a,s, EnableConnectProtocol + NoRfc7540Priorities in SETTINGS, stream dep weight 255 exclusive
+  - Minimal headers: Accept, Accept-Language, User-Agent, Accept-Encoding (no sec-ch-ua, no sec-fetch-*)
+  - Node.js: `new Koon({ browser: 'okhttp5' })`
+  - Python: `Koon("okhttp5")`
+  - R: `Koon$new("okhttp5")`
 - **CONNECT Proxy Headers**: Custom headers in the HTTP CONNECT tunnel request
   - Useful for proxy session IDs, geo-targeting, or authentication (Bright Data, Oxylabs, etc.)
   - Node.js: `new Koon({ proxyHeaders: { 'X-Session-ID': 'abc' } })`

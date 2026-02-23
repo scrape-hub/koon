@@ -30,7 +30,8 @@ class Koon:
         """Create a new Koon HTTP client with browser fingerprint impersonation.
 
         Args:
-            browser: Browser to impersonate (e.g. "chrome", "firefox147", "safari18.3").
+            browser: Browser to impersonate (e.g. "chrome", "firefox147", "safari18.3",
+                "chrome-mobile145", "safari-mobile183", "firefox-mobile147", "okhttp5").
             profile_json: Custom browser profile as JSON string (overrides ``browser``).
             proxy: Proxy URL (``http://``, ``https://``, ``socks5://``).
             timeout: Request timeout in milliseconds.
