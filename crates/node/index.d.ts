@@ -1,26 +1,23 @@
+/**
+ * Browser profile name for impersonation.
+ *
+ * Format: `{browser}{version?}{-os?}`
+ * - browser: chrome, firefox, safari, edge, opera, chrome-mobile, firefox-mobile, safari-mobile, okhttp
+ * - version: optional number (e.g. 145, 148)
+ * - os: optional suffix with dash (e.g. -windows, -macos, -linux, -android, -ios)
+ *
+ * Examples: "chrome", "chrome145", "chrome145-macos", "firefox148-linux",
+ *           "chrome-mobile145", "firefox-mobile148", "safari-mobile183", "okhttp5"
+ */
 export type Browser =
-  // Desktop browsers
-  | 'chrome' | 'chrome131' | 'chrome132' | 'chrome133' | 'chrome134' | 'chrome135'
-  | 'chrome136' | 'chrome137' | 'chrome138' | 'chrome139' | 'chrome140'
-  | 'chrome141' | 'chrome142' | 'chrome143' | 'chrome144' | 'chrome145'
-  | 'firefox' | 'firefox135' | 'firefox136' | 'firefox137' | 'firefox138'
-  | 'firefox139' | 'firefox140' | 'firefox141' | 'firefox142' | 'firefox143'
-  | 'firefox144' | 'firefox145' | 'firefox146' | 'firefox147' | 'firefox148'
-  | 'safari' | 'safari156' | 'safari160' | 'safari161' | 'safari170' | 'safari171'
-  | 'safari172' | 'safari173' | 'safari180' | 'safari181' | 'safari182' | 'safari183'
-  | 'edge' | 'edge131' | 'edge132' | 'edge133' | 'edge134' | 'edge135'
-  | 'edge136' | 'edge137' | 'edge138' | 'edge139' | 'edge140'
-  | 'edge141' | 'edge142' | 'edge143' | 'edge144' | 'edge145'
-  | 'opera' | 'opera124' | 'opera125' | 'opera126' | 'opera127'
+  // Desktop browsers (common values for autocomplete)
+  | 'chrome' | 'firefox' | 'safari' | 'edge' | 'opera'
   // Mobile browsers
-  | 'chrome-mobile' | `chrome-mobile${number}`
-  | 'safari-mobile' | `safari-mobile${string}`
-  | 'firefox-mobile' | `firefox-mobile${number}`
+  | 'chrome-mobile' | 'firefox-mobile' | 'safari-mobile'
   // OkHttp (Android apps)
   | 'okhttp' | 'okhttp4' | 'okhttp5'
-  // OS-specific variants
-  | `${string}-windows` | `${string}-macos` | `${string}-linux`
-  | `${string}-android` | `${string}-ios`;
+  // Any other valid profile string (version, OS suffix, etc.)
+  | (string & {});
 
 export interface KoonOptions {
   /** Browser profile to impersonate. */

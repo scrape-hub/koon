@@ -96,7 +96,50 @@ All fingerprints are tested against hashes captured from real browsers. 10 integ
 | Opera | 124 – 127 | Windows, macOS, Linux | 12 |
 | OkHttp | 4, 5 | Android | 2 |
 
-**175 profiles** total. Desktop profiles include OS variants (`chrome145-macos`, `firefox147-linux`). Mobile profiles use `chrome-mobile145`, `safari-mobile183`, `firefox-mobile147`. OkHttp profiles use `okhttp4`, `okhttp5`.
+**175 profiles** total. Use `koon --list-browsers` (CLI) to see all profiles.
+
+### Profile naming
+
+Format: `{browser}{version}{-os}` — all parts except the browser name are optional. Both `chrome145-macos` and `chrome145macos` work (dash is optional).
+
+**Desktop browsers with OS variants:**
+
+| Browser | Default (Windows) | Windows | macOS | Linux |
+|---------|-------------------|---------|-------|-------|
+| Chrome 145 | `chrome145` | `chrome145-windows` | `chrome145-macos` | `chrome145-linux` |
+| Firefox 148 | `firefox148` | `firefox148-windows` | `firefox148-macos` | `firefox148-linux` |
+| Edge 145 | `edge145` | `edge145-windows` | `edge145-macos` | — |
+| Opera 127 | `opera127` | `opera127-windows` | `opera127-macos` | `opera127-linux` |
+| Safari 18.3 | `safari183` | — | `safari183-macos` | — |
+
+**Mobile browsers:**
+
+| Browser | Example |
+|---------|---------|
+| Chrome Mobile (Android) | `chrome-mobile145` |
+| Firefox Mobile (Android) | `firefox-mobile148` |
+| Safari Mobile (iOS) | `safari-mobile183` |
+
+**OkHttp (Android apps):**
+
+| Version | Name |
+|---------|------|
+| OkHttp 4 | `okhttp4` |
+| OkHttp 5 | `okhttp5` |
+
+**Shorthand** — omit the version to get the latest:
+
+| Shorthand | Resolves to |
+|-----------|-------------|
+| `chrome` | Chrome 145 Windows |
+| `firefox` | Firefox 148 Windows |
+| `safari` | Safari 18.3 macOS |
+| `edge` | Edge 145 Windows |
+| `opera` | Opera 127 Windows |
+| `chrome-mobile` | Chrome Mobile 145 Android |
+| `firefox-mobile` | Firefox Mobile 148 Android |
+| `safari-mobile` | Safari Mobile 18.3 iOS |
+| `okhttp` | OkHttp 5 |
 
 ## Features
 

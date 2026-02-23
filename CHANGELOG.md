@@ -2,6 +2,12 @@
 
 All notable changes to koon will be documented in this file.
 
+## [0.5.3] - 2026-02-24
+
+### Changed
+- **Node.js: `browser` option accepts any string** — replaced the fixed enum with a free-form string that is passed directly to the core's `BrowserProfile::resolve()`. All naming formats now work: `firefox148-macos`, `firefox148macos`, `chrome-mobile145`, `chromemobile145`, etc. New profiles added in the core are automatically available without updating the bindings. Removes ~490 lines of boilerplate.
+- **README: expanded browser profile documentation** — added per-category tables with concrete examples for every browser-OS combination, shorthand names, and a note that the dash separator is optional.
+
 ## [0.5.2] - 2026-02-23
 
 ### Added
