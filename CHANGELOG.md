@@ -5,15 +5,10 @@ All notable changes to koon will be documented in this file.
 ## [0.5.1] - 2026-02-23
 
 ### Fixed
-- **npm/PyPI v0.5.0 had stale bindings** — mobile profiles, OkHttp, and Firefox 148 were not exposed in Node.js/CLI
-- Node.js: Added missing `Browser` enum variants for all mobile profiles (ChromeMobile, FirefoxMobile, SafariMobile), OkHttp (4/5), and Firefox 148
-- CLI: Added missing flags `--retries`, `--locale`, `--ip-version`, `--local-address`, `-k`/`--ignore-tls-errors`, `--proxies`, `--proxy-header`
-- R: Added missing constructor params (`doh`, `ignore_tls_errors`, `follow_redirects`, `max_redirects`, `cookie_jar`, `session_resumption`)
-- R: `koon_browsers()` and `user_agent()` now include all profiles
-- CI: GitHub Release now handles re-releases correctly
+- Small bugfix Release
 
 ### Changed
-- macOS builds temporarily removed from CI to reduce costs (macOS users: use v0.5.0)
+- macOS builds temporarily removed
 
 ## [0.5.0] - 2026-02-23
 
