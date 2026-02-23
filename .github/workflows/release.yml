@@ -29,13 +29,13 @@ jobs:
             cli-file: koon-x86_64-unknown-linux-gnu
             lib-prefix: lib
             lib-ext: so
-          - target: aarch64-unknown-linux-gnu
-            runner: ubuntu-latest
-            node-file: koon.linux-arm64-gnu.node
-            cli-file: koon-aarch64-unknown-linux-gnu
-            lib-prefix: lib
-            lib-ext: so
-          # macOS builds commented out to save CI minutes — re-enable when needed
+          # ARM64 + macOS builds commented out to save CI minutes — re-enable when needed
+          # - target: aarch64-unknown-linux-gnu
+          #   runner: ubuntu-latest
+          #   node-file: koon.linux-arm64-gnu.node
+          #   cli-file: koon-aarch64-unknown-linux-gnu
+          #   lib-prefix: lib
+          #   lib-ext: so
           # - target: x86_64-apple-darwin
           #   runner: macos-15
           #   node-file: koon.darwin-x64.node
@@ -157,8 +157,8 @@ jobs:
             runner: windows-latest
           - target: x86_64-unknown-linux-gnu
             runner: ubuntu-latest
-          - target: aarch64-unknown-linux-gnu
-            runner: ubuntu-latest
+          # - target: aarch64-unknown-linux-gnu
+          #   runner: ubuntu-latest
           # macOS builds commented out to save CI minutes — re-enable when needed
           # - target: x86_64-apple-darwin
           #   runner: macos-15
