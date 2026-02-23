@@ -15,6 +15,8 @@
 #'   \item{body}{Raw vector with response body bytes}
 #'   \item{text}{Character response body as UTF-8 string}
 #'   \item{headers}{Data frame with \code{name} and \code{value} columns}
+#'   \item{bytes_sent}{Numeric, approximate bytes sent (headers + body)}
+#'   \item{bytes_received}{Numeric, approximate bytes received (headers + body, pre-decompression)}
 #' }
 #'
 #' @examples
