@@ -16,7 +16,7 @@ pub mod tls;
 pub mod websocket;
 
 pub use client::{
-    Client, ClientBuilder, HttpResponse, OnRedirectHook, OnRequestHook, OnResponseHook,
+    Client, ClientBuilder, HttpResponse, IpVersion, OnRedirectHook, OnRequestHook, OnResponseHook,
     SessionExport,
 };
 pub use cookie::{Cookie, CookieJar, SameSite};

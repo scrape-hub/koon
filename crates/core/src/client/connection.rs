@@ -4,26 +4,41 @@ use std::pin::Pin;
 use tokio::net::{TcpSocket, TcpStream};
 use tokio_boring2::SslStream;
 
+use super::IpVersion;
 use crate::error::Error;
 use crate::proxy::ProxyKind;
 use crate::tls::TlsConnector;
 
 impl super::Client {
+    /// Resolve DNS and filter by IP version preference.
+    async fn resolve_addr(
+        &self,
+        addr: impl tokio::net::ToSocketAddrs,
+    ) -> Result<SocketAddr, Error> {
+        let mut addrs = tokio::net::lookup_host(addr).await.map_err(Error::Io)?;
+
+        match self.ip_version {
+            Some(IpVersion::V4) => addrs.find(|a| a.is_ipv4()),
+            Some(IpVersion::V6) => addrs.find(|a| a.is_ipv6()),
+            None => addrs.next(),
+        }
+        .ok_or_else(|| {
+            Error::Io(std::io::Error::new(
+                std::io::ErrorKind::AddrNotAvailable,
+                match self.ip_version {
+                    Some(IpVersion::V4) => "No IPv4 address found",
+                    Some(IpVersion::V6) => "No IPv6 address found",
+                    None => "DNS resolution returned no addresses",
+                },
+            ))
+        })
+    }
+
     /// Connect a TCP stream, optionally binding to a local address.
     async fn tcp_connect(&self, addr: impl tokio::net::ToSocketAddrs) -> Result<TcpStream, Error> {
         match self.local_address {
             Some(local_ip) => {
-                // Resolve the remote address first
-                let remote: SocketAddr = tokio::net::lookup_host(addr)
-                    .await
-                    .map_err(Error::Io)?
-                    .next()
-                    .ok_or_else(|| {
-                        Error::Io(std::io::Error::new(
-                            std::io::ErrorKind::AddrNotAvailable,
-                            "DNS resolution returned no addresses",
-                        ))
-                    })?;
+                let remote = self.resolve_addr(addr).await?;
 
                 let socket = match local_ip {
                     IpAddr::V4(_) => TcpSocket::new_v4(),
@@ -36,7 +51,14 @@ impl super::Client {
                     .map_err(Error::Io)?;
                 socket.connect(remote).await.map_err(Error::Io)
             }
-            None => TcpStream::connect(addr).await.map_err(Error::Io),
+            None => {
+                if self.ip_version.is_some() {
+                    let remote = self.resolve_addr(addr).await?;
+                    TcpStream::connect(remote).await.map_err(Error::Io)
+                } else {
+                    TcpStream::connect(addr).await.map_err(Error::Io)
+                }
+            }
         }
     }
 
@@ -62,7 +84,18 @@ impl super::Client {
                 if let Some(resolver) = &self.doh_resolver {
                     // Resolve via DoH, then connect to IP directly
                     let addrs = resolver.resolve(host).await?;
-                    let addr = SocketAddr::new(addrs[0], port);
+                    let addr = match self.ip_version {
+                        Some(IpVersion::V4) => addrs.iter().find(|a| a.is_ipv4()),
+                        Some(IpVersion::V6) => addrs.iter().find(|a| a.is_ipv6()),
+                        None => addrs.first(),
+                    }
+                    .ok_or_else(|| {
+                        Error::Io(std::io::Error::new(
+                            std::io::ErrorKind::AddrNotAvailable,
+                            "No matching IP address from DoH",
+                        ))
+                    })?;
+                    let addr = SocketAddr::new(*addr, port);
                     let stream = tokio::time::timeout(self.timeout, self.tcp_connect(addr))
                         .await
                         .map_err(|_| Error::Timeout)?;
@@ -124,12 +157,15 @@ impl super::Client {
                     .await
                     .map_err(|e| Error::Proxy(format!("Failed to connect to proxy: {e}")))?;
 
-                // Send CONNECT request
-                let connect_req = format!(
+                // Send CONNECT request with optional proxy headers
+                let mut connect_req = format!(
                     "CONNECT {target_host}:{target_port} HTTP/1.1\r\n\
-                     Host: {target_host}:{target_port}\r\n\
-                     \r\n"
+                     Host: {target_host}:{target_port}\r\n"
                 );
+                for (name, value) in &self.proxy_headers {
+                    connect_req.push_str(&format!("{name}: {value}\r\n"));
+                }
+                connect_req.push_str("\r\n");
 
                 use tokio::io::{AsyncReadExt, AsyncWriteExt};
                 let mut stream = stream;

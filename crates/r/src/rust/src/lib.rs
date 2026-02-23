@@ -118,8 +118,11 @@ impl Koon {
     /// @param retries Number of automatic retries on transport errors (default: 0).
     /// @param locale Optional locale string (e.g. "fr-FR", "de") to generate a matching
     ///   Accept-Language header for the proxy's geography.
+    /// @param proxy_headers Optional named character vector of headers for the HTTP CONNECT
+    ///   tunnel request (e.g. session IDs, geo-targeting for Bright Data / Oxylabs).
+    /// @param ip_version Optional integer (4 or 6) to restrict DNS resolution to IPv4 or IPv6.
     /// @return A new Koon client object.
-    fn new(browser: &str, proxy: Nullable<String>, proxies: Robj, timeout: Nullable<i32>, randomize: Nullable<bool>, headers: Robj, local_address: Nullable<String>, on_request: Robj, on_response: Robj, on_redirect: Robj, retries: Nullable<i32>, locale: Nullable<String>) -> Self {
+    fn new(browser: &str, proxy: Nullable<String>, proxies: Robj, timeout: Nullable<i32>, randomize: Nullable<bool>, headers: Robj, local_address: Nullable<String>, on_request: Robj, on_response: Robj, on_redirect: Robj, retries: Nullable<i32>, locale: Nullable<String>, proxy_headers: Robj, ip_version: Nullable<i32>) -> Self {
         let mut profile = BrowserProfile::resolve(browser)
             .unwrap_or_else(|e| panic!("Unknown browser profile '{}': {}", browser, e));
 
@@ -144,6 +147,20 @@ impl Koon {
 
         if let NotNull(ref loc) = locale {
             builder = builder.locale(loc);
+        }
+
+        let proxy_hdrs = parse_headers_robj(&proxy_headers);
+        if !proxy_hdrs.is_empty() {
+            builder = builder.proxy_headers(proxy_hdrs);
+        }
+
+        if let NotNull(ip_ver) = ip_version {
+            let version = match ip_ver {
+                4 => koon_core::IpVersion::V4,
+                6 => koon_core::IpVersion::V6,
+                other => panic!("Invalid ip_version: {other}. Must be 4 or 6."),
+            };
+            builder = builder.ip_version(version);
         }
 
         if !proxies.is_null() {

@@ -481,6 +481,15 @@ pub struct KoonOptions {
     /// Overrides the profile's Accept-Language to match proxy geography.
     /// Examples: "fr-FR", "de", "ja-JP", "en-US".
     pub locale: Option<String>,
+
+    /// Custom headers to send in the HTTP CONNECT tunnel request.
+    /// Useful for proxy session IDs, geo-targeting, or authentication.
+    #[napi(ts_type = "Record<string, string>")]
+    pub proxy_headers: Option<std::collections::HashMap<String, String>>,
+
+    /// Restrict DNS resolution to IPv4 (4) or IPv6 (6).
+    /// Useful when residential proxies only support IPv4.
+    pub ip_version: Option<u32>,
 }
 
 /// Per-request options (headers, timeout).
@@ -772,6 +781,27 @@ impl Koon {
 
         if let Some(ref locale) = opts.locale {
             builder = builder.locale(locale);
+        }
+
+        if let Some(ref proxy_hdrs) = opts.proxy_headers {
+            let hdrs: Vec<(String, String)> = proxy_hdrs
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+            builder = builder.proxy_headers(hdrs);
+        }
+
+        if let Some(ip_ver) = opts.ip_version {
+            let version = match ip_ver {
+                4 => koon_core::IpVersion::V4,
+                6 => koon_core::IpVersion::V6,
+                other => {
+                    return Err(napi::Error::from_reason(format!(
+                        "Invalid ipVersion: {other}. Must be 4 or 6."
+                    )));
+                }
+            };
+            builder = builder.ip_version(version);
         }
 
         // Wire up hooks: JsFunction → ThreadsafeFunction → Arc closure

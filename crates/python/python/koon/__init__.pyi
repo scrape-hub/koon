@@ -24,6 +24,8 @@ class Koon:
         on_redirect: Optional[Callable[[int, str, Sequence[Tuple[str, str]]], bool]] = None,
         retries: int = 0,
         locale: Optional[str] = None,
+        proxy_headers: Optional[dict[str, str]] = None,
+        ip_version: Optional[int] = None,
     ) -> None:
         """Create a new Koon HTTP client with browser fingerprint impersonation.
 
@@ -46,6 +48,8 @@ class Koon:
             on_redirect: Hook called before following a redirect. Receives (status, url, headers). Return False to stop redirecting.
             retries: Number of automatic retries on transport errors. With proxy rotation, each retry uses the next proxy.
             locale: Locale for Accept-Language header generation (e.g. ``"fr-FR"``, ``"de"``).
+            proxy_headers: Custom headers for the HTTP CONNECT tunnel request (e.g. session IDs, geo-targeting).
+            ip_version: Restrict DNS resolution to IPv4 (4) or IPv6 (6).
         """
         ...
     @property

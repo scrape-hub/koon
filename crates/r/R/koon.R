@@ -70,6 +70,14 @@
 #' # Locale matching (Accept-Language for proxy geography)
 #' client <- Koon$new("chrome145", locale = "fr-FR")
 #'
+#' # CONNECT proxy headers (session IDs, geo-targeting)
+#' client <- Koon$new("chrome145",
+#'   proxy = "http://proxy.example.com:8080",
+#'   proxy_headers = c(`X-Session-ID` = "abc123"))
+#'
+#' # Force IPv4 only (useful with residential proxies)
+#' client <- Koon$new("chrome145", ip_version = 4L)
+#'
 #' # Connection debugging
 #' resp <- client$get("https://httpbin.org/get")
 #' resp$tls_resumed        # FALSE on first request

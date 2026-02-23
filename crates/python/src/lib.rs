@@ -91,7 +91,7 @@ impl Koon {
     ///     local_address: Bind outgoing connections to a specific local IP address.
     ///     proxies: List of proxy URLs for round-robin rotation (takes priority over `proxy`).
     #[new]
-    #[pyo3(signature = (browser="chrome", *, profile_json=None, proxy=None, proxies=None, timeout=30000, ignore_tls_errors=false, headers=None, follow_redirects=true, max_redirects=10, cookie_jar=true, randomize=false, session_resumption=true, doh=None, local_address=None, on_request=None, on_response=None, on_redirect=None, retries=0, locale=None))]
+    #[pyo3(signature = (browser="chrome", *, profile_json=None, proxy=None, proxies=None, timeout=30000, ignore_tls_errors=false, headers=None, follow_redirects=true, max_redirects=10, cookie_jar=true, randomize=false, session_resumption=true, doh=None, local_address=None, on_request=None, on_response=None, on_redirect=None, retries=0, locale=None, proxy_headers=None, ip_version=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         browser: &str,
@@ -113,6 +113,8 @@ impl Koon {
         on_redirect: Option<Py<PyAny>>,
         retries: u32,
         locale: Option<&str>,
+        proxy_headers: Option<HashMap<String, String>>,
+        ip_version: Option<u32>,
     ) -> PyResult<Self> {
         let mut profile = if let Some(json) = profile_json {
             BrowserProfile::from_json(json).map_err(to_py_err)?
@@ -214,6 +216,24 @@ impl Koon {
 
         if let Some(locale) = locale {
             builder = builder.locale(locale);
+        }
+
+        if let Some(proxy_hdrs) = proxy_headers {
+            let hdrs: Vec<(String, String)> = proxy_hdrs.into_iter().collect();
+            builder = builder.proxy_headers(hdrs);
+        }
+
+        if let Some(ip_ver) = ip_version {
+            let version = match ip_ver {
+                4 => koon_core::IpVersion::V4,
+                6 => koon_core::IpVersion::V6,
+                other => {
+                    return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                        "Invalid ip_version: {other}. Must be 4 or 6."
+                    )));
+                }
+            };
+            builder = builder.ip_version(version);
         }
 
         let client = builder.build().map_err(to_koon_err)?;

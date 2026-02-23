@@ -53,6 +53,10 @@ export interface KoonOptions {
   retries?: number;
   /** Locale for Accept-Language header generation. Overrides the profile's Accept-Language to match proxy geography. Examples: "fr-FR", "de", "ja-JP". */
   locale?: string;
+  /** Custom headers to send in the HTTP CONNECT tunnel request. Useful for proxy session IDs, geo-targeting, or authentication. */
+  proxyHeaders?: Record<string, string>;
+  /** Restrict DNS resolution to IPv4 (4) or IPv6 (6). Useful when residential proxies only support IPv4. */
+  ipVersion?: 4 | 6;
 }
 
 export class KoonResponse {

@@ -60,8 +60,19 @@ pub struct ClientBuilder {
     on_redirect: Option<OnRedirectHook>,
     max_retries: u32,
     locale: Option<String>,
+    proxy_headers: Vec<(String, String)>,
+    ip_version: Option<IpVersion>,
     #[cfg(feature = "doh")]
     doh_resolver: Option<DohResolver>,
+}
+
+/// IP version preference for DNS resolution.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IpVersion {
+    /// Only use IPv4 addresses.
+    V4,
+    /// Only use IPv6 addresses.
+    V6,
 }
 
 impl ClientBuilder {
@@ -82,6 +93,8 @@ impl ClientBuilder {
             on_redirect: None,
             max_retries: 0,
             locale: None,
+            proxy_headers: Vec::new(),
+            ip_version: None,
             #[cfg(feature = "doh")]
             doh_resolver: None,
         }
@@ -203,6 +216,30 @@ impl ClientBuilder {
         self
     }
 
+    /// Set custom headers to send in the HTTP CONNECT tunnel request.
+    ///
+    /// These are sent to the proxy server during the CONNECT handshake,
+    /// not to the target server. Useful for proxy authentication, session
+    /// IDs, or geo-targeting headers required by providers like Bright Data
+    /// or Oxylabs.
+    pub fn proxy_headers(mut self, headers: Vec<(String, String)>) -> Self {
+        self.proxy_headers = headers;
+        self
+    }
+
+    /// Restrict DNS resolution to a specific IP version.
+    ///
+    /// - `IpVersion::V4`: Only connect via IPv4 addresses.
+    /// - `IpVersion::V6`: Only connect via IPv6 addresses.
+    ///
+    /// Useful when residential proxies only support IPv4 or when a target
+    /// behaves differently on IPv4 vs IPv6. Does not affect proxy connections
+    /// (only the direct target resolution).
+    pub fn ip_version(mut self, version: IpVersion) -> Self {
+        self.ip_version = Some(version);
+        self
+    }
+
     /// Set a DNS-over-HTTPS resolver for encrypted DNS and ECH support.
     #[cfg(feature = "doh")]
     pub fn doh(mut self, resolver: DohResolver) -> Self {
@@ -260,6 +297,8 @@ impl ClientBuilder {
             on_response: self.on_response,
             on_redirect: self.on_redirect,
             max_retries: self.max_retries,
+            proxy_headers: self.proxy_headers,
+            ip_version: self.ip_version,
             #[cfg(feature = "doh")]
             doh_resolver: self.doh_resolver,
             pool: ConnectionPool::new(256, Duration::from_secs(90)),
@@ -291,6 +330,8 @@ pub struct Client {
     on_response: Option<OnResponseHook>,
     on_redirect: Option<OnRedirectHook>,
     max_retries: u32,
+    proxy_headers: Vec<(String, String)>,
+    pub(super) ip_version: Option<IpVersion>,
     #[cfg(feature = "doh")]
     doh_resolver: Option<DohResolver>,
     pool: ConnectionPool,

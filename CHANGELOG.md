@@ -5,6 +5,18 @@ All notable changes to koon will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **CONNECT Proxy Headers**: Custom headers in the HTTP CONNECT tunnel request
+  - Useful for proxy session IDs, geo-targeting, or authentication (Bright Data, Oxylabs, etc.)
+  - Node.js: `new Koon({ proxyHeaders: { 'X-Session-ID': 'abc' } })`
+  - Python: `Koon("chrome", proxy_headers={"X-Session-ID": "abc"})`
+  - R: `Koon$new("chrome", proxy_headers = c("X-Session-ID" = "abc"))`
+  - Rust: `Client::builder(profile).proxy_headers(vec![("X-Session-ID".into(), "abc".into())]).build()`
+- **IPv4/IPv6 Toggle**: Restrict DNS resolution to a specific IP version
+  - Useful when residential proxies only support IPv4 or when IPv6 causes issues
+  - Node.js: `new Koon({ ipVersion: 4 })`
+  - Python: `Koon("chrome", ip_version=4)`
+  - R: `Koon$new("chrome", ip_version = 4L)`
+  - Rust: `Client::builder(profile).ip_version(IpVersion::V4).build()`
 - **String Body**: `post()`, `put()`, `patch()`, `request()` now accept `string | Buffer` (Node.js), `str | bytes` (Python), or `character | raw` (R)
   - No more `Buffer.from('...')` needed — pass strings directly
   - Node.js: `client.post(url, '{"key":"value"}')`
