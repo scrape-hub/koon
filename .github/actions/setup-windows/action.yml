@@ -1,0 +1,43 @@
+name: Setup Windows MSVC
+description: Configure VS Enterprise vcvars64, linker override, and NASM for boring2/BoringSSL builds
+
+runs:
+  using: composite
+  steps:
+    - name: Setup MSVC Enterprise
+      shell: pwsh
+      run: |
+        $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
+          -products 'Microsoft.VisualStudio.Product.Enterprise' `
+          -latest -property installationPath
+        if (-not $vsPath) { throw "VS Enterprise not found" }
+
+        $before = @{}
+        cmd /c set 2>$null | ForEach-Object {
+          if ($_ -match '^([^=]+)=(.*)$') { $before[$matches[1]] = $matches[2] }
+        }
+
+        $vcvars = Join-Path $vsPath 'VC\Auxiliary\Build\vcvars64.bat'
+        cmd /c "`"$vcvars`" >nul 2>&1 && set" | ForEach-Object {
+          if ($_ -match '^([^=]+)=(.*)$') {
+            $k = $matches[1]; $v = $matches[2]
+            if ($before[$k] -ne $v) {
+              if ($k -ieq 'Path') {
+                $v.Split(';') | Where-Object { $_ -and -not $before['Path'].Contains($_) } |
+                  ForEach-Object { echo $_ >> $env:GITHUB_PATH }
+              } else {
+                echo "$k=$v" >> $env:GITHUB_ENV
+              }
+            }
+          }
+        }
+
+        $toolsDir = Get-ChildItem "$vsPath\VC\Tools\MSVC" -Directory |
+          Sort-Object Name -Descending | Select-Object -First 1
+        $linker = Join-Path $toolsDir.FullName 'bin\Hostx64\x64\link.exe'
+        echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$linker" >> $env:GITHUB_ENV
+        Write-Host "VS Enterprise: $vsPath"
+        Write-Host "Linker: $linker (exists: $(Test-Path $linker))"
+
+    - name: Install NASM
+      uses: ilammy/setup-nasm@v1
