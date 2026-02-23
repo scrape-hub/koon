@@ -1,8 +1,7 @@
 use clap::{Parser, Subcommand};
 use http::Method;
 use koon_core::{
-    BrowserProfile, Client, HeaderMode, IpVersion, ProxyServer, ProxyServerConfig,
-    dns::DohResolver,
+    BrowserProfile, Client, HeaderMode, IpVersion, ProxyServer, ProxyServerConfig, dns::DohResolver,
 };
 use serde_json::json;
 use std::collections::HashMap;
