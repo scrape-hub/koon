@@ -90,13 +90,13 @@ All fingerprints are tested against hashes captured from real browsers. 10 integ
 | Browser | Versions | Platforms | Profiles |
 |---------|----------|-----------|----------|
 | Chrome | 131 – 145 | Windows, macOS, Linux, Android | 60 |
-| Firefox | 135 – 147 | Windows, macOS, Linux, Android | 52 |
+| Firefox | 135 – 148 | Windows, macOS, Linux, Android | 56 |
 | Safari | 15.6 – 18.3 | macOS, iOS | 15 |
 | Edge | 131 – 145 | Windows, macOS | 30 |
 | Opera | 124 – 127 | Windows, macOS, Linux | 12 |
 | OkHttp | 4, 5 | Android | 2 |
 
-**171 profiles** total. Desktop profiles include OS variants (`chrome145-macos`, `firefox147-linux`). Mobile profiles use `chrome-mobile145`, `safari-mobile183`, `firefox-mobile147`. OkHttp profiles use `okhttp4`, `okhttp5`.
+**175 profiles** total. Desktop profiles include OS variants (`chrome145-macos`, `firefox147-linux`). Mobile profiles use `chrome-mobile145`, `safari-mobile183`, `firefox-mobile147`. OkHttp profiles use `okhttp4`, `okhttp5`.
 
 ## Features
 

@@ -226,13 +226,11 @@ enum Os {
 // ========== Internal: Profile generator ==========
 
 fn chrome_profile(major: u32, os: Os) -> BrowserProfile {
-    let mut tls = chrome_tls(major);
-    if matches!(os, Os::Android) {
-        // Android Chrome: no post-quantum ML-KEM curve
-        tls.curves = Cow::Borrowed(CHROME_CURVES_ANDROID);
-    }
+    // Chrome Mobile (Android) has IDENTICAL TLS/H2 fingerprint to desktop Chrome.
+    // Verified via real Pixel 7 Pro capture (Chrome 145, Android 16):
+    // JA4, JA3N, Akamai hash all match desktop exactly (including X25519MLKEM768).
     BrowserProfile {
-        tls,
+        tls: chrome_tls(major),
         http2: chrome_http2(),
         quic: Some(chrome_quic()),
         headers: chrome_headers(major, os),
@@ -269,10 +267,6 @@ rsa_pss_rsae_sha512:\
 rsa_pkcs1_sha512";
 
 const CHROME_CURVES: &str = "X25519MLKEM768:X25519:P-256:P-384";
-
-// Android Chrome does NOT include X25519MLKEM768 (post-quantum not shipped on Android).
-// Verified via curl-impersonate Chrome 131 Android signature.
-const CHROME_CURVES_ANDROID: &str = "X25519:P-256:P-384";
 
 // Shared TLS config — only ALPS codepoint differs between Chrome ≤134 and ≥135.
 fn chrome_tls(major: u32) -> TlsConfig {

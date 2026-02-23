@@ -6,9 +6,10 @@ All notable changes to koon will be documented in this file.
 
 ### Added
 - **Mobile Browser Profiles**: Chrome Mobile (Android), Firefox Mobile (Android), Safari Mobile (iOS) with platform-specific fingerprints
-  - Chrome Mobile: same TLS as desktop except no X25519MLKEM768 (post-quantum) curve. `sec-ch-ua-mobile: ?1`, `sec-ch-ua-platform: "Android"`
-  - Firefox Mobile: different TLS (no ML-KEM, `key_shares_limit=2`, no SCT) and different H2 (`header_table_size=4096`, `initial_window_size=32768`)
+  - Chrome Mobile: IDENTICAL TLS/H2 to desktop (verified via real Pixel 7 Pro capture, Chrome 145 Android 16). Only UA and `sec-ch-ua-mobile: ?1` differ.
+  - Firefox Mobile: same TLS curves as desktop (ML-KEM present), no SCT extension, different H2 (`header_table_size=4096`, `initial_window_size=32768`). Verified via real Pixel 7 Pro capture (Firefox 148, Android 16).
   - Safari Mobile (iOS): same TLS as desktop, but 2MB H2 initial window on all versions (desktop varies by version)
+- **Firefox 148**: Added Firefox 148 profiles (desktop + Android). Verified via real device capture.
   - Node.js: `new Koon({ browser: 'chrome-mobile145' })`, `'safari-mobile183'`, `'firefox-mobile147'`
   - Python: `Koon("chrome-mobile145")`, `Koon("safari-mobile183")`, `Koon("firefox-mobile147")`
   - R: `Koon$new("chrome-mobile145")`, `Koon$new("safari-mobile183")`

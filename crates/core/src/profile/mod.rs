@@ -94,7 +94,7 @@ impl BrowserProfile {
                 } else {
                     let major: u32 = rest.parse().map_err(|_| {
                         format!(
-                            "Invalid Firefox Mobile version: '{rest}'. Expected a number (135-147)"
+                            "Invalid Firefox Mobile version: '{rest}'. Expected a number (135-148)"
                         )
                     })?;
                     Firefox::resolve(major, Some("android"))
@@ -125,7 +125,7 @@ impl BrowserProfile {
                 Firefox::resolve(Firefox::LATEST_VERSION, os)
             } else {
                 let major: u32 = rest.parse().map_err(|_| {
-                    format!("Invalid Firefox version: '{rest}'. Expected a number (135-147)")
+                    format!("Invalid Firefox version: '{rest}'. Expected a number (135-148)")
                 })?;
                 Firefox::resolve(major, os)
             };

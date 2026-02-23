@@ -5,7 +5,7 @@ export type Browser =
   | 'chrome141' | 'chrome142' | 'chrome143' | 'chrome144' | 'chrome145'
   | 'firefox' | 'firefox135' | 'firefox136' | 'firefox137' | 'firefox138'
   | 'firefox139' | 'firefox140' | 'firefox141' | 'firefox142' | 'firefox143'
-  | 'firefox144' | 'firefox145' | 'firefox146' | 'firefox147'
+  | 'firefox144' | 'firefox145' | 'firefox146' | 'firefox147' | 'firefox148'
   | 'safari' | 'safari156' | 'safari160' | 'safari161' | 'safari170' | 'safari171'
   | 'safari172' | 'safari173' | 'safari180' | 'safari181' | 'safari182' | 'safari183'
   | 'edge' | 'edge131' | 'edge132' | 'edge133' | 'edge134' | 'edge135'

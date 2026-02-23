@@ -8,7 +8,7 @@ use super::BrowserProfile;
 
 /// Firefox browser profile factory.
 ///
-/// Supports Firefox 135–147. TLS/H2/QUIC fingerprint is identical across all
+/// Supports Firefox 135–148. TLS/H2/QUIC fingerprint is identical across all
 /// versions (verified via capture tool). Only User-Agent differs per version.
 pub struct Firefox;
 
@@ -156,26 +156,37 @@ impl Firefox {
         firefox_profile(147, Os::Linux)
     }
 
+    // ========== Firefox 148 ==========
+    pub fn v148_windows() -> BrowserProfile {
+        firefox_profile(148, Os::Windows)
+    }
+    pub fn v148_macos() -> BrowserProfile {
+        firefox_profile(148, Os::MacOS)
+    }
+    pub fn v148_linux() -> BrowserProfile {
+        firefox_profile(148, Os::Linux)
+    }
+
     // ========== Firefox Mobile (Android) — latest ==========
-    pub fn v147_android() -> BrowserProfile {
-        firefox_profile(147, Os::Android)
+    pub fn v148_android() -> BrowserProfile {
+        firefox_profile(148, Os::Android)
     }
 
-    /// Latest Firefox profile (currently v147 on Windows).
+    /// Latest Firefox profile (currently v148 on Windows).
     pub fn latest() -> BrowserProfile {
-        Self::v147_windows()
+        Self::v148_windows()
     }
 
-    /// Latest Firefox Mobile profile (currently v147 on Android).
+    /// Latest Firefox Mobile profile (currently v148 on Android).
     pub fn latest_android() -> BrowserProfile {
-        Self::v147_android()
+        Self::v148_android()
     }
 
     /// Resolve a Firefox profile by version number and optional OS.
     pub(super) fn resolve(major: u32, os: Option<&str>) -> Result<BrowserProfile, String> {
-        if !(135..=147).contains(&major) {
+        if !(135..=148).contains(&major) {
             return Err(format!(
-                "Unsupported Firefox version: {major}. Supported: 135-147"
+                "Unsupported Firefox version: {major}. Supported: 135-148"
             ));
         }
         let os = match os {
@@ -187,7 +198,7 @@ impl Firefox {
         Ok(firefox_profile(major, os))
     }
 
-    pub(super) const LATEST_VERSION: u32 = 147;
+    pub(super) const LATEST_VERSION: u32 = 148;
 }
 
 // ========== Internal: OS enum ==========
@@ -258,10 +269,6 @@ rsa_pkcs1_sha1";
 
 const FIREFOX_CURVES: &str = "X25519MLKEM768:X25519:P-256:P-384:P-521:ffdhe2048:ffdhe3072";
 
-// Firefox Android: no post-quantum ML-KEM (uses NSS without MLKEM support).
-// Verified via wreq-util FirefoxAndroid135 profile.
-const FIREFOX_CURVES_ANDROID: &str = "X25519:P-256:P-384:P-521:ffdhe2048:ffdhe3072";
-
 const FIREFOX_DC_SIGALGS: &str =
     "ecdsa_secp256r1_sha256:ecdsa_secp384r1_sha384:ecdsa_secp521r1_sha512:ecdsa_sha1";
 
@@ -296,12 +303,13 @@ fn firefox_tls() -> TlsConfig {
     }
 }
 
-// Firefox Android TLS: no ML-KEM, key_shares_limit=2, no SCT.
-// Verified via wreq-util FirefoxAndroid135 (tls_options!(5)).
+// Firefox Android TLS: same as desktop but no SCT (signed_cert_timestamps).
+// Verified via real Pixel 7 Pro capture (Firefox 148, Android 16):
+// - Curves include X25519MLKEM768 (JA3 group 4588 present)
+// - Extension count: 16 (no 0x0012/SCT vs desktop's 17)
+// - H2 Akamai hash matches: 1:4096;2:0;4:32768;5:16384|12517377|0|m,p,a,s
 fn firefox_tls_android() -> TlsConfig {
     TlsConfig {
-        curves: Cow::Borrowed(FIREFOX_CURVES_ANDROID),
-        key_shares_limit: Some(2),
         signed_cert_timestamps: false,
         ..firefox_tls()
     }
