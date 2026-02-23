@@ -1,7 +1,8 @@
 use clap::{Parser, Subcommand};
 use http::Method;
 use koon_core::{
-    BrowserProfile, Client, HeaderMode, ProxyServer, ProxyServerConfig, dns::DohResolver,
+    BrowserProfile, Client, HeaderMode, IpVersion, ProxyServer, ProxyServerConfig,
+    dns::DohResolver,
 };
 use serde_json::json;
 use std::collections::HashMap;
@@ -56,6 +57,14 @@ struct Cli {
     #[arg(long)]
     proxy: Option<String>,
 
+    /// Multiple proxy URLs for round-robin rotation (comma-separated)
+    #[arg(long, value_delimiter = ',')]
+    proxies: Vec<String>,
+
+    /// Custom header for HTTP CONNECT tunnel (repeatable, format: "Key: Value")
+    #[arg(long = "proxy-header")]
+    proxy_headers: Vec<String>,
+
     /// Request timeout in seconds
     #[arg(long, default_value = "30")]
     timeout: u32,
@@ -99,6 +108,26 @@ struct Cli {
     /// Disable TLS session resumption
     #[arg(long)]
     no_session_resumption: bool,
+
+    /// Skip TLS certificate verification
+    #[arg(long = "ignore-tls-errors", short = 'k')]
+    ignore_tls_errors: bool,
+
+    /// Number of automatic retries on transport errors
+    #[arg(long, default_value = "0")]
+    retries: u32,
+
+    /// Locale for Accept-Language header (e.g. "de-DE", "fr-FR", "ja-JP")
+    #[arg(long)]
+    locale: Option<String>,
+
+    /// Bind outgoing connections to a specific local IP address
+    #[arg(long = "local-address")]
+    local_address: Option<String>,
+
+    /// Restrict DNS to IPv4 (4) or IPv6 (6)
+    #[arg(long = "ip-version")]
+    ip_version: Option<u32>,
 
     /// Save session (cookies + TLS) to file after request
     #[arg(long = "save-session")]
@@ -166,13 +195,25 @@ fn list_browsers() {
         println!("    chrome{v}           Chrome {v} (Windows/macOS/Linux)");
     }
 
-    println!("\n  Firefox (135-147):");
-    println!("    firefox             Firefox latest (147, Windows)");
-    for v in 135..=147 {
+    println!("\n  Chrome Mobile (131-145, Android):");
+    println!("    chrome-mobile       Chrome Mobile latest (145, Android)");
+    for v in 131..=145 {
+        println!("    chrome-mobile{v}    Chrome Mobile {v} (Android)");
+    }
+
+    println!("\n  Firefox (135-148):");
+    println!("    firefox             Firefox latest (148, Windows)");
+    for v in 135..=148 {
         println!("    firefox{v}          Firefox {v} (Windows/macOS/Linux)");
     }
 
-    println!("\n  Safari (15.6-18.3, macOS only):");
+    println!("\n  Firefox Mobile (135-148, Android):");
+    println!("    firefox-mobile      Firefox Mobile latest (148, Android)");
+    for v in 135..=148 {
+        println!("    firefox-mobile{v}   Firefox Mobile {v} (Android)");
+    }
+
+    println!("\n  Safari (15.6-18.3, macOS):");
     println!("    safari              Safari latest (18.3)");
     for (tag, ver) in [
         ("156", "15.6"),
@@ -182,6 +223,18 @@ fn list_browsers() {
         ("183", "18.3"),
     ] {
         println!("    safari{tag}           Safari {ver} (macOS)");
+    }
+
+    println!("\n  Safari Mobile (15.6-18.3, iOS):");
+    println!("    safari-mobile       Safari Mobile latest (18.3, iOS)");
+    for (tag, ver) in [
+        ("156", "15.6"),
+        ("160", "16.0"),
+        ("170", "17.0"),
+        ("180", "18.0"),
+        ("183", "18.3"),
+    ] {
+        println!("    safari-mobile{tag}    Safari Mobile {ver} (iOS)");
     }
 
     println!("\n  Edge (131-145, Windows/macOS):");
@@ -196,7 +249,12 @@ fn list_browsers() {
         println!("    opera{v}            Opera {v} (Windows/macOS/Linux)");
     }
 
-    println!("\n  OS suffix: -windows, -macos, -linux (e.g. chrome145-macos)");
+    println!("\n  OkHttp (Android apps):");
+    println!("    okhttp              OkHttp latest (5)");
+    println!("    okhttp4             OkHttp 4.12.0");
+    println!("    okhttp5             OkHttp 5.0-alpha2");
+
+    println!("\n  OS suffix: -windows, -macos, -linux, -android, -ios (e.g. chrome145-macos)");
 }
 
 fn parse_headers(raw: &[String]) -> Vec<(String, String)> {
@@ -226,6 +284,9 @@ async fn run_request(cli: Cli) -> Result<(), String> {
     if cli.randomize {
         profile.randomize();
     }
+    if cli.ignore_tls_errors {
+        profile.tls.danger_accept_invalid_certs = true;
+    }
 
     let mut builder = Client::builder(profile);
     builder = builder
@@ -233,12 +294,23 @@ async fn run_request(cli: Cli) -> Result<(), String> {
         .max_redirects(cli.max_redirects)
         .timeout(Duration::from_secs(cli.timeout as u64))
         .cookie_jar(!cli.no_cookies)
-        .session_resumption(!cli.no_session_resumption);
+        .session_resumption(!cli.no_session_resumption)
+        .max_retries(cli.retries);
 
-    if let Some(ref proxy_url) = cli.proxy {
+    if !cli.proxies.is_empty() {
+        let refs: Vec<&str> = cli.proxies.iter().map(|s| s.as_str()).collect();
+        builder = builder
+            .proxies(&refs)
+            .map_err(|e| format!("Invalid proxies: {e}"))?;
+    } else if let Some(ref proxy_url) = cli.proxy {
         builder = builder
             .proxy(proxy_url)
             .map_err(|e| format!("Invalid proxy: {e}"))?;
+    }
+
+    let proxy_hdrs = parse_headers(&cli.proxy_headers);
+    if !proxy_hdrs.is_empty() {
+        builder = builder.proxy_headers(proxy_hdrs);
     }
 
     let extra_headers = parse_headers(&cli.headers);
@@ -257,6 +329,26 @@ async fn run_request(cli: Cli) -> Result<(), String> {
             }
         };
         builder = builder.doh(resolver.map_err(|e| format!("DoH init failed: {e}"))?);
+    }
+
+    if let Some(ref locale) = cli.locale {
+        builder = builder.locale(locale);
+    }
+
+    if let Some(ref addr_str) = cli.local_address {
+        let addr: std::net::IpAddr = addr_str
+            .parse()
+            .map_err(|e| format!("Invalid local-address '{addr_str}': {e}"))?;
+        builder = builder.local_address(addr);
+    }
+
+    if let Some(ip_ver) = cli.ip_version {
+        let version = match ip_ver {
+            4 => IpVersion::V4,
+            6 => IpVersion::V6,
+            other => return Err(format!("Invalid ip-version: {other}. Must be 4 or 6.")),
+        };
+        builder = builder.ip_version(version);
     }
 
     let client = builder
@@ -293,11 +385,28 @@ async fn run_request(cli: Cli) -> Result<(), String> {
 
     if cli.verbose {
         eprintln!("* {method} {url}");
-        if let Some(ref proxy_url) = cli.proxy {
+        if !cli.proxies.is_empty() {
+            eprintln!("* Proxies: {} (round-robin)", cli.proxies.join(", "));
+        } else if let Some(ref proxy_url) = cli.proxy {
             eprintln!("* Proxy: {proxy_url}");
         }
         if let Some(ref doh) = cli.doh {
             eprintln!("* DoH: {doh}");
+        }
+        if let Some(ref locale) = cli.locale {
+            eprintln!("* Locale: {locale}");
+        }
+        if let Some(ref addr) = cli.local_address {
+            eprintln!("* Local address: {addr}");
+        }
+        if let Some(ip_ver) = cli.ip_version {
+            eprintln!("* IP version: IPv{ip_ver}");
+        }
+        if cli.retries > 0 {
+            eprintln!("* Retries: {}", cli.retries);
+        }
+        if cli.ignore_tls_errors {
+            eprintln!("* TLS verification: disabled");
         }
     }
 

@@ -2,7 +2,8 @@
 #'
 #' @description
 #' An HTTP client that impersonates real browser TLS, HTTP/2, and HTTP/3
-#' fingerprints. Supports Chrome, Firefox, Safari, Edge, and Opera profiles.
+#' fingerprints. Supports Chrome, Firefox, Safari, Edge, Opera, mobile browser,
+#' and OkHttp (Android app) profiles.
 #'
 #' @details
 #' All requests are synchronous (blocking). Cookies persist across requests.
@@ -77,6 +78,26 @@
 #'
 #' # Force IPv4 only (useful with residential proxies)
 #' client <- Koon$new("chrome145", ip_version = 4L)
+#'
+#' # Mobile browser profiles
+#' client <- Koon$new("chromemobile145")    # Chrome on Android
+#' client <- Koon$new("firefoxmobile148")   # Firefox on Android
+#' client <- Koon$new("safarimobile183")    # Safari on iOS
+#'
+#' # OkHttp (Android app impersonation)
+#' client <- Koon$new("okhttp4")
+#'
+#' # DNS-over-HTTPS with encrypted DNS
+#' client <- Koon$new("chrome145", doh = "cloudflare")
+#'
+#' # Disable TLS verification (dangerous, for testing only)
+#' client <- Koon$new("chrome145", ignore_tls_errors = TRUE)
+#'
+#' # Fine-grained control
+#' client <- Koon$new("chrome145",
+#'   follow_redirects = FALSE,
+#'   cookie_jar = FALSE,
+#'   session_resumption = FALSE)
 #'
 #' # Connection debugging
 #' resp <- client$get("https://httpbin.org/get")

@@ -1,4 +1,5 @@
 use extendr_api::prelude::*;
+use koon_core::dns::DohResolver;
 use koon_core::profile::BrowserProfile;
 use koon_core::Client;
 use std::sync::Arc;
@@ -103,7 +104,8 @@ impl Koon {
     /// Create a new Koon client.
     ///
     /// @param browser Character string specifying the browser profile
-    ///   (e.g. "chrome145", "firefox147", "safari183").
+    ///   (e.g. "chrome145", "firefox148", "safari183", "chromemobile145",
+    ///   "firefoxmobile148", "safarimobile183", "okhttp4").
     /// @param proxy Optional proxy URL (e.g. "socks5://127.0.0.1:1080").
     /// @param proxies Optional character vector of proxy URLs for round-robin rotation.
     ///   Takes priority over `proxy`.
@@ -121,13 +123,23 @@ impl Koon {
     /// @param proxy_headers Optional named character vector of headers for the HTTP CONNECT
     ///   tunnel request (e.g. session IDs, geo-targeting for Bright Data / Oxylabs).
     /// @param ip_version Optional integer (4 or 6) to restrict DNS resolution to IPv4 or IPv6.
+    /// @param follow_redirects Logical; follow redirects automatically (default: TRUE).
+    /// @param max_redirects Maximum number of redirects to follow (default: 10).
+    /// @param cookie_jar Logical; enable built-in cookie jar (default: TRUE).
+    /// @param session_resumption Logical; enable TLS session resumption (default: TRUE).
+    /// @param ignore_tls_errors Logical; skip TLS certificate verification (default: FALSE).
+    /// @param doh Optional DNS-over-HTTPS provider ("cloudflare" or "google").
     /// @return A new Koon client object.
-    fn new(browser: &str, proxy: Nullable<String>, proxies: Robj, timeout: Nullable<i32>, randomize: Nullable<bool>, headers: Robj, local_address: Nullable<String>, on_request: Robj, on_response: Robj, on_redirect: Robj, retries: Nullable<i32>, locale: Nullable<String>, proxy_headers: Robj, ip_version: Nullable<i32>) -> Self {
+    fn new(browser: &str, proxy: Nullable<String>, proxies: Robj, timeout: Nullable<i32>, randomize: Nullable<bool>, headers: Robj, local_address: Nullable<String>, on_request: Robj, on_response: Robj, on_redirect: Robj, retries: Nullable<i32>, locale: Nullable<String>, proxy_headers: Robj, ip_version: Nullable<i32>, follow_redirects: Nullable<bool>, max_redirects: Nullable<i32>, cookie_jar: Nullable<bool>, session_resumption: Nullable<bool>, ignore_tls_errors: Nullable<bool>, doh: Nullable<String>) -> Self {
         let mut profile = BrowserProfile::resolve(browser)
             .unwrap_or_else(|e| panic!("Unknown browser profile '{}': {}", browser, e));
 
         if let NotNull(true) = randomize {
             profile.randomize();
+        }
+
+        if let NotNull(true) = ignore_tls_errors {
+            profile.tls.danger_accept_invalid_certs = true;
         }
 
         let timeout_ms = match timeout {
@@ -137,13 +149,18 @@ impl Koon {
 
         let custom_headers = parse_headers_robj(&headers);
 
+        let do_follow = match follow_redirects { NotNull(v) => v, Null => true };
+        let max_redir = match max_redirects { NotNull(v) => v as u32, Null => 10 };
+        let do_cookies = match cookie_jar { NotNull(v) => v, Null => true };
+        let do_session = match session_resumption { NotNull(v) => v, Null => true };
+
         let mut builder = Client::builder(profile)
             .timeout(Duration::from_millis(timeout_ms))
             .headers(custom_headers)
-            .follow_redirects(true)
-            .max_redirects(10)
-            .cookie_jar(true)
-            .session_resumption(true);
+            .follow_redirects(do_follow)
+            .max_redirects(max_redir)
+            .cookie_jar(do_cookies)
+            .session_resumption(do_session);
 
         if let NotNull(ref loc) = locale {
             builder = builder.locale(loc);
@@ -205,6 +222,17 @@ impl Koon {
             if n > 0 {
                 builder = builder.max_retries(n as u32);
             }
+        }
+
+        if let NotNull(ref doh_provider) = doh {
+            let resolver = match doh_provider.as_str() {
+                "cloudflare" => DohResolver::with_cloudflare(),
+                "google" => DohResolver::with_google(),
+                other => panic!("Unknown doh provider: '{}'. Use 'cloudflare' or 'google'.", other),
+            };
+            builder = builder.doh(
+                resolver.unwrap_or_else(|e| panic!("Failed to create DoH resolver: {}", e))
+            );
         }
 
         let client = builder
@@ -403,13 +431,25 @@ fn koon_browsers() -> Vec<String> {
     for v in 131..=145 {
         names.push(format!("chrome{v}"));
     }
-    // Firefox 135-147
-    for v in 135..=147 {
+    // Chrome Mobile 131-145 (Android)
+    for v in 131..=145 {
+        names.push(format!("chromemobile{v}"));
+    }
+    // Firefox 135-148
+    for v in 135..=148 {
         names.push(format!("firefox{v}"));
     }
-    // Safari
+    // Firefox Mobile 135-148 (Android)
+    for v in 135..=148 {
+        names.push(format!("firefoxmobile{v}"));
+    }
+    // Safari (macOS)
     for tag in &["156", "160", "170", "180", "183"] {
         names.push(format!("safari{tag}"));
+    }
+    // Safari Mobile (iOS)
+    for tag in &["156", "160", "170", "180", "183"] {
+        names.push(format!("safarimobile{tag}"));
     }
     // Edge 131-145
     for v in 131..=145 {
@@ -419,6 +459,9 @@ fn koon_browsers() -> Vec<String> {
     for v in 124..=127 {
         names.push(format!("opera{v}"));
     }
+    // OkHttp (Android)
+    names.push("okhttp4".to_string());
+    names.push("okhttp5".to_string());
 
     names
 }

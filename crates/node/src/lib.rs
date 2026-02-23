@@ -14,11 +14,12 @@ use tokio::time::timeout as tokio_timeout;
 /// Supported browser profiles for impersonation.
 ///
 /// Format: `{browser}{version?}{os?}`
-/// - browser: chrome, firefox, safari, edge, opera
+/// - browser: chrome, firefox, safari, edge, opera, chromemobile, firefoxmobile, safarimobile, okhttp
 /// - version: optional version number (e.g. 145, 147)
 /// - os: optional OS suffix (windows, macos, linux)
 ///
-/// Examples: "chrome", "chrome145", "chrome145windows", "firefox147macos"
+/// Examples: "chrome", "chrome145", "chrome145windows", "firefox147macos",
+///           "chromemobile145", "firefoxmobile148", "safarimobile183", "okhttp4"
 #[napi(string_enum = "lowercase")]
 pub enum Browser {
     // Chrome
@@ -137,6 +138,10 @@ pub enum Browser {
     Firefox147Windows,
     Firefox147Macos,
     Firefox147Linux,
+    Firefox148,
+    Firefox148Windows,
+    Firefox148Macos,
+    Firefox148Linux,
     // Safari
     Safari,
     Safari156,
@@ -214,6 +219,50 @@ pub enum Browser {
     Edge145,
     Edge145Windows,
     Edge145Macos,
+    // Chrome Mobile (Android)
+    ChromeMobile,
+    ChromeMobile131,
+    ChromeMobile132,
+    ChromeMobile133,
+    ChromeMobile134,
+    ChromeMobile135,
+    ChromeMobile136,
+    ChromeMobile137,
+    ChromeMobile138,
+    ChromeMobile139,
+    ChromeMobile140,
+    ChromeMobile141,
+    ChromeMobile142,
+    ChromeMobile143,
+    ChromeMobile144,
+    ChromeMobile145,
+    // Firefox Mobile (Android)
+    FirefoxMobile,
+    FirefoxMobile135,
+    FirefoxMobile136,
+    FirefoxMobile137,
+    FirefoxMobile138,
+    FirefoxMobile139,
+    FirefoxMobile140,
+    FirefoxMobile141,
+    FirefoxMobile142,
+    FirefoxMobile143,
+    FirefoxMobile144,
+    FirefoxMobile145,
+    FirefoxMobile146,
+    FirefoxMobile147,
+    FirefoxMobile148,
+    // Safari Mobile (iOS)
+    SafariMobile,
+    SafariMobile156,
+    SafariMobile160,
+    SafariMobile170,
+    SafariMobile180,
+    SafariMobile183,
+    // OkHttp (Android)
+    OkHttp,
+    OkHttp4,
+    OkHttp5,
 }
 
 /// Convert a Browser enum variant to its napi lowercase string representation.
@@ -333,6 +382,10 @@ fn browser_to_name(browser: &Browser) -> &'static str {
         Browser::Firefox147Windows => "firefox147windows",
         Browser::Firefox147Macos => "firefox147macos",
         Browser::Firefox147Linux => "firefox147linux",
+        Browser::Firefox148 => "firefox148",
+        Browser::Firefox148Windows => "firefox148windows",
+        Browser::Firefox148Macos => "firefox148macos",
+        Browser::Firefox148Linux => "firefox148linux",
         Browser::Safari => "safari",
         Browser::Safari156 | Browser::Safari156Macos => "safari156",
         Browser::Safari160 | Browser::Safari160Macos => "safari160",
@@ -402,6 +455,50 @@ fn browser_to_name(browser: &Browser) -> &'static str {
         Browser::Edge145 => "edge145",
         Browser::Edge145Windows => "edge145windows",
         Browser::Edge145Macos => "edge145macos",
+        // Chrome Mobile (Android)
+        Browser::ChromeMobile => "chromemobile",
+        Browser::ChromeMobile131 => "chromemobile131",
+        Browser::ChromeMobile132 => "chromemobile132",
+        Browser::ChromeMobile133 => "chromemobile133",
+        Browser::ChromeMobile134 => "chromemobile134",
+        Browser::ChromeMobile135 => "chromemobile135",
+        Browser::ChromeMobile136 => "chromemobile136",
+        Browser::ChromeMobile137 => "chromemobile137",
+        Browser::ChromeMobile138 => "chromemobile138",
+        Browser::ChromeMobile139 => "chromemobile139",
+        Browser::ChromeMobile140 => "chromemobile140",
+        Browser::ChromeMobile141 => "chromemobile141",
+        Browser::ChromeMobile142 => "chromemobile142",
+        Browser::ChromeMobile143 => "chromemobile143",
+        Browser::ChromeMobile144 => "chromemobile144",
+        Browser::ChromeMobile145 => "chromemobile145",
+        // Firefox Mobile (Android)
+        Browser::FirefoxMobile => "firefoxmobile",
+        Browser::FirefoxMobile135 => "firefoxmobile135",
+        Browser::FirefoxMobile136 => "firefoxmobile136",
+        Browser::FirefoxMobile137 => "firefoxmobile137",
+        Browser::FirefoxMobile138 => "firefoxmobile138",
+        Browser::FirefoxMobile139 => "firefoxmobile139",
+        Browser::FirefoxMobile140 => "firefoxmobile140",
+        Browser::FirefoxMobile141 => "firefoxmobile141",
+        Browser::FirefoxMobile142 => "firefoxmobile142",
+        Browser::FirefoxMobile143 => "firefoxmobile143",
+        Browser::FirefoxMobile144 => "firefoxmobile144",
+        Browser::FirefoxMobile145 => "firefoxmobile145",
+        Browser::FirefoxMobile146 => "firefoxmobile146",
+        Browser::FirefoxMobile147 => "firefoxmobile147",
+        Browser::FirefoxMobile148 => "firefoxmobile148",
+        // Safari Mobile (iOS)
+        Browser::SafariMobile => "safarimobile",
+        Browser::SafariMobile156 => "safarimobile156",
+        Browser::SafariMobile160 => "safarimobile160",
+        Browser::SafariMobile170 => "safarimobile170",
+        Browser::SafariMobile180 => "safarimobile180",
+        Browser::SafariMobile183 => "safarimobile183",
+        // OkHttp (Android)
+        Browser::OkHttp => "okhttp",
+        Browser::OkHttp4 => "okhttp4",
+        Browser::OkHttp5 => "okhttp5",
     }
 }
 

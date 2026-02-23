@@ -8,25 +8,33 @@ All notable changes to koon will be documented in this file.
 - **Mobile Browser Profiles**: Chrome Mobile, Firefox Mobile, Safari Mobile
   - `chrome-mobile145`, `firefox-mobile148`, `safari-mobile183`
   - Also available via OS suffix: `chrome145-android`, `safari183-ios`, `firefox148-android`
+  - Available on all platforms: Node.js, Python, R, CLI
 - **Firefox 148**: Desktop + Android profiles
 - **OkHttp Profiles**: Android app impersonation (OkHttp 4.x, 5.x)
   - `okhttp4`, `okhttp5`
 - **CONNECT Proxy Headers**: Custom headers in the HTTP CONNECT tunnel request
   - Node.js: `new Koon({ proxyHeaders: { 'X-Session-ID': 'abc' } })`
   - Python: `Koon("chrome", proxy_headers={"X-Session-ID": "abc"})`
+  - R: `Koon$new("chrome", proxy_headers = c("X-Session-ID" = "abc"))`
+  - CLI: `koon --proxy-header "X-Session-ID: abc"`
 - **IPv4/IPv6 Toggle**: Restrict DNS resolution to a specific IP version
   - Node.js: `new Koon({ ipVersion: 4 })`
   - Python: `Koon("chrome", ip_version=4)`
+  - R: `Koon$new("chrome", ip_version = 4L)`
+  - CLI: `koon --ip-version 4`
 - **String Body**: `post()`, `put()`, `patch()`, `request()` now accept strings directly
   - Node.js: `client.post(url, '{"key":"value"}')`  (no more `Buffer.from()`)
   - Python: `await client.post(url, '{"key":"value"}')`  (no more `b'...'`)
 - **User-Agent Property**: Access the profile's UA string for use in Puppeteer/Playwright
   - Node.js: `client.userAgent`
   - Python: `client.user_agent`
+  - R: `client$user_agent()`
 - **Geo-Locale Matching**: Generate Accept-Language headers matching proxy geography
   - `"fr-FR"` -> `"fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7"`
   - Node.js: `new Koon({ locale: 'fr-FR' })`
   - Python: `Koon("chrome", locale="fr-FR")`
+  - R: `Koon$new("chrome", locale = "fr-FR")`
+  - CLI: `koon --locale fr-FR`
 - **Structured Errors**: Machine-readable error codes on all errors
   - Format: `[CODE] description` (e.g. `[TIMEOUT] Request timed out`)
   - Codes: `TLS_ERROR`, `HTTP2_ERROR`, `PROXY_ERROR`, `CONNECTION_FAILED`, `TIMEOUT`, `TOO_MANY_REDIRECTS`, etc.
@@ -37,24 +45,33 @@ All notable changes to koon will be documented in this file.
 - **Custom Redirect Hook**: Intercept redirects before following
   - Node.js: `new Koon({ onRedirect: (status, url, headers) => !url.includes('captcha') })`
   - Python: `Koon("chrome", on_redirect=lambda s,u,h: "captcha" not in u)`
+  - R: `Koon$new("chrome", on_redirect = function(s, u, h) !grepl("captcha", u))`
 - **Automatic Retry**: Transport-error retry with proxy rotation
   - Node.js: `new Koon({ retries: 3 })`
   - Python: `Koon("chrome", retries=3)`
+  - R: `Koon$new("chrome", retries = 3L)`
+  - CLI: `koon --retries 3`
 - **Clear Cookies**: Empty the cookie jar without resetting connections
   - Node.js: `client.clearCookies()`
   - Python: `client.clear_cookies()`
+  - R: `client$clear_cookies()`
 - **Bandwidth Tracking**: Per-request and cumulative byte counters
   - `resp.bytesSent`, `resp.bytesReceived` per response
   - `client.totalBytesSent()`, `client.totalBytesReceived()`, `client.resetCounters()`
 - **Request Hooks**: `onRequest` / `onResponse` callbacks for logging
   - Node.js: `new Koon({ onRequest: (m, u) => ..., onResponse: (s, u, h) => ... })`
   - Python: `Koon("chrome", on_request=lambda m,u: ..., on_response=lambda s,u,h: ...)`
+  - R: `Koon$new("chrome", on_request = function(m, u) ..., on_response = function(s, u, h) ...)`
 - **Proxy Rotation**: Round-robin over multiple proxy URLs
   - Node.js: `new Koon({ proxies: ['socks5://a:1080', 'socks5://b:1080'] })`
   - Python: `Koon("chrome", proxies=["socks5://a:1080", "socks5://b:1080"])`
+  - R: `Koon$new("chrome", proxies = c("socks5://a:1080", "socks5://b:1080"))`
+  - CLI: `koon --proxies socks5://a:1080,socks5://b:1080`
 - **Local Address Binding**: Bind outgoing connections to a specific local IP
   - Node.js: `new Koon({ localAddress: '192.168.1.100' })`
   - Python: `Koon("chrome", local_address="192.168.1.100")`
+  - R: `Koon$new("chrome", local_address = "192.168.1.100")`
+  - CLI: `koon --local-address 192.168.1.100`
 - **Ergonomic Response API**
   - `resp.ok` — true when status is 2xx
   - `resp.text()` — decode body as UTF-8
@@ -65,6 +82,14 @@ All notable changes to koon will be documented in this file.
   - Python: `await client.get(url, timeout=5000)`
 - **Python Per-Request Headers**: All Python HTTP methods now accept `headers` and `timeout`
   - `await client.get(url, headers={"Authorization": "Bearer ..."})`
+- **CLI**: `--retries`, `--locale`, `--ip-version`, `--local-address`, `-k`/`--ignore-tls-errors`, `--proxies`, `--proxy-header`
+
+### Fixed
+- Node.js: Missing Browser enum variants for mobile profiles, OkHttp, and Firefox 148
+- R: Missing constructor params (`doh`, `ignore_tls_errors`, `follow_redirects`, `max_redirects`, `cookie_jar`, `session_resumption`)
+- R: `koon_browsers()` now lists mobile, OkHttp, and Firefox 148 profiles
+- R: `user_agent()` method now exposed in R wrapper
+- CLI: `--list-browsers` now shows mobile, OkHttp, and Firefox 148 profiles
 
 ## [0.4.5] - 2026-02-22
 
