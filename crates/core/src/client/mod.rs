@@ -59,6 +59,7 @@ pub struct ClientBuilder {
     on_response: Option<OnResponseHook>,
     on_redirect: Option<OnRedirectHook>,
     max_retries: u32,
+    locale: Option<String>,
     #[cfg(feature = "doh")]
     doh_resolver: Option<DohResolver>,
 }
@@ -80,6 +81,7 @@ impl ClientBuilder {
             on_response: None,
             on_redirect: None,
             max_retries: 0,
+            locale: None,
             #[cfg(feature = "doh")]
             doh_resolver: None,
         }
@@ -189,6 +191,18 @@ impl ClientBuilder {
         self
     }
 
+    /// Set a locale to generate a matching Accept-Language header.
+    ///
+    /// This overrides the profile's Accept-Language header with one derived
+    /// from the given locale string. Useful when using geo-located proxies to
+    /// match the Accept-Language to the proxy's region.
+    ///
+    /// Examples: `"fr-FR"`, `"de"`, `"ja-JP"`, `"en-US"`.
+    pub fn locale(mut self, locale: &str) -> Self {
+        self.locale = Some(locale.to_string());
+        self
+    }
+
     /// Set a DNS-over-HTTPS resolver for encrypted DNS and ECH support.
     #[cfg(feature = "doh")]
     pub fn doh(mut self, resolver: DohResolver) -> Self {
@@ -197,7 +211,24 @@ impl ClientBuilder {
     }
 
     /// Build the [`Client`]. This creates the TLS connector (Phase 1).
-    pub fn build(self) -> Result<Client, Error> {
+    pub fn build(mut self) -> Result<Client, Error> {
+        // Apply locale → Accept-Language override (preserve position in header list)
+        if let Some(ref locale) = self.locale {
+            let accept_lang = build_accept_language(locale);
+            if let Some(pos) = self
+                .profile
+                .headers
+                .iter()
+                .position(|(k, _)| k.eq_ignore_ascii_case("accept-language"))
+            {
+                self.profile.headers[pos].1 = accept_lang;
+            } else {
+                self.profile
+                    .headers
+                    .push(("accept-language".to_string(), accept_lang));
+            }
+        }
+
         let session_cache = if self.session_resumption {
             Some(SessionCache::new())
         } else {
@@ -282,6 +313,15 @@ impl Client {
     /// Get a reference to the browser profile.
     pub fn profile(&self) -> &BrowserProfile {
         &self.profile
+    }
+
+    /// Get the User-Agent string from the browser profile.
+    pub fn user_agent(&self) -> Option<&str> {
+        self.profile
+            .headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case("user-agent"))
+            .map(|(_, v)| v.as_str())
     }
 
     /// Fire the on_request hook if registered.
@@ -546,5 +586,33 @@ impl Client {
 
         // 4. WebSocket handshake
         websocket::connect(tls_stream, &uri, &ws_headers, self.timeout).await
+    }
+}
+
+/// Build an Accept-Language header value from a locale string.
+///
+/// `"fr-FR"` → `"fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7"`
+/// `"de"`    → `"de,en-US;q=0.9,en;q=0.8"`
+/// `"en-US"` → `"en-US,en;q=0.9"`
+/// `"en"`    → `"en"`
+fn build_accept_language(locale: &str) -> String {
+    let lang = locale.split('-').next().unwrap_or(locale);
+    let is_english = lang.eq_ignore_ascii_case("en");
+    let has_region = locale.contains('-');
+
+    if is_english {
+        if has_region {
+            // e.g. "en-US" → "en-US,en;q=0.9"
+            format!("{locale},{lang};q=0.9")
+        } else {
+            // e.g. "en" → "en"
+            locale.to_string()
+        }
+    } else if has_region {
+        // e.g. "fr-FR" → "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7"
+        format!("{locale},{lang};q=0.9,en-US;q=0.8,en;q=0.7")
+    } else {
+        // e.g. "de" → "de,en-US;q=0.9,en;q=0.8"
+        format!("{locale},en-US;q=0.9,en;q=0.8")
     }
 }

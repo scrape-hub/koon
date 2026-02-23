@@ -62,6 +62,47 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {}
 
 impl Error {
+    /// Machine-readable error code string for programmatic error handling.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Error::Tls(_) | Error::TlsStack(_) => "TLS_ERROR",
+            Error::Http2(_) => "HTTP2_ERROR",
+            Error::Quic(_) => "QUIC_ERROR",
+            Error::Http3(_) => "HTTP3_ERROR",
+            Error::Io(_) => "IO_ERROR",
+            Error::Url(_) => "INVALID_URL",
+            Error::Proxy(_) => "PROXY_ERROR",
+            Error::InvalidHeader(_) => "INVALID_HEADER",
+            Error::ConnectionFailed(_) => "CONNECTION_FAILED",
+            Error::Json(_) => "JSON_ERROR",
+            Error::WebSocket(_) => "WEBSOCKET_ERROR",
+            #[cfg(feature = "doh")]
+            Error::Dns(_) => "DNS_ERROR",
+            Error::Timeout => "TIMEOUT",
+            Error::TooManyRedirects => "TOO_MANY_REDIRECTS",
+        }
+    }
+
+    /// Check if this is a timeout error.
+    pub fn is_timeout(&self) -> bool {
+        matches!(self, Error::Timeout)
+    }
+
+    /// Check if this is a proxy error.
+    pub fn is_proxy_error(&self) -> bool {
+        matches!(self, Error::Proxy(_))
+    }
+
+    /// Check if this is a TLS error.
+    pub fn is_tls_error(&self) -> bool {
+        matches!(self, Error::Tls(_) | Error::TlsStack(_))
+    }
+
+    /// Check if this is a connection error.
+    pub fn is_connection_error(&self) -> bool {
+        matches!(self, Error::ConnectionFailed(_))
+    }
+
     /// Check if this error is an HTTP/2 GOAWAY from the remote peer.
     pub fn is_h2_goaway(&self) -> bool {
         match self {

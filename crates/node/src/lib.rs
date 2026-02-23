@@ -476,6 +476,11 @@ pub struct KoonOptions {
     /// With proxy rotation, each retry uses the next proxy.
     /// @default 0
     pub retries: Option<u32>,
+
+    /// Locale for Accept-Language header generation.
+    /// Overrides the profile's Accept-Language to match proxy geography.
+    /// Examples: "fr-FR", "de", "ja-JP", "en-US".
+    pub locale: Option<String>,
 }
 
 /// Per-request options (headers, timeout).
@@ -523,6 +528,8 @@ pub struct KoonResponse {
     url_val: String,
     bytes_sent_val: u32,
     bytes_received_val: u32,
+    tls_resumed_val: bool,
+    connection_reused_val: bool,
 }
 
 #[napi]
@@ -603,6 +610,18 @@ impl KoonResponse {
     pub fn bytes_received(&self) -> u32 {
         self.bytes_received_val
     }
+
+    /// Whether TLS session resumption was used for this connection.
+    #[napi(getter)]
+    pub fn tls_resumed(&self) -> bool {
+        self.tls_resumed_val
+    }
+
+    /// Whether an existing pooled connection was reused.
+    #[napi(getter)]
+    pub fn connection_reused(&self) -> bool {
+        self.connection_reused_val
+    }
 }
 
 /// A field in a multipart/form-data request.
@@ -622,6 +641,11 @@ pub struct KoonMultipartField {
     pub content_type: Option<String>,
 }
 
+/// Convert a koon_core::Error to a napi::Error with structured error code.
+fn koon_napi_error(e: koon_core::Error) -> napi::Error {
+    napi::Error::from_reason(format!("[{}] {}", e.code(), e))
+}
+
 /// Convert a core HttpResponse to a napi KoonResponse.
 fn response_to_napi(response: koon_core::HttpResponse) -> KoonResponse {
     let headers: Vec<KoonHeader> = response
@@ -637,6 +661,8 @@ fn response_to_napi(response: koon_core::HttpResponse) -> KoonResponse {
         url_val: response.url,
         bytes_sent_val: response.bytes_sent as u32,
         bytes_received_val: response.bytes_received as u32,
+        tls_resumed_val: response.tls_resumed,
+        connection_reused_val: response.connection_reused,
     }
 }
 
@@ -742,6 +768,10 @@ impl Koon {
 
         if let Some(retries) = opts.retries {
             builder = builder.max_retries(retries);
+        }
+
+        if let Some(ref locale) = opts.locale {
+            builder = builder.locale(locale);
         }
 
         // Wire up hooks: JsFunction → ThreadsafeFunction → Arc closure
@@ -889,11 +919,16 @@ impl Koon {
             }
         }
 
-        let client = builder
-            .build()
-            .map_err(|e| napi::Error::from_reason(format!("Failed to create client: {e}")))?;
+        let client = builder.build().map_err(koon_napi_error)?;
 
         Ok(Koon { client })
+    }
+
+    /// The User-Agent string from the browser profile.
+    /// Useful for setting in Puppeteer/Playwright.
+    #[napi(getter)]
+    pub fn user_agent(&self) -> Option<String> {
+        self.client.user_agent().map(|s| s.to_string())
     }
 
     /// Export the current browser profile as a JSON string.
@@ -921,7 +956,7 @@ impl Koon {
     pub async fn post(
         &self,
         url: String,
-        body: Option<Buffer>,
+        body: Option<Either<String, Buffer>>,
         options: Option<KoonRequestOptions>,
     ) -> Result<KoonResponse> {
         self.request("POST".to_string(), url, body, options).await
@@ -932,7 +967,7 @@ impl Koon {
     pub async fn put(
         &self,
         url: String,
-        body: Option<Buffer>,
+        body: Option<Either<String, Buffer>>,
         options: Option<KoonRequestOptions>,
     ) -> Result<KoonResponse> {
         self.request("PUT".to_string(), url, body, options).await
@@ -953,7 +988,7 @@ impl Koon {
     pub async fn patch(
         &self,
         url: String,
-        body: Option<Buffer>,
+        body: Option<Either<String, Buffer>>,
         options: Option<KoonRequestOptions>,
     ) -> Result<KoonResponse> {
         self.request("PATCH".to_string(), url, body, options).await
@@ -975,14 +1010,17 @@ impl Koon {
         &self,
         method: String,
         url: String,
-        body: Option<Buffer>,
+        body: Option<Either<String, Buffer>>,
         options: Option<KoonRequestOptions>,
     ) -> Result<KoonResponse> {
         let method = method
             .parse()
             .map_err(|_| napi::Error::from_reason(format!("Invalid HTTP method: {method}")))?;
 
-        let body_bytes = body.map(|b| b.to_vec());
+        let body_bytes = body.map(|b| match b {
+            Either::A(s) => s.into_bytes(),
+            Either::B(buf) => buf.to_vec(),
+        });
         let opts = options.unwrap_or_default();
         let extra_headers: Vec<(String, String)> =
             opts.headers.unwrap_or_default().into_iter().collect();
@@ -995,11 +1033,9 @@ impl Koon {
             tokio_timeout(Duration::from_millis(timeout_ms as u64), future)
                 .await
                 .map_err(|_| napi::Error::from_reason("Request timed out"))?
-                .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?
+                .map_err(koon_napi_error)?
         } else {
-            future
-                .await
-                .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?
+            future.await.map_err(koon_napi_error)?
         };
 
         Ok(response_to_napi(response))
@@ -1054,11 +1090,9 @@ impl Koon {
             tokio_timeout(Duration::from_millis(timeout_ms as u64), future)
                 .await
                 .map_err(|_| napi::Error::from_reason("Request timed out"))?
-                .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?
+                .map_err(koon_napi_error)?
         } else {
-            future
-                .await
-                .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?
+            future.await.map_err(koon_napi_error)?
         };
 
         Ok(response_to_napi(response))
@@ -1081,13 +1115,16 @@ impl Koon {
         &self,
         method: String,
         url: String,
-        body: Option<Buffer>,
+        body: Option<Either<String, Buffer>>,
         options: Option<KoonRequestOptions>,
     ) -> Result<KoonStreamingResponse> {
         let method = method
             .parse()
             .map_err(|_| napi::Error::from_reason(format!("Invalid HTTP method: {method}")))?;
-        let body_bytes = body.map(|b| b.to_vec());
+        let body_bytes = body.map(|b| match b {
+            Either::A(s) => s.into_bytes(),
+            Either::B(buf) => buf.to_vec(),
+        });
         let opts = options.unwrap_or_default();
         let extra_headers: Vec<(String, String)> =
             opts.headers.unwrap_or_default().into_iter().collect();
@@ -1100,11 +1137,9 @@ impl Koon {
             tokio_timeout(Duration::from_millis(timeout_ms as u64), future)
                 .await
                 .map_err(|_| napi::Error::from_reason("Request timed out"))?
-                .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?
+                .map_err(koon_napi_error)?
         } else {
-            future
-                .await
-                .map_err(|e| napi::Error::from_reason(format!("Request failed: {e}")))?
+            future.await.map_err(koon_napi_error)?
         };
 
         let headers: Vec<KoonHeader> = resp
@@ -1220,7 +1255,7 @@ impl Koon {
             .client
             .websocket_with_headers(&url, extra_headers)
             .await
-            .map_err(|e| napi::Error::from_reason(format!("WebSocket connect failed: {e}")))?;
+            .map_err(koon_napi_error)?;
 
         Ok(KoonWebSocket {
             inner: tokio::sync::Mutex::new(Some(ws)),
@@ -1344,7 +1379,7 @@ impl KoonWebSocket {
             Either::A(text) => ws.send_text(&text).await,
             Either::B(buf) => ws.send_binary(&buf).await,
         }
-        .map_err(|e| napi::Error::from_reason(format!("WebSocket send failed: {e}")))
+        .map_err(koon_napi_error)
     }
 
     /// Receive the next message from the server.
@@ -1366,9 +1401,7 @@ impl KoonWebSocket {
                 data: Buffer::from(b),
             })),
             Ok(None) => Ok(None),
-            Err(e) => Err(napi::Error::from_reason(format!(
-                "WebSocket receive failed: {e}"
-            ))),
+            Err(e) => Err(koon_napi_error(e)),
         }
     }
 
@@ -1382,7 +1415,7 @@ impl KoonWebSocket {
 
         ws.close(code.map(|c| c as u16), reason)
             .await
-            .map_err(|e| napi::Error::from_reason(format!("WebSocket close failed: {e}")))?;
+            .map_err(koon_napi_error)?;
 
         // Consume the WebSocket so it can't be used again
         *guard = None;

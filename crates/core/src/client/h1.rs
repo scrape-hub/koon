@@ -71,6 +71,8 @@ impl super::Client {
             url: uri.to_string(),
             bytes_sent,
             bytes_received,
+            tls_resumed: false,
+            connection_reused: false,
         };
 
         Ok((response, keep_alive))
@@ -220,6 +222,8 @@ impl super::Client {
             url: uri.to_string(),
             bytes_sent,
             bytes_received,
+            tls_resumed: false,
+            connection_reused: false,
         };
 
         Ok((response, keep_alive))

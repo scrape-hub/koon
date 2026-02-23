@@ -10,9 +10,16 @@ use koon_core::multipart::Multipart;
 use koon_core::profile::BrowserProfile;
 use koon_core::{Client, HeaderMode, ProxyServer, ProxyServerConfig, WsMessage};
 
+pyo3::create_exception!(koon, KoonError, pyo3::exceptions::PyRuntimeError);
+
 /// Convert any Display error to a Python RuntimeError.
 fn to_py_err(e: impl std::fmt::Display) -> PyErr {
     PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string())
+}
+
+/// Convert a koon_core::Error to a structured KoonError with error code prefix.
+fn to_koon_err(e: koon_core::Error) -> PyErr {
+    KoonError::new_err(format!("[{}] {}", e.code(), e))
 }
 
 /// Run a future with an optional per-request timeout.
@@ -26,10 +33,24 @@ where
     if let Some(ms) = timeout_ms {
         tokio::time::timeout(Duration::from_millis(ms as u64), future)
             .await
-            .map_err(|_| PyErr::new::<pyo3::exceptions::PyTimeoutError, _>("Request timed out"))?
-            .map_err(to_py_err)
+            .map_err(|_| KoonError::new_err("[TIMEOUT] Request timed out".to_string()))?
+            .map_err(to_koon_err)
     } else {
-        future.await.map_err(to_py_err)
+        future.await.map_err(to_koon_err)
+    }
+}
+
+/// Extract body from a Python object: str → bytes, bytes → bytes, None → None.
+fn extract_body(py: Python<'_>, obj: Option<Py<PyAny>>) -> PyResult<Option<Vec<u8>>> {
+    match obj {
+        Some(o) => {
+            if let Ok(s) = o.extract::<String>(py) {
+                Ok(Some(s.into_bytes()))
+            } else {
+                Ok(Some(o.extract::<Vec<u8>>(py)?))
+            }
+        }
+        None => Ok(None),
     }
 }
 
@@ -70,7 +91,7 @@ impl Koon {
     ///     local_address: Bind outgoing connections to a specific local IP address.
     ///     proxies: List of proxy URLs for round-robin rotation (takes priority over `proxy`).
     #[new]
-    #[pyo3(signature = (browser="chrome", *, profile_json=None, proxy=None, proxies=None, timeout=30000, ignore_tls_errors=false, headers=None, follow_redirects=true, max_redirects=10, cookie_jar=true, randomize=false, session_resumption=true, doh=None, local_address=None, on_request=None, on_response=None, on_redirect=None, retries=0))]
+    #[pyo3(signature = (browser="chrome", *, profile_json=None, proxy=None, proxies=None, timeout=30000, ignore_tls_errors=false, headers=None, follow_redirects=true, max_redirects=10, cookie_jar=true, randomize=false, session_resumption=true, doh=None, local_address=None, on_request=None, on_response=None, on_redirect=None, retries=0, locale=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         browser: &str,
@@ -91,6 +112,7 @@ impl Koon {
         on_response: Option<Py<PyAny>>,
         on_redirect: Option<Py<PyAny>>,
         retries: u32,
+        locale: Option<&str>,
     ) -> PyResult<Self> {
         let mut profile = if let Some(json) = profile_json {
             BrowserProfile::from_json(json).map_err(to_py_err)?
@@ -119,9 +141,9 @@ impl Koon {
 
         if let Some(proxy_urls) = proxies {
             let refs: Vec<&str> = proxy_urls.iter().map(|s| s.as_str()).collect();
-            builder = builder.proxies(&refs).map_err(to_py_err)?;
+            builder = builder.proxies(&refs).map_err(to_koon_err)?;
         } else if let Some(proxy_url) = proxy {
-            builder = builder.proxy(proxy_url).map_err(to_py_err)?;
+            builder = builder.proxy(proxy_url).map_err(to_koon_err)?;
         }
 
         if let Some(doh_provider) = doh {
@@ -134,7 +156,7 @@ impl Koon {
                     )));
                 }
             }
-            .map_err(to_py_err)?;
+            .map_err(to_koon_err)?;
             builder = builder.doh(resolver);
         }
 
@@ -190,11 +212,21 @@ impl Koon {
             builder = builder.max_retries(retries);
         }
 
-        let client = builder.build().map_err(to_py_err)?;
+        if let Some(locale) = locale {
+            builder = builder.locale(locale);
+        }
+
+        let client = builder.build().map_err(to_koon_err)?;
 
         Ok(Koon {
             client: Arc::new(client),
         })
+    }
+
+    /// The User-Agent string from the browser profile.
+    #[getter]
+    fn user_agent(&self) -> Option<String> {
+        self.client.user_agent().map(|s| s.to_string())
     }
 
     /// Export the current browser profile as a JSON string.
@@ -204,22 +236,24 @@ impl Koon {
 
     /// Save the current session (cookies + TLS sessions) as a JSON string.
     fn save_session(&self) -> PyResult<String> {
-        self.client.save_session().map_err(to_py_err)
+        self.client.save_session().map_err(to_koon_err)
     }
 
     /// Load a session (cookies + TLS sessions) from a JSON string.
     fn load_session(&self, json: &str) -> PyResult<()> {
-        self.client.load_session(json).map_err(to_py_err)
+        self.client.load_session(json).map_err(to_koon_err)
     }
 
     /// Save the current session to a file.
     fn save_session_to_file(&self, path: &str) -> PyResult<()> {
-        self.client.save_session_to_file(path).map_err(to_py_err)
+        self.client.save_session_to_file(path).map_err(to_koon_err)
     }
 
     /// Load a session from a file.
     fn load_session_from_file(&self, path: &str) -> PyResult<()> {
-        self.client.load_session_from_file(path).map_err(to_py_err)
+        self.client
+            .load_session_from_file(path)
+            .map_err(to_koon_err)
     }
 
     /// Get the total number of bytes sent across all requests.
@@ -270,7 +304,7 @@ impl Koon {
     ///
     /// Args:
     ///     url: The URL to request.
-    ///     body: Optional request body as bytes.
+    ///     body: Optional request body as str or bytes.
     ///     headers: Optional dict of per-request headers.
     ///     timeout: Optional per-request timeout in milliseconds.
     #[pyo3(signature = (url, body=None, *, headers=None, timeout=None))]
@@ -278,10 +312,11 @@ impl Koon {
         &self,
         py: Python<'py>,
         url: String,
-        body: Option<Vec<u8>>,
+        body: Option<Py<PyAny>>,
         headers: Option<HashMap<String, String>>,
         timeout: Option<u32>,
     ) -> PyResult<Bound<'py, PyAny>> {
+        let body = extract_body(py, body)?;
         let client = self.client.clone();
         let extra: Vec<(String, String)> = headers.unwrap_or_default().into_iter().collect();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
@@ -295,7 +330,7 @@ impl Koon {
     ///
     /// Args:
     ///     url: The URL to request.
-    ///     body: Optional request body as bytes.
+    ///     body: Optional request body as str or bytes.
     ///     headers: Optional dict of per-request headers.
     ///     timeout: Optional per-request timeout in milliseconds.
     #[pyo3(signature = (url, body=None, *, headers=None, timeout=None))]
@@ -303,10 +338,11 @@ impl Koon {
         &self,
         py: Python<'py>,
         url: String,
-        body: Option<Vec<u8>>,
+        body: Option<Py<PyAny>>,
         headers: Option<HashMap<String, String>>,
         timeout: Option<u32>,
     ) -> PyResult<Bound<'py, PyAny>> {
+        let body = extract_body(py, body)?;
         let client = self.client.clone();
         let extra: Vec<(String, String)> = headers.unwrap_or_default().into_iter().collect();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
@@ -343,7 +379,7 @@ impl Koon {
     ///
     /// Args:
     ///     url: The URL to request.
-    ///     body: Optional request body as bytes.
+    ///     body: Optional request body as str or bytes.
     ///     headers: Optional dict of per-request headers.
     ///     timeout: Optional per-request timeout in milliseconds.
     #[pyo3(signature = (url, body=None, *, headers=None, timeout=None))]
@@ -351,10 +387,11 @@ impl Koon {
         &self,
         py: Python<'py>,
         url: String,
-        body: Option<Vec<u8>>,
+        body: Option<Py<PyAny>>,
         headers: Option<HashMap<String, String>>,
         timeout: Option<u32>,
     ) -> PyResult<Bound<'py, PyAny>> {
+        let body = extract_body(py, body)?;
         let client = self.client.clone();
         let extra: Vec<(String, String)> = headers.unwrap_or_default().into_iter().collect();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
@@ -392,7 +429,7 @@ impl Koon {
     /// Args:
     ///     method: HTTP method string (e.g. "GET", "POST").
     ///     url: The URL to request.
-    ///     body: Optional request body as bytes.
+    ///     body: Optional request body as str or bytes.
     ///     headers: Optional dict of per-request headers.
     ///     timeout: Optional per-request timeout in milliseconds.
     #[pyo3(signature = (method, url, body=None, *, headers=None, timeout=None))]
@@ -401,10 +438,11 @@ impl Koon {
         py: Python<'py>,
         method: String,
         url: String,
-        body: Option<Vec<u8>>,
+        body: Option<Py<PyAny>>,
         headers: Option<HashMap<String, String>>,
         timeout: Option<u32>,
     ) -> PyResult<Bound<'py, PyAny>> {
+        let body = extract_body(py, body)?;
         let client = self.client.clone();
         let extra: Vec<(String, String)> = headers.unwrap_or_default().into_iter().collect();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
@@ -472,7 +510,7 @@ impl Koon {
                     mp = mp.file(name, second, third, data);
                 }
             }
-            let resp = client.post_multipart(&url, mp).await.map_err(to_py_err)?;
+            let resp = client.post_multipart(&url, mp).await.map_err(to_koon_err)?;
             Ok(KoonResponse::from_core(resp))
         })
     }
@@ -497,7 +535,7 @@ impl Koon {
             let resp = client
                 .request_streaming(method, &url, body)
                 .await
-                .map_err(to_py_err)?;
+                .map_err(to_koon_err)?;
 
             let bytes_sent = resp.bytes_sent();
             Ok(KoonStreamingResponse {
@@ -526,7 +564,7 @@ impl Koon {
             let ws = client
                 .websocket_with_headers(&url, extra_headers)
                 .await
-                .map_err(to_py_err)?;
+                .map_err(to_koon_err)?;
             Ok(KoonWebSocket {
                 inner: Arc::new(tokio::sync::Mutex::new(Some(ws))),
             })
@@ -554,6 +592,12 @@ struct KoonResponse {
     /// Approximate bytes received for this response (headers + body, pre-decompression).
     #[pyo3(get)]
     bytes_received: u64,
+    /// Whether TLS session resumption was used for this connection.
+    #[pyo3(get)]
+    tls_resumed: bool,
+    /// Whether an existing pooled connection was reused.
+    #[pyo3(get)]
+    connection_reused: bool,
 }
 
 impl KoonResponse {
@@ -566,6 +610,8 @@ impl KoonResponse {
             url: resp.url,
             bytes_sent: resp.bytes_sent,
             bytes_received: resp.bytes_received,
+            tls_resumed: resp.tls_resumed,
+            connection_reused: resp.connection_reused,
         }
     }
 }
@@ -751,8 +797,8 @@ impl KoonWebSocket {
                 PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("WebSocket is closed")
             })?;
             match msg {
-                WsData::Text(t) => ws.send_text(&t).await.map_err(to_py_err)?,
-                WsData::Binary(b) => ws.send_binary(&b).await.map_err(to_py_err)?,
+                WsData::Text(t) => ws.send_text(&t).await.map_err(to_koon_err)?,
+                WsData::Binary(b) => ws.send_binary(&b).await.map_err(to_koon_err)?,
             }
             Ok(())
         })
@@ -804,7 +850,7 @@ impl KoonWebSocket {
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let mut guard = inner.lock().await;
             if let Some(mut ws) = guard.take() {
-                ws.close(code, reason).await.map_err(to_py_err)?;
+                ws.close(code, reason).await.map_err(to_koon_err)?;
             }
             Ok(())
         })
@@ -939,5 +985,6 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<KoonStreamingResponse>()?;
     m.add_class::<KoonWebSocket>()?;
     m.add_class::<KoonProxy>()?;
+    m.add("KoonError", m.py().get_type::<KoonError>())?;
     Ok(())
 }

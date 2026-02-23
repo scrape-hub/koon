@@ -23,7 +23,9 @@ fn response_to_list(resp: koon_core::HttpResponse) -> List {
         text = text,
         headers = headers_df,
         bytes_sent = resp.bytes_sent as f64,
-        bytes_received = resp.bytes_received as f64
+        bytes_received = resp.bytes_received as f64,
+        tls_resumed = resp.tls_resumed,
+        connection_reused = resp.connection_reused
     )
 }
 
@@ -42,6 +44,20 @@ fn parse_headers_robj(robj: &Robj) -> Vec<(String, String)> {
         }
     }
     result
+}
+
+/// Extract body bytes from an Robj that can be either a character string or raw vector.
+fn extract_body_robj(robj: &Robj) -> Option<Vec<u8>> {
+    if robj.is_null() {
+        return None;
+    }
+    if let Some(s) = robj.as_str() {
+        Some(s.as_bytes().to_vec())
+    } else if let Ok(raw) = <Raw as TryFrom<&Robj>>::try_from(robj) {
+        Some(raw.as_slice().to_vec())
+    } else {
+        panic!("body must be a character string or raw vector");
+    }
 }
 
 /// Wrapper to make Robj Send+Sync for use in Core hooks.
@@ -100,8 +116,10 @@ impl Koon {
     /// @param on_redirect Optional function(status, url, headers) called before following a redirect.
     ///   Return FALSE to stop redirecting and return the 3xx response.
     /// @param retries Number of automatic retries on transport errors (default: 0).
+    /// @param locale Optional locale string (e.g. "fr-FR", "de") to generate a matching
+    ///   Accept-Language header for the proxy's geography.
     /// @return A new Koon client object.
-    fn new(browser: &str, proxy: Nullable<String>, proxies: Robj, timeout: Nullable<i32>, randomize: Nullable<bool>, headers: Robj, local_address: Nullable<String>, on_request: Robj, on_response: Robj, on_redirect: Robj, retries: Nullable<i32>) -> Self {
+    fn new(browser: &str, proxy: Nullable<String>, proxies: Robj, timeout: Nullable<i32>, randomize: Nullable<bool>, headers: Robj, local_address: Nullable<String>, on_request: Robj, on_response: Robj, on_redirect: Robj, retries: Nullable<i32>, locale: Nullable<String>) -> Self {
         let mut profile = BrowserProfile::resolve(browser)
             .unwrap_or_else(|e| panic!("Unknown browser profile '{}': {}", browser, e));
 
@@ -123,6 +141,10 @@ impl Koon {
             .max_redirects(10)
             .cookie_jar(true)
             .session_resumption(true);
+
+        if let NotNull(ref loc) = locale {
+            builder = builder.locale(loc);
+        }
 
         if !proxies.is_null() {
             if let Some(urls) = proxies.as_str_vector() {
@@ -204,15 +226,12 @@ impl Koon {
     /// Perform an HTTP POST request.
     ///
     /// @param url The URL to request.
-    /// @param body Optional raw vector with the request body.
+    /// @param body Optional character string or raw vector with the request body.
     /// @param headers Optional named character vector of per-request headers.
     /// @return A list with components: status, version, url, body (raw), text, headers (data.frame).
-    fn post(&self, url: &str, body: Nullable<Raw>, headers: Robj) -> List {
+    fn post(&self, url: &str, body: Robj, headers: Robj) -> List {
         self.fire_on_request_r("POST", url);
-        let body_bytes = match body {
-            NotNull(r) => Some(r.as_slice().to_vec()),
-            Null => None,
-        };
+        let body_bytes = extract_body_robj(&body);
         let extra = parse_headers_robj(&headers);
         let resp = self
             .runtime
@@ -225,15 +244,12 @@ impl Koon {
     /// Perform an HTTP PUT request.
     ///
     /// @param url The URL to request.
-    /// @param body Optional raw vector with the request body.
+    /// @param body Optional character string or raw vector with the request body.
     /// @param headers Optional named character vector of per-request headers.
     /// @return A list with components: status, version, url, body (raw), text, headers (data.frame).
-    fn put(&self, url: &str, body: Nullable<Raw>, headers: Robj) -> List {
+    fn put(&self, url: &str, body: Robj, headers: Robj) -> List {
         self.fire_on_request_r("PUT", url);
-        let body_bytes = match body {
-            NotNull(r) => Some(r.as_slice().to_vec()),
-            Null => None,
-        };
+        let body_bytes = extract_body_robj(&body);
         let extra = parse_headers_robj(&headers);
         let resp = self
             .runtime
@@ -262,15 +278,12 @@ impl Koon {
     /// Perform an HTTP PATCH request.
     ///
     /// @param url The URL to request.
-    /// @param body Optional raw vector with the request body.
+    /// @param body Optional character string or raw vector with the request body.
     /// @param headers Optional named character vector of per-request headers.
     /// @return A list with components: status, version, url, body (raw), text, headers (data.frame).
-    fn patch(&self, url: &str, body: Nullable<Raw>, headers: Robj) -> List {
+    fn patch(&self, url: &str, body: Robj, headers: Robj) -> List {
         self.fire_on_request_r("PATCH", url);
-        let body_bytes = match body {
-            NotNull(r) => Some(r.as_slice().to_vec()),
-            Null => None,
-        };
+        let body_bytes = extract_body_robj(&body);
         let extra = parse_headers_robj(&headers);
         let resp = self
             .runtime
@@ -341,6 +354,16 @@ impl Koon {
     /// Reset both cumulative byte counters to zero.
     fn reset_counters(&self) {
         self.client.reset_counters();
+    }
+
+    /// Get the User-Agent string from the browser profile.
+    ///
+    /// @return A character string with the User-Agent, or NULL if not set.
+    fn user_agent(&self) -> Nullable<String> {
+        match self.client.user_agent() {
+            Some(ua) => NotNull(ua.to_string()),
+            None => Null,
+        }
     }
 
     /// Clear all cookies from the cookie jar.

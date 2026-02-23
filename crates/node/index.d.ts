@@ -51,6 +51,8 @@ export interface KoonOptions {
   onRedirect?: (status: number, url: string, headers: Array<{ name: string; value: string }>) => boolean;
   /** Number of automatic retries on transport errors. With proxy rotation, each retry uses the next proxy. Default: 0. */
   retries?: number;
+  /** Locale for Accept-Language header generation. Overrides the profile's Accept-Language to match proxy geography. Examples: "fr-FR", "de", "ja-JP". */
+  locale?: string;
 }
 
 export class KoonResponse {
@@ -70,6 +72,10 @@ export class KoonResponse {
   readonly bytesSent: number;
   /** Approximate bytes received for this response (headers + body, pre-decompression). */
   readonly bytesReceived: number;
+  /** Whether TLS session resumption was used for this connection. */
+  readonly tlsResumed: boolean;
+  /** Whether an existing pooled connection was reused. */
+  readonly connectionReused: boolean;
 
   /** Decode response body as UTF-8 string. */
   text(): string;
@@ -109,15 +115,18 @@ export interface KoonMultipartField {
 export class Koon {
   constructor(options?: KoonOptions);
 
+  /** The User-Agent string from the browser profile. Useful for Puppeteer/Playwright. */
+  readonly userAgent: string | null;
+
   get(url: string, options?: KoonRequestOptions): Promise<KoonResponse>;
-  post(url: string, body?: Buffer, options?: KoonRequestOptions): Promise<KoonResponse>;
-  put(url: string, body?: Buffer, options?: KoonRequestOptions): Promise<KoonResponse>;
+  post(url: string, body?: string | Buffer, options?: KoonRequestOptions): Promise<KoonResponse>;
+  put(url: string, body?: string | Buffer, options?: KoonRequestOptions): Promise<KoonResponse>;
   delete(url: string, options?: KoonRequestOptions): Promise<KoonResponse>;
-  patch(url: string, body?: Buffer, options?: KoonRequestOptions): Promise<KoonResponse>;
+  patch(url: string, body?: string | Buffer, options?: KoonRequestOptions): Promise<KoonResponse>;
   head(url: string, options?: KoonRequestOptions): Promise<KoonResponse>;
-  request(method: string, url: string, body?: Buffer, options?: KoonRequestOptions): Promise<KoonResponse>;
+  request(method: string, url: string, body?: string | Buffer, options?: KoonRequestOptions): Promise<KoonResponse>;
   postMultipart(url: string, fields: KoonMultipartField[], options?: KoonRequestOptions): Promise<KoonResponse>;
-  requestStreaming(method: string, url: string, body?: Buffer, options?: KoonRequestOptions): Promise<KoonStreamingResponse>;
+  requestStreaming(method: string, url: string, body?: string | Buffer, options?: KoonRequestOptions): Promise<KoonStreamingResponse>;
 
   websocket(url: string, headers?: Record<string, string>): Promise<KoonWebSocket>;
 

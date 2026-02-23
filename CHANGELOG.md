@@ -5,6 +5,33 @@ All notable changes to koon will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **String Body**: `post()`, `put()`, `patch()`, `request()` now accept `string | Buffer` (Node.js), `str | bytes` (Python), or `character | raw` (R)
+  - No more `Buffer.from('...')` needed — pass strings directly
+  - Node.js: `client.post(url, '{"key":"value"}')`
+  - Python: `await client.post(url, '{"key":"value"}')`
+  - R: `client$post(url, '{"key":"value"}')`
+- **User-Agent Property**: `client.userAgent` (Node.js) / `client.user_agent` (Python) / `client$user_agent()` (R) exposes the profile's UA string
+  - Useful for setting in Puppeteer/Playwright: `page.setUserAgent(client.userAgent)`
+- **Geo-Locale Matching**: `locale` option generates Accept-Language matching proxy geography
+  - `"fr-FR"` → `"fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7"`
+  - `"de"` → `"de,en-US;q=0.9,en;q=0.8"`
+  - Node.js: `new Koon({ locale: 'fr-FR' })`
+  - Python: `Koon("chrome", locale="fr-FR")`
+  - R: `Koon$new("chrome", locale = "fr-FR")`
+  - Rust: `Client::builder(profile).locale("fr-FR").build()`
+- **Structured Errors**: Machine-readable error codes on all errors
+  - Format: `[CODE] description` (e.g. `[TIMEOUT] Request timed out`, `[TLS_ERROR] TLS error: ...`)
+  - Codes: `TLS_ERROR`, `HTTP2_ERROR`, `QUIC_ERROR`, `HTTP3_ERROR`, `IO_ERROR`, `INVALID_URL`, `PROXY_ERROR`, `INVALID_HEADER`, `CONNECTION_FAILED`, `JSON_ERROR`, `WEBSOCKET_ERROR`, `DNS_ERROR`, `TIMEOUT`, `TOO_MANY_REDIRECTS`
+  - Rust: `error.code()`, `error.is_timeout()`, `error.is_proxy_error()`, `error.is_tls_error()`, `error.is_connection_error()`
+  - Node.js: `err.message.startsWith('[TIMEOUT]')` or `err.message.match(/^\[(\w+)\]/)[1]`
+  - Python: `KoonError` exception class with `[CODE]` prefix
+- **Connection Info**: `response.tlsResumed` + `response.connectionReused` for debugging connection behavior
+  - `tlsResumed`: Whether TLS session resumption was used (faster handshake)
+  - `connectionReused`: Whether an existing pooled connection was reused (no new TCP+TLS)
+  - Node.js: `resp.tlsResumed`, `resp.connectionReused`
+  - Python: `resp.tls_resumed`, `resp.connection_reused`
+  - R: `resp$tls_resumed`, `resp$connection_reused`
+  - Rust: `response.tls_resumed`, `response.connection_reused`
 - **Custom Redirect Hook**: `onRedirect(status, url, headers) → bool` to intercept redirects
   - Return `false` to stop following and receive the 3xx response as-is
   - Fires after Location header resolution + cookie storage, before the next request

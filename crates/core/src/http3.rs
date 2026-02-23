@@ -135,6 +135,8 @@ pub(crate) async fn send_request(
         url: uri.to_string(),
         bytes_sent,
         bytes_received,
+        tls_resumed: false,
+        connection_reused: false,
     })
 }
 

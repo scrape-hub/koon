@@ -17,6 +17,8 @@
 #'   \item{headers}{Data frame with \code{name} and \code{value} columns}
 #'   \item{bytes_sent}{Numeric, approximate bytes sent (headers + body)}
 #'   \item{bytes_received}{Numeric, approximate bytes received (headers + body, pre-decompression)}
+#'   \item{tls_resumed}{Logical, TRUE if TLS session was resumed (not a full handshake)}
+#'   \item{connection_reused}{Logical, TRUE if an existing pooled connection was reused}
 #' }
 #'
 #' @examples
@@ -36,8 +38,8 @@
 #' resp <- client$get("https://httpbin.org/get",
 #'   headers = c(Authorization = "Bearer token"))
 #'
-#' # POST request with body
-#' resp <- client$post("https://httpbin.org/post", charToRaw("hello"))
+#' # POST request with string body (also accepts raw vectors)
+#' resp <- client$post("https://httpbin.org/post", "hello")
 #'
 #' # Parse JSON response
 #' data <- jsonlite::fromJSON(resp$text)
@@ -61,6 +63,17 @@
 #' client <- Koon$new("chrome145",
 #'   proxies = c("socks5://a:1080", "socks5://b:1080"),
 #'   retries = 3L)
+#'
+#' # Get the User-Agent from the profile
+#' client$user_agent()
+#'
+#' # Locale matching (Accept-Language for proxy geography)
+#' client <- Koon$new("chrome145", locale = "fr-FR")
+#'
+#' # Connection debugging
+#' resp <- client$get("https://httpbin.org/get")
+#' resp$tls_resumed        # FALSE on first request
+#' resp$connection_reused   # FALSE on first request
 #'
 #' # Clear cookies
 #' client$clear_cookies()

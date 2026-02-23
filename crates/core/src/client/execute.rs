@@ -193,7 +193,8 @@ impl super::Client {
             .await
             {
                 Ok(response) => {
-                    let response = self.decompress_response(response)?;
+                    let mut response = self.decompress_response(response)?;
+                    response.connection_reused = true;
                     return Ok(response);
                 }
                 Err(_) => {
@@ -215,7 +216,10 @@ impl super::Client {
                 )
                 .await
             {
-                Ok(response) => return Ok(response),
+                Ok(mut response) => {
+                    response.connection_reused = true;
+                    return Ok(response);
+                }
                 Err(e) => {
                     self.pool.remove(host, port, proxy_idx);
                     // GOAWAY: retry on a fresh connection
@@ -240,7 +244,7 @@ impl super::Client {
 
         // 3. Try cached H1.1 connection from pool
         if let Some(mut stream) = self.pool.try_take_h1(host, port, proxy_idx) {
-            if let Ok((response, keep_alive)) = self
+            if let Ok((mut response, keep_alive)) = self
                 .send_on_h1(
                     &mut stream,
                     method.clone(),
@@ -254,6 +258,7 @@ impl super::Client {
                 if keep_alive {
                     self.pool.insert_h1(host, port, proxy_idx, stream);
                 }
+                response.connection_reused = true;
                 return Ok(response);
             }
         }
@@ -325,8 +330,9 @@ impl super::Client {
 
         let alpn = tls_stream.ssl().selected_alpn_protocol();
         let is_h2 = matches!(alpn, Some(b"h2"));
+        let tls_resumed = tls_stream.ssl().session_reused();
 
-        let response = if is_h2 {
+        let mut response = if is_h2 {
             let mut sender = self.h2_handshake(tls_stream).await?;
             let response = self
                 .send_on_h2(&mut sender, method, uri, body, cookie_header, extra_headers)
@@ -343,6 +349,8 @@ impl super::Client {
             }
             response
         };
+
+        response.tls_resumed = tls_resumed;
 
         // Parse Alt-Svc header for future H3 discovery
         if !has_proxy && has_quic {
@@ -560,7 +568,8 @@ impl super::Client {
                 )
                 .await
             {
-                Ok(response) => {
+                Ok(mut response) => {
+                    response.connection_reused = true;
                     // Fire on_response hook
                     self.fire_on_response(response.status, url, &response.headers);
                     self.pool.insert_h2(host, port, proxy_idx, sender);
@@ -581,8 +590,9 @@ impl super::Client {
 
         let alpn = tls_stream.ssl().selected_alpn_protocol();
         let is_h2 = matches!(alpn, Some(b"h2"));
+        let tls_resumed = tls_stream.ssl().session_reused();
 
-        let response = if is_h2 {
+        let mut response = if is_h2 {
             let mut sender = self.h2_handshake(tls_stream).await?;
             let response = self
                 .send_on_h2_raw(&mut sender, method, &uri, body, &raw_headers)
@@ -599,6 +609,8 @@ impl super::Client {
             }
             response
         };
+
+        response.tls_resumed = tls_resumed;
 
         // Track bandwidth
         self.track_bytes(response.bytes_sent, response.bytes_received);

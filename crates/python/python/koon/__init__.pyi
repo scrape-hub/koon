@@ -23,6 +23,7 @@ class Koon:
         on_response: Optional[Callable[[int, str, Sequence[Tuple[str, str]]], None]] = None,
         on_redirect: Optional[Callable[[int, str, Sequence[Tuple[str, str]]], bool]] = None,
         retries: int = 0,
+        locale: Optional[str] = None,
     ) -> None:
         """Create a new Koon HTTP client with browser fingerprint impersonation.
 
@@ -44,7 +45,12 @@ class Koon:
             on_response: Observe-only hook called after each HTTP response (including redirects). Receives (status, url, headers).
             on_redirect: Hook called before following a redirect. Receives (status, url, headers). Return False to stop redirecting.
             retries: Number of automatic retries on transport errors. With proxy rotation, each retry uses the next proxy.
+            locale: Locale for Accept-Language header generation (e.g. ``"fr-FR"``, ``"de"``).
         """
+        ...
+    @property
+    def user_agent(self) -> Optional[str]:
+        """The User-Agent string from the browser profile."""
         ...
     def export_profile(self) -> str:
         """Export the current browser profile as a JSON string."""
@@ -76,23 +82,23 @@ class Koon:
     async def get(self, url: str) -> KoonResponse:
         """Perform an HTTP GET request."""
         ...
-    async def post(self, url: str, body: Optional[bytes] = None) -> KoonResponse:
+    async def post(self, url: str, body: Optional[Union[str, bytes]] = None) -> KoonResponse:
         """Perform an HTTP POST request."""
         ...
-    async def put(self, url: str, body: Optional[bytes] = None) -> KoonResponse:
+    async def put(self, url: str, body: Optional[Union[str, bytes]] = None) -> KoonResponse:
         """Perform an HTTP PUT request."""
         ...
     async def delete(self, url: str) -> KoonResponse:
         """Perform an HTTP DELETE request."""
         ...
-    async def patch(self, url: str, body: Optional[bytes] = None) -> KoonResponse:
+    async def patch(self, url: str, body: Optional[Union[str, bytes]] = None) -> KoonResponse:
         """Perform an HTTP PATCH request."""
         ...
     async def head(self, url: str) -> KoonResponse:
         """Perform an HTTP HEAD request."""
         ...
     async def request(
-        self, method: str, url: str, body: Optional[bytes] = None
+        self, method: str, url: str, body: Optional[Union[str, bytes]] = None
     ) -> KoonResponse:
         """Perform an HTTP request with a custom method."""
         ...
@@ -150,6 +156,14 @@ class KoonResponse:
     @property
     def bytes_received(self) -> int:
         """Approximate bytes received for this response (headers + body, pre-decompression)."""
+        ...
+    @property
+    def tls_resumed(self) -> bool:
+        """Whether TLS session resumption was used for this connection."""
+        ...
+    @property
+    def connection_reused(self) -> bool:
+        """Whether an existing pooled connection was reused."""
         ...
     def json(self) -> object:
         """Parse response body as JSON (delegates to ``json.loads``)."""
@@ -262,3 +276,14 @@ class KoonProxy:
     async def shutdown(self) -> None:
         """Shut down the proxy server."""
         ...
+
+class KoonError(RuntimeError):
+    """Structured error from koon with machine-readable error code prefix.
+
+    Error codes: TLS_ERROR, HTTP2_ERROR, QUIC_ERROR, HTTP3_ERROR, IO_ERROR,
+    INVALID_URL, PROXY_ERROR, INVALID_HEADER, CONNECTION_FAILED, JSON_ERROR,
+    WEBSOCKET_ERROR, DNS_ERROR, TIMEOUT, TOO_MANY_REDIRECTS.
+
+    The message format is ``[CODE] description``, e.g. ``[TIMEOUT] Request timed out``.
+    """
+    ...

@@ -21,6 +21,10 @@ pub struct HttpResponse {
     pub bytes_sent: u64,
     /// Approximate bytes received for this response (headers + body, pre-decompression).
     pub bytes_received: u64,
+    /// Whether TLS session resumption was used for this connection.
+    pub tls_resumed: bool,
+    /// Whether an existing pooled connection was reused.
+    pub connection_reused: bool,
 }
 
 /// Estimate the serialized size of HTTP headers.
