@@ -88,9 +88,7 @@ impl ConnectionPool {
         match conns.get(&key) {
             Some(timed) if Instant::now().duration_since(timed.inserted_at) < self.ttl => {
                 match &timed.entry {
-                    PoolEntry::Http2(sender) => {
-                        Some((sender.clone(), timed.peer_addr.clone()))
-                    }
+                    PoolEntry::Http2(sender) => Some((sender.clone(), timed.peer_addr.clone())),
                     _ => None,
                 }
             }
@@ -198,7 +196,10 @@ impl ConnectionPool {
         host: &str,
         port: u16,
         proxy_index: Option<usize>,
-    ) -> Option<(h3::client::SendRequest<h3_quinn::OpenStreams, Bytes>, Option<String>)> {
+    ) -> Option<(
+        h3::client::SendRequest<h3_quinn::OpenStreams, Bytes>,
+        Option<String>,
+    )> {
         let key = PoolKey {
             host: host.to_string(),
             port,
@@ -208,9 +209,7 @@ impl ConnectionPool {
         match conns.get(&key) {
             Some(timed) if Instant::now().duration_since(timed.inserted_at) < self.ttl => {
                 match &timed.entry {
-                    PoolEntry::Http3(sender) => {
-                        Some((sender.clone(), timed.peer_addr.clone()))
-                    }
+                    PoolEntry::Http3(sender) => Some((sender.clone(), timed.peer_addr.clone())),
                     _ => None,
                 }
             }
