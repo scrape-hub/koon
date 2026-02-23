@@ -21,6 +21,8 @@ class Koon:
         local_address: Optional[str] = None,
         on_request: Optional[Callable[[str, str], None]] = None,
         on_response: Optional[Callable[[int, str, Sequence[Tuple[str, str]]], None]] = None,
+        on_redirect: Optional[Callable[[int, str, Sequence[Tuple[str, str]]], bool]] = None,
+        retries: int = 0,
     ) -> None:
         """Create a new Koon HTTP client with browser fingerprint impersonation.
 
@@ -40,6 +42,8 @@ class Koon:
             local_address: Bind outgoing connections to a specific local IP address.
             on_request: Observe-only hook called before each HTTP request (including redirects). Receives (method, url).
             on_response: Observe-only hook called after each HTTP response (including redirects). Receives (status, url, headers).
+            on_redirect: Hook called before following a redirect. Receives (status, url, headers). Return False to stop redirecting.
+            retries: Number of automatic retries on transport errors. With proxy rotation, each retry uses the next proxy.
         """
         ...
     def export_profile(self) -> str:
@@ -65,6 +69,9 @@ class Koon:
         ...
     def reset_counters(self) -> None:
         """Reset both cumulative byte counters to zero."""
+        ...
+    def clear_cookies(self) -> None:
+        """Clear all cookies from the cookie jar. Keeps TLS sessions and connection pool."""
         ...
     async def get(self, url: str) -> KoonResponse:
         """Perform an HTTP GET request."""

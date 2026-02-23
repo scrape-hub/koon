@@ -11,7 +11,36 @@ impl super::Client {
     /// Perform an HTTP request with extra headers (e.g. multipart content-type).
     /// These headers are injected after custom_headers and override them.
     /// Automatically follows redirects and manages cookies if enabled.
+    ///
+    /// When `max_retries > 0`, retries the entire request (including redirects)
+    /// on retryable transport errors. With proxy rotation, each retry uses the
+    /// next proxy.
     pub async fn request_with_headers(
+        &self,
+        method: Method,
+        url: &str,
+        body: Option<Vec<u8>>,
+        extra_headers: Vec<(String, String)>,
+    ) -> Result<HttpResponse, Error> {
+        let mut last_error = None;
+        for attempt in 0..=self.max_retries {
+            match self
+                .do_request_with_redirects(method.clone(), url, body.clone(), extra_headers.clone())
+                .await
+            {
+                Ok(resp) => return Ok(resp),
+                Err(e) if e.is_retryable() && attempt < self.max_retries => {
+                    last_error = Some(e);
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        Err(last_error.unwrap())
+    }
+
+    /// Inner redirect-following loop. Called by `request_with_headers` (possibly
+    /// multiple times when retries are enabled).
+    async fn do_request_with_redirects(
         &self,
         method: Method,
         url: &str,
@@ -66,11 +95,6 @@ impl super::Client {
                 });
             }
 
-            redirect_count += 1;
-            if redirect_count > self.max_redirects {
-                return Err(Error::TooManyRedirects);
-            }
-
             // Extract Location header
             let location = response
                 .headers
@@ -82,7 +106,26 @@ impl super::Client {
                 })?;
 
             // Resolve relative URL against current URL
-            current_url = resolve_redirect(&current_url, &location)?;
+            let resolved_url = resolve_redirect(&current_url, &location)?;
+
+            // Fire on_redirect hook — return 3xx response if hook says stop
+            if !self.fire_on_redirect(
+                response.status,
+                &resolved_url.to_string(),
+                &response.headers,
+            ) {
+                return Ok(HttpResponse {
+                    url: current_url.to_string(),
+                    ..response
+                });
+            }
+
+            redirect_count += 1;
+            if redirect_count > self.max_redirects {
+                return Err(Error::TooManyRedirects);
+            }
+
+            current_url = resolved_url;
 
             // 307/308: preserve method and body. Otherwise: POST -> GET, drop body.
             match response.status {
@@ -318,6 +361,8 @@ impl super::Client {
     /// 3xx responses manually (similar to `fetch(redirect: 'manual')`).
     ///
     /// Decompression is **not** applied to streaming responses.
+    ///
+    /// When `max_retries > 0`, retries on retryable transport errors.
     pub async fn request_streaming(
         &self,
         method: Method,
@@ -329,7 +374,33 @@ impl super::Client {
     }
 
     /// Perform a streaming HTTP request with additional per-request headers.
+    ///
+    /// When `max_retries > 0`, retries on retryable transport errors.
     pub async fn request_streaming_with_headers(
+        &self,
+        method: Method,
+        url: &str,
+        body: Option<Vec<u8>>,
+        extra_headers: Vec<(String, String)>,
+    ) -> Result<StreamingResponse, Error> {
+        let mut last_error = None;
+        for attempt in 0..=self.max_retries {
+            match self
+                .do_request_streaming(method.clone(), url, body.clone(), extra_headers.clone())
+                .await
+            {
+                Ok(resp) => return Ok(resp),
+                Err(e) if e.is_retryable() && attempt < self.max_retries => {
+                    last_error = Some(e);
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        Err(last_error.unwrap())
+    }
+
+    /// Inner streaming request logic (no retry).
+    async fn do_request_streaming(
         &self,
         method: Method,
         url: &str,

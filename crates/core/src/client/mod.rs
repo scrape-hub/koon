@@ -22,6 +22,12 @@ pub type OnRequestHook = Arc<dyn Fn(&str, &str) + Send + Sync>;
 /// Observe-only hook called after each HTTP response (including redirects).
 pub type OnResponseHook = Arc<dyn Fn(u16, &str, &[(String, String)]) + Send + Sync>;
 
+/// Hook called before following a redirect. Return `false` to stop redirecting
+/// and return the 3xx response as-is.
+///
+/// Arguments: `(status_code, redirect_url, response_headers)`.
+pub type OnRedirectHook = Arc<dyn Fn(u16, &str, &[(String, String)]) -> bool + Send + Sync>;
+
 use boring2::ssl::SslConnector;
 use h3_quinn::quinn;
 use http::{Method, Uri};
@@ -51,6 +57,8 @@ pub struct ClientBuilder {
     local_address: Option<IpAddr>,
     on_request: Option<OnRequestHook>,
     on_response: Option<OnResponseHook>,
+    on_redirect: Option<OnRedirectHook>,
+    max_retries: u32,
     #[cfg(feature = "doh")]
     doh_resolver: Option<DohResolver>,
 }
@@ -70,6 +78,8 @@ impl ClientBuilder {
             local_address: None,
             on_request: None,
             on_response: None,
+            on_redirect: None,
+            max_retries: 0,
             #[cfg(feature = "doh")]
             doh_resolver: None,
         }
@@ -153,6 +163,32 @@ impl ClientBuilder {
         self
     }
 
+    /// Register a hook called before following each redirect.
+    ///
+    /// The hook receives `(status, redirect_url, response_headers)` and
+    /// should return `true` to follow or `false` to stop.
+    /// When stopped, the 3xx response is returned to the caller.
+    pub fn on_redirect<F: Fn(u16, &str, &[(String, String)]) -> bool + Send + Sync + 'static>(
+        mut self,
+        f: F,
+    ) -> Self {
+        self.on_redirect = Some(Arc::new(f));
+        self
+    }
+
+    /// Set the maximum number of automatic retries on transport errors.
+    ///
+    /// When a retryable error occurs (connection failure, TLS error, timeout,
+    /// proxy error, QUIC/H3 error), the entire request (including redirects)
+    /// is retried up to `n` times. With proxy rotation, each retry uses the
+    /// next proxy in the rotation.
+    ///
+    /// Default: 0 (no retries).
+    pub fn max_retries(mut self, n: u32) -> Self {
+        self.max_retries = n;
+        self
+    }
+
     /// Set a DNS-over-HTTPS resolver for encrypted DNS and ECH support.
     #[cfg(feature = "doh")]
     pub fn doh(mut self, resolver: DohResolver) -> Self {
@@ -191,6 +227,8 @@ impl ClientBuilder {
             local_address: self.local_address,
             on_request: self.on_request,
             on_response: self.on_response,
+            on_redirect: self.on_redirect,
+            max_retries: self.max_retries,
             #[cfg(feature = "doh")]
             doh_resolver: self.doh_resolver,
             pool: ConnectionPool::new(256, Duration::from_secs(90)),
@@ -220,6 +258,8 @@ pub struct Client {
     local_address: Option<IpAddr>,
     on_request: Option<OnRequestHook>,
     on_response: Option<OnResponseHook>,
+    on_redirect: Option<OnRedirectHook>,
+    max_retries: u32,
     #[cfg(feature = "doh")]
     doh_resolver: Option<DohResolver>,
     pool: ConnectionPool,
@@ -255,6 +295,29 @@ impl Client {
     pub(super) fn fire_on_response(&self, status: u16, url: &str, headers: &[(String, String)]) {
         if let Some(hook) = &self.on_response {
             hook(status, url, headers);
+        }
+    }
+
+    /// Fire the on_redirect hook if registered.
+    /// Returns `true` if the redirect should be followed, `false` to stop.
+    pub(super) fn fire_on_redirect(
+        &self,
+        status: u16,
+        url: &str,
+        headers: &[(String, String)],
+    ) -> bool {
+        match &self.on_redirect {
+            Some(hook) => hook(status, url, headers),
+            None => true,
+        }
+    }
+
+    /// Clear all cookies from the cookie jar.
+    ///
+    /// Keeps TLS sessions, connection pool, and all other client state intact.
+    pub fn clear_cookies(&self) {
+        if let Some(jar) = &self.cookie_jar {
+            jar.lock().unwrap().clear();
         }
     }
 

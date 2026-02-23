@@ -471,6 +471,11 @@ pub struct KoonOptions {
     /// Bind outgoing connections to a specific local IP address.
     /// Useful for servers with multiple IPs or IP rotation without a proxy.
     pub local_address: Option<String>,
+
+    /// Number of automatic retries on transport errors (connection, TLS, timeout).
+    /// With proxy rotation, each retry uses the next proxy.
+    /// @default 0
+    pub retries: Option<u32>,
 }
 
 /// Per-request options (headers, timeout).
@@ -735,8 +740,91 @@ impl Koon {
             builder = builder.local_address(addr);
         }
 
-        // Wire up on_request / on_response hooks: JsFunction → ThreadsafeFunction → Arc closure
+        if let Some(retries) = opts.retries {
+            builder = builder.max_retries(retries);
+        }
+
+        // Wire up hooks: JsFunction → ThreadsafeFunction → Arc closure
         if let Some(ref obj) = raw_options {
+            // onRedirect: returns bool, uses Blocking call mode + sync_channel
+            if let Ok(val) = obj.get_named_property::<napi::JsUnknown>("onRedirect") {
+                if val.get_type()? == napi::ValueType::Function {
+                    let js_fn = unsafe { val.cast::<JsFunction>() };
+                    // Store reference to prevent GC
+                    let js_fn_ref = env.create_reference(js_fn)?;
+
+                    // Wrapper to make Ref Send+Sync (only accessed on JS thread inside TSFN callback)
+                    struct SendRef(napi::Ref<()>);
+                    unsafe impl Send for SendRef {}
+                    unsafe impl Sync for SendRef {}
+                    let send_ref = Arc::new(SendRef(js_fn_ref));
+
+                    // Noop function as TSFN target — we call the real function manually in the callback
+                    let noop = env.create_function_from_closure("noop", |_ctx| Ok(()))?;
+
+                    type RedirectData = (
+                        u16,
+                        String,
+                        Vec<(String, String)>,
+                        std::sync::mpsc::SyncSender<bool>,
+                    );
+                    let tsfn = noop.create_threadsafe_function(
+                        0,
+                        move |ctx: ThreadSafeCallContext<RedirectData>| {
+                            let (status, url, headers, tx) = ctx.value;
+
+                            // Get real JS function from ref
+                            let js_fn: JsFunction = ctx.env.get_reference_value(&send_ref.0)?;
+
+                            // Build arguments
+                            let js_status = ctx.env.create_uint32(status as u32)?;
+                            let js_url = ctx.env.create_string(&url)?;
+                            let mut js_headers = ctx.env.create_array_with_length(headers.len())?;
+                            for (i, (name, value)) in headers.iter().enumerate() {
+                                let mut obj = ctx.env.create_object()?;
+                                obj.set_named_property("name", ctx.env.create_string(name)?)?;
+                                obj.set_named_property("value", ctx.env.create_string(value)?)?;
+                                js_headers.set_element(i as u32, obj)?;
+                            }
+
+                            // Call the real function
+                            let result = js_fn.call(
+                                None,
+                                &[
+                                    js_status.into_unknown(),
+                                    js_url.into_unknown(),
+                                    js_headers.coerce_to_object()?.into_unknown(),
+                                ],
+                            )?;
+
+                            // Extract boolean return value (default true if not boolean)
+                            let follow = match result.get_type()? {
+                                napi::ValueType::Boolean => {
+                                    unsafe { result.cast::<napi::JsBoolean>() }.get_value()?
+                                }
+                                _ => true,
+                            };
+                            let _ = tx.send(follow);
+
+                            // Return empty vec — noop doesn't need args
+                            Ok(Vec::<napi::JsUnknown>::new())
+                        },
+                    )?;
+
+                    let tsfn: Arc<ThreadsafeFunction<RedirectData, ErrorStrategy::Fatal>> =
+                        Arc::new(tsfn);
+                    builder = builder.on_redirect(
+                        move |status: u16, url: &str, headers: &[(String, String)]| {
+                            let (tx, rx) = std::sync::mpsc::sync_channel(1);
+                            tsfn.call(
+                                (status, url.to_string(), headers.to_vec(), tx),
+                                napi::threadsafe_function::ThreadsafeFunctionCallMode::Blocking,
+                            );
+                            rx.recv().unwrap_or(true)
+                        },
+                    );
+                }
+            }
             // Check if onRequest is a function (not undefined/null)
             if let Ok(val) = obj.get_named_property::<napi::JsUnknown>("onRequest") {
                 if val.get_type()? == napi::ValueType::Function {
@@ -1100,6 +1188,13 @@ impl Koon {
     #[napi]
     pub fn reset_counters(&self) {
         self.client.reset_counters();
+    }
+
+    /// Clear all cookies from the cookie jar.
+    /// Keeps TLS sessions, connection pool, and all other client state intact.
+    #[napi]
+    pub fn clear_cookies(&self) {
+        self.client.clear_cookies();
     }
 
     /// Open a WebSocket connection to a wss:// URL.

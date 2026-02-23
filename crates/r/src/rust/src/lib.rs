@@ -44,6 +44,12 @@ fn parse_headers_robj(robj: &Robj) -> Vec<(String, String)> {
     result
 }
 
+/// Wrapper to make Robj Send+Sync for use in Core hooks.
+/// Safe because block_on runs the future on the R thread (same thread that owns the Robj).
+struct UnsafeSendRobj(Robj);
+unsafe impl Send for UnsafeSendRobj {}
+unsafe impl Sync for UnsafeSendRobj {}
+
 /// The main Koon HTTP client with browser fingerprint impersonation.
 ///
 /// @details
@@ -91,8 +97,11 @@ impl Koon {
     /// @param local_address Optional local IP address to bind outgoing connections to.
     /// @param on_request Optional function(method, url) called before each request.
     /// @param on_response Optional function(status, url, headers) called after each response.
+    /// @param on_redirect Optional function(status, url, headers) called before following a redirect.
+    ///   Return FALSE to stop redirecting and return the 3xx response.
+    /// @param retries Number of automatic retries on transport errors (default: 0).
     /// @return A new Koon client object.
-    fn new(browser: &str, proxy: Nullable<String>, proxies: Robj, timeout: Nullable<i32>, randomize: Nullable<bool>, headers: Robj, local_address: Nullable<String>, on_request: Robj, on_response: Robj) -> Self {
+    fn new(browser: &str, proxy: Nullable<String>, proxies: Robj, timeout: Nullable<i32>, randomize: Nullable<bool>, headers: Robj, local_address: Nullable<String>, on_request: Robj, on_response: Robj, on_redirect: Robj, retries: Nullable<i32>) -> Self {
         let mut profile = BrowserProfile::resolve(browser)
             .unwrap_or_else(|e| panic!("Unknown browser profile '{}': {}", browser, e));
 
@@ -133,6 +142,30 @@ impl Koon {
                 .parse()
                 .unwrap_or_else(|e| panic!("Invalid local_address '{}': {}", addr_str, e));
             builder = builder.local_address(addr);
+        }
+
+        if on_redirect.is_function() {
+            let send_robj = Arc::new(UnsafeSendRobj(on_redirect.clone()));
+            builder = builder.on_redirect(
+                move |status: u16, url: &str, headers: &[(String, String)]| {
+                    let header_names: Vec<String> = headers.iter().map(|(n, _)| n.clone()).collect();
+                    let header_values: Vec<String> = headers.iter().map(|(_, v)| v.clone()).collect();
+                    let headers_df = data_frame!(name = header_names, value = header_values);
+                    match send_robj.0.call(pairlist!(status as i32, url, headers_df)) {
+                        Ok(result) => {
+                            // R FALSE → stop, anything else → continue
+                            result.as_logical().map(|l| l.is_true()).unwrap_or(true)
+                        }
+                        Err(_) => true,
+                    }
+                },
+            );
+        }
+
+        if let NotNull(n) = retries {
+            if n > 0 {
+                builder = builder.max_retries(n as u32);
+            }
         }
 
         let client = builder
@@ -308,6 +341,13 @@ impl Koon {
     /// Reset both cumulative byte counters to zero.
     fn reset_counters(&self) {
         self.client.reset_counters();
+    }
+
+    /// Clear all cookies from the cookie jar.
+    ///
+    /// Keeps TLS sessions, connection pool, and all other client state intact.
+    fn clear_cookies(&self) {
+        self.client.clear_cookies();
     }
 }
 

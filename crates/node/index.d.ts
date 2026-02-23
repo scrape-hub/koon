@@ -47,6 +47,10 @@ export interface KoonOptions {
   onRequest?: (method: string, url: string) => void;
   /** Observe-only hook called after each HTTP response (including redirects). */
   onResponse?: (status: number, url: string, headers: Array<{ name: string; value: string }>) => void;
+  /** Hook called before following a redirect. Return false to stop redirecting and return the 3xx response. */
+  onRedirect?: (status: number, url: string, headers: Array<{ name: string; value: string }>) => boolean;
+  /** Number of automatic retries on transport errors. With proxy rotation, each retry uses the next proxy. Default: 0. */
+  retries?: number;
 }
 
 export class KoonResponse {
@@ -123,6 +127,9 @@ export class Koon {
   totalBytesReceived(): bigint;
   /** Reset both cumulative byte counters to zero. */
   resetCounters(): void;
+
+  /** Clear all cookies from the cookie jar. Keeps TLS sessions and connection pool. */
+  clearCookies(): void;
 
   exportProfile(): string;
   saveSession(): string;

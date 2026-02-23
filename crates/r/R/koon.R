@@ -51,6 +51,20 @@
 #' client2 <- Koon$new("chrome145")
 #' client2$load_session(json)
 #'
+#' # Custom redirect handling
+#' client <- Koon$new("chrome145",
+#'   on_redirect = function(status, url, headers) {
+#'     !grepl("captcha", url)  # stop if redirect goes to captcha
+#'   })
+#'
+#' # Automatic retries with proxy rotation
+#' client <- Koon$new("chrome145",
+#'   proxies = c("socks5://a:1080", "socks5://b:1080"),
+#'   retries = 3L)
+#'
+#' # Clear cookies
+#' client$clear_cookies()
+#'
 #' # List available browsers
 #' koon_browsers()
 #' }

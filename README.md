@@ -119,6 +119,9 @@ Each profile includes Windows, macOS, and Linux user-agent variants (`chrome145-
 - **Response decompression** — gzip, brotli, deflate, zstd (automatic)
 - **Local address binding** — bind outgoing connections to a specific local IP (multi-IP servers, IP rotation)
 - **Connection pooling** — H3 multiplexed + H2 multiplexed + H1.1 keep-alive
+- **Custom redirect hook** — `onRedirect(status, url, headers) → bool` to intercept and stop redirects (captcha detection, geo-block handling)
+- **Automatic retry** — retry on transport errors (connection, TLS, timeout) with automatic proxy rotation
+- **Request hooks** — `onRequest`/`onResponse` observe-only callbacks for logging and debugging
 
 ## Usage
 
@@ -134,6 +137,10 @@ const client = new Koon({
   proxy: 'socks5://127.0.0.1:1080',  // optional
   localAddress: '192.168.1.100',      // optional: bind to specific IP
   randomize: true,                     // optional: slight fingerprint jitter
+  retries: 3,                          // optional: retry on transport errors
+  onRedirect: (status, url, headers) => {
+    return !url.includes('captcha');   // stop if redirect goes to captcha
+  },
 });
 
 // HTTP methods
@@ -161,6 +168,9 @@ const r7 = await client.get('https://httpbin.org/get', {
 // Cookies persist automatically
 await client.get('https://httpbin.org/cookies/set/name/value');
 const r = await client.get('https://httpbin.org/cookies');
+
+// Clear cookies (keeps TLS sessions and connection pool)
+client.clearCookies();
 
 // Session save/load
 const session = client.saveSession();           // JSON string
@@ -203,7 +213,12 @@ import asyncio
 from koon import Koon
 
 async def main():
-    client = Koon("chrome145", headers={"X-Custom": "value"}, local_address="192.168.1.100")
+    client = Koon("chrome145",
+        headers={"X-Custom": "value"},
+        local_address="192.168.1.100",
+        retries=3,  # retry on transport errors
+        on_redirect=lambda s, u, h: "captcha" not in u,  # stop on captcha redirect
+    )
 
     # HTTP methods
     r = await client.get("https://httpbin.org/get")
@@ -229,6 +244,9 @@ async def main():
     # Cookies persist automatically
     await client.get("https://httpbin.org/cookies/set/name/value")
     r = await client.get("https://httpbin.org/cookies")
+
+    # Clear cookies (keeps TLS sessions and connection pool)
+    client.clear_cookies()
 
     # Session save/load
     session = client.save_session()
@@ -267,7 +285,8 @@ library(koon)
 
 # Browser profile + options
 client <- Koon$new("chrome145", proxy = "socks5://127.0.0.1:1080", randomize = TRUE,
-                    local_address = "192.168.1.100")
+                    local_address = "192.168.1.100", retries = 3L,
+                    on_redirect = function(status, url, headers) !grepl("captcha", url))
 
 # HTTP methods (synchronous)
 resp <- client$get("https://httpbin.org/get")
@@ -296,6 +315,9 @@ resp <- client$get("https://httpbin.org/get",
 # Cookies persist automatically
 client$get("https://httpbin.org/cookies/set/name/value")
 resp <- client$get("https://httpbin.org/cookies")
+
+# Clear cookies (keeps TLS sessions and connection pool)
+client$clear_cookies()
 
 # Session save/load
 json <- client$save_session()
@@ -370,14 +392,22 @@ use koon_core::profile::Chrome;
 #[tokio::main]
 async fn main() -> Result<(), koon_core::Error> {
     // From a specific profile constructor
-    let client = Client::new(Chrome::v145_windows());
+    let client = Client::new(Chrome::v145_windows())?;
 
-    // Or resolve by name (supports "chrome145", "firefox147-linux", etc.)
+    // Or with builder for full control
     let profile = BrowserProfile::resolve("chrome145")?;
-    let client = Client::new(profile);
+    let client = Client::builder(profile)
+        .max_retries(3)
+        .on_redirect(|status, url, _headers| {
+            !url.contains("captcha")
+        })
+        .build()?;
 
     let r = client.get("https://example.com").await?;
     println!("{} {} ({} bytes)", r.status, r.version, r.body.len());
+
+    // Clear cookies without resetting TLS/pool
+    client.clear_cookies();
 
     Ok(())
 }

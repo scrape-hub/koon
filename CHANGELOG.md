@@ -5,6 +5,29 @@ All notable changes to koon will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Custom Redirect Hook**: `onRedirect(status, url, headers) → bool` to intercept redirects
+  - Return `false` to stop following and receive the 3xx response as-is
+  - Fires after Location header resolution + cookie storage, before the next request
+  - Useful for detecting captcha pages, geo-blocks, or login redirects
+  - Node.js: `new Koon({ onRedirect: (status, url, headers) => !url.includes('captcha') })`
+  - Python: `Koon("chrome", on_redirect=lambda s,u,h: "captcha" not in u)`
+  - R: `Koon$new("chrome", on_redirect = function(s, u, h) !grepl("captcha", u))`
+  - Rust: `Client::builder(profile).on_redirect(|status, url, headers| true).build()`
+- **Automatic Retry**: Transport-error retry with proxy rotation
+  - `retries: N` retries the entire request (including redirect chain) on transport errors
+  - Retryable: connection failures, TLS errors, I/O errors, timeouts, proxy/QUIC/H3 errors
+  - NOT retryable: HTTP/2 stream errors, redirect limits, URL parse errors, JSON, WebSocket
+  - With proxy rotation, each retry automatically uses the next proxy
+  - Streaming requests also support retries
+  - Node.js: `new Koon({ retries: 3 })`
+  - Python: `Koon("chrome", retries=3)`
+  - R: `Koon$new("chrome", retries = 3L)`
+  - Rust: `Client::builder(profile).max_retries(3).build()`
+- **Clear Cookies**: `clearCookies()` to empty the cookie jar while keeping TLS sessions and connection pool
+  - Node.js: `client.clearCookies()`
+  - Python: `client.clear_cookies()`
+  - R: `client$clear_cookies()`
+  - Rust: `client.clear_cookies()`
 - **Bandwidth Tracking**: Per-request and cumulative byte counters for bandwidth budget monitoring
   - Per-request: `bytes_sent` / `bytes_received` on every response (headers + body, pre-decompression)
   - Cumulative: `total_bytes_sent()` / `total_bytes_received()` / `reset_counters()` on the client

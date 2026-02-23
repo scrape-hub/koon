@@ -69,6 +69,27 @@ impl Error {
             _ => false,
         }
     }
+
+    /// Check if this error is retryable (transport-level failures).
+    ///
+    /// Retryable: connection failures, TLS errors, I/O errors, timeouts,
+    /// proxy errors, QUIC/H3 errors.
+    ///
+    /// NOT retryable: HTTP/2 stream errors, redirect limits, URL parse errors,
+    /// JSON errors, WebSocket errors.
+    pub fn is_retryable(&self) -> bool {
+        matches!(
+            self,
+            Error::ConnectionFailed(_)
+                | Error::Tls(_)
+                | Error::TlsStack(_)
+                | Error::Io(_)
+                | Error::Timeout
+                | Error::Proxy(_)
+                | Error::Quic(_)
+                | Error::Http3(_)
+        )
+    }
 }
 
 impl From<boring2::ssl::Error> for Error {

@@ -70,7 +70,7 @@ impl Koon {
     ///     local_address: Bind outgoing connections to a specific local IP address.
     ///     proxies: List of proxy URLs for round-robin rotation (takes priority over `proxy`).
     #[new]
-    #[pyo3(signature = (browser="chrome", *, profile_json=None, proxy=None, proxies=None, timeout=30000, ignore_tls_errors=false, headers=None, follow_redirects=true, max_redirects=10, cookie_jar=true, randomize=false, session_resumption=true, doh=None, local_address=None, on_request=None, on_response=None))]
+    #[pyo3(signature = (browser="chrome", *, profile_json=None, proxy=None, proxies=None, timeout=30000, ignore_tls_errors=false, headers=None, follow_redirects=true, max_redirects=10, cookie_jar=true, randomize=false, session_resumption=true, doh=None, local_address=None, on_request=None, on_response=None, on_redirect=None, retries=0))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         browser: &str,
@@ -89,6 +89,8 @@ impl Koon {
         local_address: Option<&str>,
         on_request: Option<Py<PyAny>>,
         on_response: Option<Py<PyAny>>,
+        on_redirect: Option<Py<PyAny>>,
+        retries: u32,
     ) -> PyResult<Self> {
         let mut profile = if let Some(json) = profile_json {
             BrowserProfile::from_json(json).map_err(to_py_err)?
@@ -167,6 +169,27 @@ impl Koon {
             );
         }
 
+        if let Some(callback) = on_redirect {
+            builder = builder.on_redirect(
+                move |status: u16, url: &str, headers: &[(String, String)]| {
+                    Python::attach(|py| {
+                        let headers_list: Vec<(&str, &str)> = headers
+                            .iter()
+                            .map(|(n, v)| (n.as_str(), v.as_str()))
+                            .collect();
+                        match callback.call1(py, (status, url, headers_list)) {
+                            Ok(result) => result.is_truthy(py).unwrap_or(true),
+                            Err(_) => true,
+                        }
+                    })
+                },
+            );
+        }
+
+        if retries > 0 {
+            builder = builder.max_retries(retries);
+        }
+
         let client = builder.build().map_err(to_py_err)?;
 
         Ok(Koon {
@@ -212,6 +235,12 @@ impl Koon {
     /// Reset both cumulative byte counters to zero.
     fn reset_counters(&self) {
         self.client.reset_counters();
+    }
+
+    /// Clear all cookies from the cookie jar.
+    /// Keeps TLS sessions, connection pool, and all other client state intact.
+    fn clear_cookies(&self) {
+        self.client.clear_cookies();
     }
 
     /// Perform an HTTP GET request.

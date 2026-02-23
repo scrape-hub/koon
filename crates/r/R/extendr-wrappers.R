@@ -18,7 +18,7 @@ koon_browsers <- function() .Call(wrap__koon_browsers)
 
 Koon <- new.env(parent = emptyenv())
 
-Koon$new <- function(browser, proxy = NULL, proxies = NULL, timeout = NULL, randomize = NULL, headers = NULL, local_address = NULL, on_request = NULL, on_response = NULL) .Call(wrap__Koon__new, browser, proxy, proxies, timeout, randomize, headers, local_address, on_request, on_response)
+Koon$new <- function(browser, proxy = NULL, proxies = NULL, timeout = NULL, randomize = NULL, headers = NULL, local_address = NULL, on_request = NULL, on_response = NULL, on_redirect = NULL, retries = NULL) .Call(wrap__Koon__new, browser, proxy, proxies, timeout, randomize, headers, local_address, on_request, on_response, on_redirect, retries)
 
 Koon$get <- function(url, headers = NULL) .Call(wrap__Koon__get, self, url, headers)
 
@@ -43,6 +43,8 @@ Koon$total_bytes_sent <- function() .Call(wrap__Koon__total_bytes_sent, self)
 Koon$total_bytes_received <- function() .Call(wrap__Koon__total_bytes_received, self)
 
 Koon$reset_counters <- function() invisible(.Call(wrap__Koon__reset_counters, self))
+
+Koon$clear_cookies <- function() invisible(.Call(wrap__Koon__clear_cookies, self))
 
 #' @export
 `$.Koon` <- function (self, name) { func <- Koon[[name]]; environment(func) <- environment(); func }

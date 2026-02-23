@@ -161,6 +161,11 @@ impl CookieJar {
         Some(header)
     }
 
+    /// Remove all stored cookies.
+    pub fn clear(&mut self) {
+        self.cookies.clear();
+    }
+
     /// Get a reference to all stored cookies.
     pub fn cookies(&self) -> &[Cookie] {
         &self.cookies
