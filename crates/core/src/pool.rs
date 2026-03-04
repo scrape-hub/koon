@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
@@ -53,6 +53,16 @@ impl ConnectionPool {
         }
     }
 
+    /// Acquire the lock, recovering from poisoned state.
+    /// A poisoned mutex means a thread panicked while holding it, but the data
+    /// is still accessible. We recover rather than cascading into another panic.
+    fn lock(&self) -> MutexGuard<'_, HashMap<PoolKey, TimedEntry>> {
+        self.connections.lock().unwrap_or_else(|e| {
+            eprintln!("[koon] connection pool mutex was poisoned, recovering");
+            e.into_inner()
+        })
+    }
+
     /// Remove all entries whose TTL has expired. Must be called with lock held.
     fn evict_expired(connections: &mut HashMap<PoolKey, TimedEntry>, ttl: Duration) {
         let now = Instant::now();
@@ -84,7 +94,7 @@ impl ConnectionPool {
             port,
             proxy_index,
         };
-        let mut conns = self.connections.lock().unwrap();
+        let mut conns = self.lock();
         match conns.get(&key) {
             Some(timed) if Instant::now().duration_since(timed.inserted_at) < self.ttl => {
                 match &timed.entry {
@@ -113,7 +123,7 @@ impl ConnectionPool {
             port,
             proxy_index,
         };
-        let mut conns = self.connections.lock().unwrap();
+        let mut conns = self.lock();
         match conns.get(&key) {
             Some(timed) if Instant::now().duration_since(timed.inserted_at) < self.ttl => {
                 match &timed.entry {
@@ -150,7 +160,7 @@ impl ConnectionPool {
             port,
             proxy_index,
         };
-        let mut conns = self.connections.lock().unwrap();
+        let mut conns = self.lock();
         Self::evict_expired(&mut conns, self.ttl);
         Self::evict_oldest(&mut conns, self.max_size);
         conns.insert(
@@ -177,7 +187,7 @@ impl ConnectionPool {
             port,
             proxy_index,
         };
-        let mut conns = self.connections.lock().unwrap();
+        let mut conns = self.lock();
         Self::evict_expired(&mut conns, self.ttl);
         Self::evict_oldest(&mut conns, self.max_size);
         conns.insert(
@@ -205,7 +215,7 @@ impl ConnectionPool {
             port,
             proxy_index,
         };
-        let mut conns = self.connections.lock().unwrap();
+        let mut conns = self.lock();
         match conns.get(&key) {
             Some(timed) if Instant::now().duration_since(timed.inserted_at) < self.ttl => {
                 match &timed.entry {
@@ -235,7 +245,7 @@ impl ConnectionPool {
             port,
             proxy_index,
         };
-        let mut conns = self.connections.lock().unwrap();
+        let mut conns = self.lock();
         Self::evict_expired(&mut conns, self.ttl);
         Self::evict_oldest(&mut conns, self.max_size);
         conns.insert(
@@ -255,11 +265,11 @@ impl ConnectionPool {
             port,
             proxy_index,
         };
-        self.connections.lock().unwrap().remove(&key);
+        self.lock().remove(&key);
     }
 
     /// Drop all pooled connections immediately.
     pub fn clear(&self) {
-        self.connections.lock().unwrap().clear();
+        self.lock().clear();
     }
 }

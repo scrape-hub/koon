@@ -128,9 +128,12 @@ impl super::Client {
             .await
             .map_err(Error::Http2)?;
 
-        // Spawn a task to drive the HTTP/2 connection
+        // Spawn a task to drive the HTTP/2 connection.
+        // Log errors to stderr so connection failures don't silently disappear.
         tokio::spawn(async move {
-            let _ = h2_conn.await;
+            if let Err(e) = h2_conn.await {
+                eprintln!("[koon] H2 connection driver error: {e}");
+            }
         });
 
         Ok(client)

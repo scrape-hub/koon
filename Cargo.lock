@@ -909,7 +909,7 @@ dependencies = [
 
 [[package]]
 name = "koon-cli"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "clap",
  "http",
@@ -920,7 +920,7 @@ dependencies = [
 
 [[package]]
 name = "koon-core"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "base64",
  "boring2",
@@ -958,7 +958,7 @@ dependencies = [
 
 [[package]]
 name = "koon-node"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "koon-core",
  "napi",
@@ -971,7 +971,7 @@ dependencies = [
 
 [[package]]
 name = "koon-python"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "http",
  "koon-core",

@@ -2,6 +2,15 @@
 
 All notable changes to koon will be documented in this file.
 
+## [0.5.5] - 2026-03-04
+
+### Added
+- **Panic hook in NAPI module**: Logs panic message, location, and backtrace to stderr before crash. Makes silent native crashes diagnosable.
+- **H2 connection driver error logging**: H2 background task now logs errors to stderr instead of silently swallowing them.
+
+### Fixed
+- **Poisoned Mutex recovery**: Connection pool Mutex locks now recover from poisoned state instead of panicking. Prevents cascading crashes when a thread panics while holding the pool lock.
+
 ## [0.5.4] - 2026-03-04
 
 ### Added

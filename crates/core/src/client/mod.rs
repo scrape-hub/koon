@@ -369,8 +369,12 @@ impl Client {
     /// The client can still be used after this — new connections will be opened as needed.
     pub fn close(&self) {
         self.pool.clear();
-        *self.quic_endpoint.lock().unwrap() = None;
-        *self.alt_svc_cache.lock().unwrap() = HashMap::new();
+        if let Ok(mut ep) = self.quic_endpoint.lock() {
+            *ep = None;
+        }
+        if let Ok(mut cache) = self.alt_svc_cache.lock() {
+            cache.clear();
+        }
     }
 
     /// Fire the on_request hook if registered.

@@ -11,6 +11,31 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::timeout as tokio_timeout;
 
+/// Install a panic hook that logs to stderr before aborting.
+/// This captures Rust panics that would otherwise silently crash the Node.js process.
+#[napi::module_init]
+fn init_module() {
+    std::panic::set_hook(Box::new(|info| {
+        let thread = std::thread::current();
+        let thread_name = thread.name().unwrap_or("<unnamed>");
+        let payload = if let Some(s) = info.payload().downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = info.payload().downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "Box<dyn Any>".to_string()
+        };
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "<unknown>".to_string());
+
+        eprintln!("\n[koon] PANIC in thread '{thread_name}' at {location}:");
+        eprintln!("[koon]   {payload}");
+        eprintln!("[koon] backtrace:\n{}", std::backtrace::Backtrace::force_capture());
+    }));
+}
+
 /// Options for creating a Koon client.
 #[napi(object)]
 #[derive(Default)]
