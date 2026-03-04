@@ -151,6 +151,9 @@ export class Koon {
   /** Clear all cookies from the cookie jar. Keeps TLS sessions and connection pool. */
   clearCookies(): void;
 
+  /** Close all pooled connections and release resources. The client can still be used after — new connections open on demand. */
+  close(): void;
+
   exportProfile(): string;
   saveSession(): string;
   loadSession(json: string): void;

@@ -257,4 +257,9 @@ impl ConnectionPool {
         };
         self.connections.lock().unwrap().remove(&key);
     }
+
+    /// Drop all pooled connections immediately.
+    pub fn clear(&self) {
+        self.connections.lock().unwrap().clear();
+    }
 }

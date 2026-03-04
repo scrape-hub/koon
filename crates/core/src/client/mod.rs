@@ -365,6 +365,14 @@ impl Client {
             .map(|(_, v)| v.as_str())
     }
 
+    /// Close all pooled connections and release resources.
+    /// The client can still be used after this — new connections will be opened as needed.
+    pub fn close(&self) {
+        self.pool.clear();
+        *self.quic_endpoint.lock().unwrap() = None;
+        *self.alt_svc_cache.lock().unwrap() = HashMap::new();
+    }
+
     /// Fire the on_request hook if registered.
     pub(super) fn fire_on_request(&self, method: &str, url: &str) {
         if let Some(hook) = &self.on_request {

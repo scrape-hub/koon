@@ -874,6 +874,14 @@ impl Koon {
         self.client.clear_cookies();
     }
 
+    /// Close all pooled connections and release resources.
+    /// Call this when you're done with the client to prevent resource leaks.
+    /// The client can still be used after this — new connections will be opened as needed.
+    #[napi]
+    pub fn close(&self) {
+        self.client.close();
+    }
+
     /// Open a WebSocket connection to a wss:// URL.
     ///
     /// @example

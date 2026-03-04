@@ -2,6 +2,12 @@
 
 All notable changes to koon will be documented in this file.
 
+## [0.5.4] - 2026-03-04
+
+### Added
+- **`close()` method on Client / Koon**: Explicitly drops all pooled connections (H1, H2, H3), clears QUIC endpoint and Alt-Svc cache. Prevents resource leaks when creating many short-lived clients. The client remains usable after `close()` — new connections open on demand.
+- **`ConnectionPool::clear()`**: Internal method to drop all pooled connections immediately.
+
 ## [0.5.3] - 2026-02-24
 
 ### Changed
