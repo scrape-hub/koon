@@ -133,7 +133,6 @@ jobs:
           before-script-linux: |
             curl -sL https://go.dev/dl/go1.24.1.linux-amd64.tar.gz | tar -C /usr/local -xzf -
             export PATH=$PATH:/usr/local/go/bin
-            echo "PATH=$PATH:/usr/local/go/bin" >> $GITHUB_ENV
           manylinux: auto
 
       - name: Upload wheels
