@@ -3,6 +3,11 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (e.g. v0.5.3)"
+        required: true
 
 permissions:
   contents: write
@@ -11,11 +16,13 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # ─── Node.js binary (Windows x64 only for now) ──────────────────────
-  build:
+  # ─── Node.js binary (Windows x64) ───────────────────────────────────
+  build-node-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -44,11 +51,48 @@ jobs:
           name: node-x86_64-pc-windows-msvc
           path: crates/node/koon.win32-x64-msvc.node
 
-  # ─── Python wheel (Windows x64 only for now) ────────────────────────
-  build-python:
+  # ─── Node.js binary (Linux x64) ─────────────────────────────────────
+  build-node-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install build deps
+        run: sudo apt-get update && sudo apt-get install -y cmake build-essential
+
+      - name: Build
+        run: cargo build --release -p koon-node --target x86_64-unknown-linux-gnu
+
+      - name: Rename node binary
+        run: |
+          cp "target/x86_64-unknown-linux-gnu/release/libkoon_node.so" \
+             "crates/node/koon.linux-x64-gnu.node"
+
+      - name: Upload node artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-x86_64-unknown-linux-gnu
+          path: crates/node/koon.linux-x64-gnu.node
+
+  # ─── Python wheel (Windows x64) ─────────────────────────────────────
+  build-python-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - uses: ./.github/actions/setup-windows
 
@@ -73,11 +117,38 @@ jobs:
           name: wheels-x86_64-pc-windows-msvc
           path: dist/*.whl
 
+  # ─── Python wheel (Linux x64, manylinux) ────────────────────────────
+  build-python-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: x86_64
+          args: --release --out dist --find-interpreter --manifest-path crates/python/Cargo.toml
+          before-script-linux: |
+            curl -sL https://go.dev/dl/go1.24.1.linux-amd64.tar.gz | tar -C /usr/local -xzf -
+            export PATH=$PATH:/usr/local/go/bin
+            echo "PATH=$PATH:/usr/local/go/bin" >> $GITHUB_ENV
+          manylinux: auto
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-x86_64-unknown-linux-gnu
+          path: dist/*.whl
+
   # ─── Python source distribution ────────────────────────────────────
   sdist:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Build sdist
         uses: PyO3/maturin-action@v1
@@ -93,8 +164,9 @@ jobs:
 
   # ─── Publish to npm ─────────────────────────────────────────────────
   publish-npm:
-    needs: build
+    needs: [build-node-windows, build-node-linux]
     runs-on: ubuntu-latest
+    if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
 
@@ -121,8 +193,9 @@ jobs:
 
   # ─── Publish to PyPI ────────────────────────────────────────────────
   publish-pypi:
-    needs: [build-python, sdist]
+    needs: [build-python-windows, build-python-linux, sdist]
     runs-on: ubuntu-latest
+    if: github.event_name == 'push'
     steps:
       - uses: actions/setup-python@v5
         with:
@@ -152,21 +225,40 @@ jobs:
         env:
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
 
-  # ─── GitHub Release (changelog marker, no binaries) ────────────────
+  # ─── GitHub Release with binaries ───────────────────────────────────
   publish-github:
-    needs: [build, build-python]
+    needs: [build-node-windows, build-node-linux, build-python-windows, build-python-linux, sdist]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Collect release files
+        run: |
+          mkdir -p release-files
+          cp artifacts/node-*/*.node release-files/
+          cp artifacts/wheels-*/*.whl release-files/
+          cp artifacts/sdist/*.tar.gz release-files/
+          ls -la release-files/
+
+      - name: Determine tag
+        id: tag
+        run: echo "name=${{ inputs.tag || github.ref_name }}" >> $GITHUB_OUTPUT
 
       - name: Delete existing release (if re-releasing)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release delete ${{ github.ref_name }} --yes --cleanup-tag=false 2>/dev/null || true
+        run: gh release delete ${{ steps.tag.outputs.name }} --yes --cleanup-tag=false 2>/dev/null || true
 
-      - name: Create GitHub Release
+      - name: Create GitHub Release with assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create ${{ github.ref_name }} --generate-notes
+        run: gh release create ${{ steps.tag.outputs.name }} release-files/* --generate-notes
