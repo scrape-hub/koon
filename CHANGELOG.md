@@ -2,6 +2,12 @@
 
 All notable changes to koon will be documented in this file.
 
+## [0.5.6] - 2026-03-15
+
+### Fixed
+- **Version sync**: All packages (npm, PyPI, R, CLI) now publish from the same version. Previous releases 0.5.4/0.5.5 had inconsistent version numbers across packages.
+- **CI: Linux x64 builds**: Release workflow now builds Node.js and Python binaries for Linux x86_64 in addition to Windows. GitHub Release includes all platform binaries.
+
 ## [0.5.5] - 2026-03-04
 
 ### Added
