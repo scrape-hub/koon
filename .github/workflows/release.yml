@@ -131,7 +131,12 @@ jobs:
           target: x86_64
           args: --release --out dist --find-interpreter --manifest-path crates/python/Cargo.toml
           before-script-linux: |
-            yum install -y clang-devel || apt-get update && apt-get install -y libclang-dev || true
+            if command -v yum &>/dev/null; then
+              yum install -y llvm-toolset-7.0-clang-devel || yum install -y clang-devel || true
+              source /opt/rh/llvm-toolset-7.0/enable 2>/dev/null || true
+            elif command -v apt-get &>/dev/null; then
+              apt-get update && apt-get install -y libclang-dev
+            fi
             curl -sL https://go.dev/dl/go1.24.1.linux-amd64.tar.gz | tar -C /usr/local -xzf -
             export PATH=$PATH:/usr/local/go/bin
           manylinux: auto
