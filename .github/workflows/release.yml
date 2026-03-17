@@ -147,6 +147,72 @@ jobs:
           name: wheels-x86_64-unknown-linux-gnu
           path: dist/*.whl
 
+  # ─── CLI binary (Windows x64) ──────────────────────────────────────
+  build-cli-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - uses: ./.github/actions/setup-windows
+
+      - name: Build
+        run: cargo build --release -p koon-cli --target x86_64-pc-windows-msvc
+
+      - name: Rename CLI binary
+        shell: bash
+        run: cp "target/x86_64-pc-windows-msvc/release/koon.exe" koon-windows-x64.exe
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-x86_64-pc-windows-msvc
+          path: koon-windows-x64.exe
+
+  # ─── CLI binary (Linux x64) ───────────────────────────────────────
+  build-cli-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install build deps
+        run: sudo apt-get update && sudo apt-get install -y cmake build-essential
+
+      - name: Build
+        run: cargo build --release -p koon-cli --target x86_64-unknown-linux-gnu
+
+      - name: Rename CLI binary
+        run: cp "target/x86_64-unknown-linux-gnu/release/koon" koon-linux-x64
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-x86_64-unknown-linux-gnu
+          path: koon-linux-x64
+
   # ─── Python source distribution ────────────────────────────────────
   sdist:
     runs-on: ubuntu-latest
@@ -232,7 +298,7 @@ jobs:
 
   # ─── GitHub Release with binaries ───────────────────────────────────
   publish-github:
-    needs: [build-node-windows, build-node-linux, build-python-windows, build-python-linux, sdist]
+    needs: [build-node-windows, build-node-linux, build-python-windows, build-python-linux, build-cli-windows, build-cli-linux, sdist]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -250,6 +316,7 @@ jobs:
         run: |
           mkdir -p release-files
           cp artifacts/node-*/*.node release-files/
+          cp artifacts/cli-*/* release-files/
           cp artifacts/wheels-*/*.whl release-files/
           cp artifacts/sdist/*.tar.gz release-files/
           ls -la release-files/
