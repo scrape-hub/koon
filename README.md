@@ -224,7 +224,7 @@ console.log(r1.ok);                             // true (status 2xx)
 console.log(r1.status);                         // 200
 console.log(r1.text());                         // body as string (charset-aware)
 console.log(r1.json());                         // parsed JSON
-console.log(r1.contentType);                    // "application/json" or null
+console.log(r1.contentType);                    // e.g. "text/html; charset=utf-8"
 console.log(r1.header('content-type'));          // case-insensitive header lookup
 console.log(r1.body);                           // raw Buffer
 console.log(r1.tlsResumed);                     // TLS session was reused
@@ -312,7 +312,7 @@ async def main():
     print(r.status)             # 200
     print(r.text)               # body as string (charset-aware)
     print(r.json())             # parsed JSON
-    print(r.content_type)       # "application/json" or None
+    print(r.content_type)       # e.g. "text/html; charset=utf-8"
     print(r.header("content-type"))  # case-insensitive header lookup
     print(r.tls_resumed)        # TLS session was reused
     print(r.connection_reused)  # pooled connection was reused
@@ -385,7 +385,7 @@ resp$ok         # TRUE (status 2xx)
 resp$status     # 200
 resp$version    # "HTTP/2.0"
 resp$text           # body as string (charset-aware)
-resp$content_type   # "application/json" or NULL
+resp$content_type   # e.g. "text/html; charset=utf-8"
 resp$body           # raw vector
 resp$headers        # data.frame with name + value columns
 
