@@ -120,7 +120,7 @@ jobs:
 
   # ─── Node.js binary (macOS x64 / Intel) ───────────────────────────
   build-node-macos-x64:
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -309,7 +309,7 @@ jobs:
 
   # ─── CLI binary (macOS x64 / Intel) ──────────────────────────────
   build-cli-macos-x64:
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
         with:
