@@ -5,7 +5,7 @@
   "main": "index.js",
   "types": "index.d.ts",
   "license": "MIT",
-  "author": "scrape-hub",
+  "author": "Wedge",
   "repository": {
     "type": "git",
     "url": "https://github.com/scrape-hub/koon.git",
