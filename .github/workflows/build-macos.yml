@@ -25,6 +25,11 @@ jobs:
         with:
           go-version: stable
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: https://registry.npmjs.org
+
       - name: Build
         run: cargo build --release -p koon-node --target aarch64-apple-darwin
 
@@ -36,4 +41,11 @@ jobs:
       - name: Upload to v0.6.0 release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload v0.6.0 koon.darwin-arm64.node --clobber
+        run: gh release upload v0.6.1 koon.darwin-arm64.node --clobber
+
+      - name: Publish platform package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cp koon.darwin-arm64.node crates/node/npm/darwin-arm64/
+          npm publish crates/node/npm/darwin-arm64/ --access public

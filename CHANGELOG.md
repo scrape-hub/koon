@@ -5,6 +5,15 @@ All notable changes to koon will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.1] - 2026-03-18
+
+### Changed
+
+- **Node.js: modular platform packages** — Native binaries are now distributed as separate npm packages (`koonjs-win32-x64-msvc`, `koonjs-linux-x64-gnu`, `koonjs-darwin-arm64`, `koonjs-darwin-x64`) via `optionalDependencies`. npm installs only the binary for your platform, reducing download size from ~30 MB to ~8 MB.
+- **macOS support** — Added macOS binaries for Apple Silicon (arm64) and Intel (x64) to the Node.js package and CLI
+
+[0.6.1]: https://github.com/scrape-hub/koon/releases/tag/v0.6.1
+
 ## [0.6.0] - 2026-03-17
 
 First public release.
@@ -48,7 +57,7 @@ First public release.
 
 ### Platforms
 
-- **Node.js** — `npm install koonjs` (Windows x64, Linux x64)
+- **Node.js** — `npm install koonjs` (Windows x64, Linux x64, macOS arm64, macOS x64)
 - **Python** — `pip install koon` (Windows x64, Linux x64)
 - **R** — `remotes::install_github("scrape-hub/koon", subdir = "crates/r")`
 - **CLI** — Download from [GitHub Releases](https://github.com/scrape-hub/koon/releases)

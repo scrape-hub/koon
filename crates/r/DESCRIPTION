@@ -1,6 +1,6 @@
 Package: koon
 Title: Browser-Impersonating HTTP Client
-Version: 0.6.0
+Version: 0.6.1
 URL: https://github.com/scrape-hub/koon
 BugReports: https://github.com/scrape-hub/koon/issues
 Authors@R: person("Wedge", email = "scrape-hub@users.noreply.github.com", role = c("aut", "cre"))

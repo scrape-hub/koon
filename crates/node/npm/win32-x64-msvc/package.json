@@ -1,0 +1,12 @@
+{
+  "name": "koonjs-win32-x64-msvc",
+  "version": "0.6.1",
+  "os": ["win32"],
+  "cpu": ["x64"],
+  "main": "koon.win32-x64-msvc.node",
+  "files": ["koon.win32-x64-msvc.node"],
+  "license": "MIT",
+  "author": "Wedge",
+  "description": "koonjs native binding for Windows x64",
+  "repository": { "type": "git", "url": "https://github.com/scrape-hub/koon.git" }
+}

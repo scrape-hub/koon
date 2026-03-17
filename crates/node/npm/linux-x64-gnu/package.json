@@ -1,0 +1,12 @@
+{
+  "name": "koonjs-linux-x64-gnu",
+  "version": "0.6.1",
+  "os": ["linux"],
+  "cpu": ["x64"],
+  "main": "koon.linux-x64-gnu.node",
+  "files": ["koon.linux-x64-gnu.node"],
+  "license": "MIT",
+  "author": "Wedge",
+  "description": "koonjs native binding for Linux x64",
+  "repository": { "type": "git", "url": "https://github.com/scrape-hub/koon.git" }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "koonjs-darwin-x64",
+  "version": "0.6.1",
+  "os": ["darwin"],
+  "cpu": ["x64"],
+  "main": "koon.darwin-x64.node",
+  "files": ["koon.darwin-x64.node"],
+  "license": "MIT",
+  "author": "Wedge",
+  "description": "koonjs native binding for macOS x64 (Intel)",
+  "repository": { "type": "git", "url": "https://github.com/scrape-hub/koon.git" }
+}

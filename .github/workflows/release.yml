@@ -374,17 +374,30 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: node-*
-          path: crates/node/
+          path: artifacts/
           merge-multiple: true
 
       - name: List binaries
-        run: ls -la crates/node/*.node
+        run: ls -la artifacts/
 
-      - name: Publish to npm
-        run: npm publish --access public
-        working-directory: crates/node
+      - name: Publish platform packages
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cp artifacts/koon.win32-x64-msvc.node crates/node/npm/win32-x64-msvc/
+          cp artifacts/koon.linux-x64-gnu.node crates/node/npm/linux-x64-gnu/
+          cp artifacts/koon.darwin-arm64.node crates/node/npm/darwin-arm64/
+          cp artifacts/koon.darwin-x64.node crates/node/npm/darwin-x64/
+          for dir in crates/node/npm/*/; do
+            echo "Publishing $(basename $dir)..."
+            npm publish "$dir" --access public
+          done
+
+      - name: Publish main package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
+        working-directory: crates/node
 
   # ─── Publish to PyPI ────────────────────────────────────────────────
   publish-pypi:
