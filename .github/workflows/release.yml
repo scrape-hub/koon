@@ -86,6 +86,70 @@ jobs:
           name: node-x86_64-unknown-linux-gnu
           path: crates/node/koon.linux-x64-gnu.node
 
+  # ─── Node.js binary (macOS arm64 / Apple Silicon) ──────────────────
+  build-node-macos-arm64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Build
+        run: cargo build --release -p koon-node --target aarch64-apple-darwin
+
+      - name: Rename node binary
+        run: |
+          cp "target/aarch64-apple-darwin/release/libkoon_node.dylib" \
+             "crates/node/koon.darwin-arm64.node"
+
+      - name: Upload node artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-aarch64-apple-darwin
+          path: crates/node/koon.darwin-arm64.node
+
+  # ─── Node.js binary (macOS x64 / Intel) ───────────────────────────
+  build-node-macos-x64:
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Build
+        run: cargo build --release -p koon-node --target x86_64-apple-darwin
+
+      - name: Rename node binary
+        run: |
+          cp "target/x86_64-apple-darwin/release/libkoon_node.dylib" \
+             "crates/node/koon.darwin-x64.node"
+
+      - name: Upload node artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-x86_64-apple-darwin
+          path: crates/node/koon.darwin-x64.node
+
   # ─── Python wheel (Windows x64) ─────────────────────────────────────
   build-python-windows:
     runs-on: windows-latest
@@ -213,6 +277,66 @@ jobs:
           name: cli-x86_64-unknown-linux-gnu
           path: koon-linux-x64
 
+  # ─── CLI binary (macOS arm64 / Apple Silicon) ─────────────────────
+  build-cli-macos-arm64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Build
+        run: cargo build --release -p koon-cli --target aarch64-apple-darwin
+
+      - name: Rename CLI binary
+        run: cp "target/aarch64-apple-darwin/release/koon" koon-macos-arm64
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-aarch64-apple-darwin
+          path: koon-macos-arm64
+
+  # ─── CLI binary (macOS x64 / Intel) ──────────────────────────────
+  build-cli-macos-x64:
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Build
+        run: cargo build --release -p koon-cli --target x86_64-apple-darwin
+
+      - name: Rename CLI binary
+        run: cp "target/x86_64-apple-darwin/release/koon" koon-macos-x64
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-x86_64-apple-darwin
+          path: koon-macos-x64
+
   # ─── Python source distribution ────────────────────────────────────
   sdist:
     runs-on: ubuntu-latest
@@ -235,7 +359,7 @@ jobs:
 
   # ─── Publish to npm ─────────────────────────────────────────────────
   publish-npm:
-    needs: [build-node-windows, build-node-linux]
+    needs: [build-node-windows, build-node-linux, build-node-macos-arm64, build-node-macos-x64]
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
     steps:
@@ -298,7 +422,7 @@ jobs:
 
   # ─── GitHub Release with binaries ───────────────────────────────────
   publish-github:
-    needs: [build-node-windows, build-node-linux, build-python-windows, build-python-linux, build-cli-windows, build-cli-linux, sdist]
+    needs: [build-node-windows, build-node-linux, build-node-macos-arm64, build-node-macos-x64, build-python-windows, build-python-linux, build-cli-windows, build-cli-linux, build-cli-macos-arm64, build-cli-macos-x64, sdist]
     runs-on: ubuntu-latest
     permissions:
       contents: write

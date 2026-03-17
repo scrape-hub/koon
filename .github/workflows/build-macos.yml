@@ -1,0 +1,39 @@
+name: Build macOS arm64
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-node-macos-arm64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Build
+        run: cargo build --release -p koon-node --target aarch64-apple-darwin
+
+      - name: Rename node binary
+        run: |
+          cp "target/aarch64-apple-darwin/release/libkoon_node.dylib" \
+             koon.darwin-arm64.node
+
+      - name: Upload to v0.6.0 release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload v0.6.0 koon.darwin-arm64.node --clobber

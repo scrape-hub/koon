@@ -22,9 +22,7 @@ let nativeModule;
 try {
   nativeModule = require(`./${binding}`);
 } catch (e) {
-  const hint = platform === 'darwin'
-    ? ` macOS binary may not be included in this version — try: npm install koonjs@0.5.0`
-    : ` Make sure you've built it with: cargo build --release -p koon-node`;
+  const hint = ` Make sure you've built it with: cargo build --release -p koon-node`;
   throw new Error(
     `koon: failed to load native module ${binding}.${hint}\n` +
     `Original error: ${e.message}`
