@@ -1,5 +1,10 @@
 # koon
 
+[![npm](https://img.shields.io/npm/v/koonjs)](https://www.npmjs.com/package/koonjs)
+[![PyPI](https://img.shields.io/pypi/v/koon)](https://pypi.org/project/koon/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/scrape-hub/koon/ci.yml?label=CI)](https://github.com/scrape-hub/koon/actions)
+
 An HTTP client that impersonates real browsers at the TLS, HTTP/2, and HTTP/3 fingerprint level.
 
 Built in Rust on top of BoringSSL with native bindings for **Node.js**, **Python**, **R**, and a **CLI**. Passes Akamai, Cloudflare, and other bot detection systems by reproducing exact browser fingerprints — verified against real browser captures.
@@ -67,9 +72,9 @@ koon -b chrome145 https://example.com
 
 **Rust**
 ```rust
-use koon_core::{Client, profile::Chrome};
+use koon_core::{Client, Chrome};
 
-let client = Client::new(Chrome::v145_windows());
+let client = Client::new(Chrome::v145_windows())?;
 let r = client.get("https://example.com").await?;
 ```
 
@@ -223,12 +228,13 @@ console.log(r1.header('content-type'));          // case-insensitive header look
 console.log(r1.body);                           // raw Buffer
 console.log(r1.tlsResumed);                     // TLS session was reused
 console.log(r1.connectionReused);               // pooled connection was reused
+console.log(r1.remoteAddress);                   // remote peer IP, or null for H3
 console.log(r1.bytesSent, r1.bytesReceived);    // bandwidth per request
 
 // Per-request headers and timeout
 const r7 = await client.get('https://httpbin.org/get', {
   headers: { 'Authorization': 'Bearer token' },
-  timeout: 5000,  // 5s timeout for this request only
+  timeout: 5,  // 5s timeout for this request only
 });
 
 // Cookies persist automatically
@@ -313,7 +319,7 @@ async def main():
     # Per-request headers and timeout
     r = await client.get("https://httpbin.org/get",
         headers={"Authorization": "Bearer token"},
-        timeout=5000,  # 5s timeout for this request only
+        timeout=5,  # 5s timeout for this request only
     )
 
     # Cookies persist automatically
@@ -417,7 +423,7 @@ koon -b chrome145 https://example.com
 koon -b firefox147 -X POST -d '{"key":"value"}' https://httpbin.org/post
 
 # Custom headers
-koon -b safari18.3 -H "Authorization: Bearer token" https://api.example.com
+koon -b safari183 -H "Authorization: Bearer token" https://api.example.com
 
 # Verbose output (request/response headers)
 koon -b chrome145 -v https://httpbin.org/get

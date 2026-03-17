@@ -8,7 +8,7 @@ mod headers;
 mod response;
 
 pub(crate) use response::estimate_headers_size;
-pub use response::{HttpResponse, SessionExport};
+pub use response::{HttpResponse, SessionExport, decode_body_text};
 
 use std::collections::HashMap;
 use std::net::IpAddr;

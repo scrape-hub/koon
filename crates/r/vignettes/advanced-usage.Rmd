@@ -74,14 +74,14 @@ cat(resp$text)
 
 ## Timeout Configuration
 
-Set a custom request timeout in milliseconds (default: 30000ms):
+Set a custom request timeout in seconds (default: 30):
 
 ```{r}
 # 10 second timeout
-client <- Koon$new("chrome145", timeout = 10000)
+client <- Koon$new("chrome145", timeout = 10)
 
 # 60 second timeout for slow endpoints
-client <- Koon$new("chrome145", timeout = 60000)
+client <- Koon$new("chrome145", timeout = 60)
 ```
 
 ## Error Handling
@@ -89,7 +89,7 @@ client <- Koon$new("chrome145", timeout = 60000)
 koon raises errors on network failures, timeouts, and invalid responses. Use `tryCatch` to handle them:
 
 ```{r}
-client <- Koon$new("chrome145", timeout = 5000)
+client <- Koon$new("chrome145", timeout = 5)
 
 result <- tryCatch(
   client$get("https://httpbin.org/delay/10"),

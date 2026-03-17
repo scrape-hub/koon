@@ -9,7 +9,8 @@ class Koon:
         *,
         profile_json: Optional[str] = None,
         proxy: Optional[str] = None,
-        timeout: int = 30000,
+        proxies: Optional[list[str]] = None,
+        timeout: int = 30,
         ignore_tls_errors: bool = False,
         headers: Optional[dict[str, str]] = None,
         follow_redirects: bool = True,
@@ -30,11 +31,12 @@ class Koon:
         """Create a new Koon HTTP client with browser fingerprint impersonation.
 
         Args:
-            browser: Browser to impersonate (e.g. "chrome", "firefox147", "safari18.3",
-                "chrome-mobile145", "safari-mobile183", "firefox-mobile147", "okhttp5").
+            browser: Browser to impersonate (e.g. "chrome", "firefox148", "safari183",
+                "chrome-mobile145", "safari-mobile183", "firefox-mobile148", "okhttp5").
             profile_json: Custom browser profile as JSON string (overrides ``browser``).
             proxy: Proxy URL (``http://``, ``https://``, ``socks5://``).
-            timeout: Request timeout in milliseconds.
+            proxies: List of proxy URLs for round-robin rotation. Takes priority over ``proxy``.
+            timeout: Request timeout in seconds.
             ignore_tls_errors: Skip TLS certificate verification.
             headers: Additional headers as ``{name: value}`` dict.
             follow_redirects: Automatically follow HTTP redirects.
@@ -84,32 +86,48 @@ class Koon:
     def clear_cookies(self) -> None:
         """Clear all cookies from the cookie jar. Keeps TLS sessions and connection pool."""
         ...
-    async def get(self, url: str) -> KoonResponse:
+    async def get(
+        self, url: str, *, headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None
+    ) -> "KoonResponse":
         """Perform an HTTP GET request."""
         ...
-    async def post(self, url: str, body: Optional[Union[str, bytes]] = None) -> KoonResponse:
+    async def post(
+        self, url: str, body: Optional[Union[str, bytes]] = None, *,
+        headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None
+    ) -> "KoonResponse":
         """Perform an HTTP POST request."""
         ...
-    async def put(self, url: str, body: Optional[Union[str, bytes]] = None) -> KoonResponse:
+    async def put(
+        self, url: str, body: Optional[Union[str, bytes]] = None, *,
+        headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None
+    ) -> "KoonResponse":
         """Perform an HTTP PUT request."""
         ...
-    async def delete(self, url: str) -> KoonResponse:
+    async def delete(
+        self, url: str, *, headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None
+    ) -> "KoonResponse":
         """Perform an HTTP DELETE request."""
         ...
-    async def patch(self, url: str, body: Optional[Union[str, bytes]] = None) -> KoonResponse:
+    async def patch(
+        self, url: str, body: Optional[Union[str, bytes]] = None, *,
+        headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None
+    ) -> "KoonResponse":
         """Perform an HTTP PATCH request."""
         ...
-    async def head(self, url: str) -> KoonResponse:
+    async def head(
+        self, url: str, *, headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None
+    ) -> "KoonResponse":
         """Perform an HTTP HEAD request."""
         ...
     async def request(
-        self, method: str, url: str, body: Optional[Union[str, bytes]] = None
-    ) -> KoonResponse:
+        self, method: str, url: str, body: Optional[Union[str, bytes]] = None, *,
+        headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None
+    ) -> "KoonResponse":
         """Perform an HTTP request with a custom method."""
         ...
     async def post_multipart(
         self, url: str, fields: list[dict[str, Any]]
-    ) -> KoonResponse:
+    ) -> "KoonResponse":
         """Perform an HTTP POST request with multipart/form-data body.
 
         Each field is a dict with ``name`` (required), plus either ``value`` (text)
@@ -118,12 +136,12 @@ class Koon:
         ...
     async def request_streaming(
         self, method: str, url: str, body: Optional[bytes] = None
-    ) -> KoonStreamingResponse:
+    ) -> "KoonStreamingResponse":
         """Perform a streaming HTTP request. Does NOT follow redirects."""
         ...
     async def websocket(
         self, url: str, headers: Optional[dict[str, str]] = None
-    ) -> KoonWebSocket:
+    ) -> "KoonWebSocket":
         """Open a WebSocket connection to a wss:// URL."""
         ...
 
@@ -135,6 +153,10 @@ class KoonResponse:
         """HTTP status code (e.g. 200, 404)."""
         ...
     @property
+    def ok(self) -> bool:
+        """Whether the response status is 2xx (success)."""
+        ...
+    @property
     def headers(self) -> list[tuple[str, str]]:
         """Response headers as a list of (name, value) tuples."""
         ...
@@ -143,8 +165,12 @@ class KoonResponse:
         """Response body as bytes."""
         ...
     @property
+    def content_type(self) -> Optional[str]:
+        """Content-Type header value (e.g. "text/html; charset=utf-8"), or None if absent."""
+        ...
+    @property
     def text(self) -> str:
-        """Response body decoded as UTF-8 text."""
+        """Response body decoded as text, respecting the charset from the Content-Type header."""
         ...
     @property
     def version(self) -> str:
@@ -170,8 +196,15 @@ class KoonResponse:
     def connection_reused(self) -> bool:
         """Whether an existing pooled connection was reused."""
         ...
+    @property
+    def remote_address(self) -> Optional[str]:
+        """Remote IP address of the peer (e.g. "1.2.3.4" or "::1"), or None for H3/QUIC."""
+        ...
     def json(self) -> object:
         """Parse response body as JSON (delegates to ``json.loads``)."""
+        ...
+    def header(self, name: str) -> Optional[str]:
+        """Look up a response header by name (case-insensitive). Returns the first match or None."""
         ...
 
 class KoonStreamingResponse:
@@ -200,6 +233,10 @@ class KoonStreamingResponse:
     @property
     def bytes_received(self) -> int:
         """Approximate bytes received so far (headers + body chunks consumed)."""
+        ...
+    @property
+    def remote_address(self) -> Optional[str]:
+        """Remote IP address of the peer, or None for H3/QUIC."""
         ...
     async def next_chunk(self) -> Optional[bytes]:
         """Get the next body chunk. Returns None when the body is complete."""
@@ -260,18 +297,18 @@ class KoonProxy:
         listen_addr: Optional[str] = None,
         header_mode: Optional[str] = None,
         ca_dir: Optional[str] = None,
-        timeout: int = 30000,
+        timeout: int = 30,
         randomize: bool = False,
     ) -> "KoonProxy":
         """Start a new MITM proxy server.
 
         Args:
-            browser: Browser to impersonate (e.g. "chrome", "firefox147").
+            browser: Browser to impersonate (e.g. "chrome", "firefox148").
             profile_json: Custom browser profile as JSON string (overrides ``browser``).
             listen_addr: Address to listen on (default: "127.0.0.1:0" for random port).
             header_mode: Header mode — "impersonate" (default) or "passthrough".
             ca_dir: Directory for CA certificate storage.
-            timeout: Request timeout in milliseconds.
+            timeout: Request timeout in seconds.
             randomize: Randomize fingerprint details.
         """
         ...

@@ -33,6 +33,7 @@ pub struct StreamingResponse {
 
 impl StreamingResponse {
     /// Create a new StreamingResponse.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         status: u16,
         headers: Vec<(String, String)>,

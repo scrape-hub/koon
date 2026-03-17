@@ -28,7 +28,7 @@ export interface KoonOptions {
   proxy?: string;
   /** Array of proxy URLs for round-robin rotation. Takes priority over `proxy`. */
   proxies?: string[];
-  /** Request timeout in milliseconds. Default: 30000. */
+  /** Request timeout in seconds. Default: 30. */
   timeout?: number;
   /** Skip TLS certificate verification. */
   ignoreTlsErrors?: boolean;
@@ -44,7 +44,7 @@ export interface KoonOptions {
   randomize?: boolean;
   /** Enable TLS session resumption. Default: true. */
   sessionResumption?: boolean;
-  /** DNS-over-HTTPS provider ("cloudflare", "google", or URL). */
+  /** DNS-over-HTTPS provider. Supported values: "cloudflare", "google". */
   doh?: string;
   /** Bind outgoing connections to a specific local IP address. */
   localAddress?: string;
@@ -87,8 +87,10 @@ export class KoonResponse {
   readonly connectionReused: boolean;
   /** Remote IP address of the peer (e.g. "1.2.3.4" or "::1"), or null for H3/QUIC. */
   readonly remoteAddress: string | null;
+  /** Content-Type header value (e.g. "text/html; charset=utf-8"), or null if absent. */
+  readonly contentType: string | null;
 
-  /** Decode response body as UTF-8 string. */
+  /** Decode response body as text, respecting the charset from the Content-Type header. Falls back to UTF-8. */
   text(): string;
   /** Parse response body as JSON (via JSON.parse()). */
   json(): any;
@@ -106,7 +108,7 @@ export interface KoonWsMessage {
 export interface KoonRequestOptions {
   /** Additional headers for this request. Override constructor-level headers. */
   headers?: Record<string, string>;
-  /** Per-request timeout in milliseconds. Overrides constructor-level timeout. */
+  /** Per-request timeout in seconds. Overrides constructor-level timeout. */
   timeout?: number;
 }
 
@@ -190,11 +192,11 @@ export interface KoonProxyOptions {
   profileJson?: string;
   /** Listen address. Default: "127.0.0.1:0". */
   listenAddr?: string;
-  /** Header mode: "forward", "replace", or "merge". */
+  /** Header mode: "impersonate" (default) or "passthrough". */
   headerMode?: string;
   /** CA certificate directory. */
   caDir?: string;
-  /** Request timeout in milliseconds. Default: 30000. */
+  /** Request timeout in seconds. Default: 30. */
   timeout?: number;
   /** Apply fingerprint randomization. */
   randomize?: boolean;

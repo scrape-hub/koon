@@ -32,7 +32,10 @@ fn init_module() {
 
         eprintln!("\n[koon] PANIC in thread '{thread_name}' at {location}:");
         eprintln!("[koon]   {payload}");
-        eprintln!("[koon] backtrace:\n{}", std::backtrace::Backtrace::force_capture());
+        eprintln!(
+            "[koon] backtrace:\n{}",
+            std::backtrace::Backtrace::force_capture()
+        );
     }));
 }
 
@@ -58,8 +61,8 @@ pub struct KoonOptions {
     /// Each request uses the next proxy in order. Takes priority over `proxy`.
     pub proxies: Option<Vec<String>>,
 
-    /// Request timeout in milliseconds.
-    /// @default 30000
+    /// Request timeout in seconds.
+    /// @default 30
     pub timeout: Option<u32>,
 
     /// Skip TLS certificate verification.
@@ -129,7 +132,7 @@ pub struct KoonRequestOptions {
     #[napi(ts_type = "Record<string, string>")]
     pub headers: Option<HashMap<String, String>>,
 
-    /// Per-request timeout in milliseconds.
+    /// Per-request timeout in seconds.
     /// Overrides the constructor-level timeout for this request only.
     pub timeout: Option<u32>,
 }
@@ -208,10 +211,18 @@ impl KoonResponse {
         self.status_val >= 200 && self.status_val < 300
     }
 
-    /// Decode the response body as a UTF-8 string.
+    /// Content-Type header value (e.g. "text/html; charset=utf-8"), or null if absent.
+    #[napi(getter)]
+    pub fn content_type(&self) -> Option<String> {
+        self.header("content-type".to_string())
+    }
+
+    /// Decode the response body as text, respecting the charset from the Content-Type header.
+    /// Falls back to UTF-8 if no charset is specified.
     #[napi]
     pub fn text(&self) -> String {
-        String::from_utf8_lossy(&self.body_val).into_owned()
+        let ct = self.header("content-type".to_string());
+        koon_core::decode_body_text(&self.body_val, ct.as_deref())
     }
 
     /// Parse the response body as JSON (via `JSON.parse()`).
@@ -365,7 +376,7 @@ impl Koon {
             profile.randomize();
         }
 
-        let timeout = Duration::from_millis(opts.timeout.unwrap_or(30000) as u64);
+        let timeout = Duration::from_secs(opts.timeout.unwrap_or(30) as u64);
 
         let custom_headers: Vec<(String, String)> =
             opts.headers.unwrap_or_default().into_iter().collect();
@@ -694,8 +705,8 @@ impl Koon {
             .client
             .request_with_headers(method, &url, body_bytes, extra_headers);
 
-        let response = if let Some(timeout_ms) = opts.timeout {
-            tokio_timeout(Duration::from_millis(timeout_ms as u64), future)
+        let response = if let Some(timeout_s) = opts.timeout {
+            tokio_timeout(Duration::from_secs(timeout_s as u64), future)
                 .await
                 .map_err(|_| napi::Error::from_reason("Request timed out"))?
                 .map_err(koon_napi_error)?
@@ -751,8 +762,8 @@ impl Koon {
             extra_headers,
         );
 
-        let response = if let Some(timeout_ms) = opts.timeout {
-            tokio_timeout(Duration::from_millis(timeout_ms as u64), future)
+        let response = if let Some(timeout_s) = opts.timeout {
+            tokio_timeout(Duration::from_secs(timeout_s as u64), future)
                 .await
                 .map_err(|_| napi::Error::from_reason("Request timed out"))?
                 .map_err(koon_napi_error)?
@@ -798,8 +809,8 @@ impl Koon {
             self.client
                 .request_streaming_with_headers(method, &url, body_bytes, extra_headers);
 
-        let resp = if let Some(timeout_ms) = opts.timeout {
-            tokio_timeout(Duration::from_millis(timeout_ms as u64), future)
+        let resp = if let Some(timeout_s) = opts.timeout {
+            tokio_timeout(Duration::from_secs(timeout_s as u64), future)
                 .await
                 .map_err(|_| napi::Error::from_reason("Request timed out"))?
                 .map_err(koon_napi_error)?
@@ -1130,8 +1141,8 @@ pub struct KoonProxyOptions {
     /// @default '~/.koon/ca/'
     pub ca_dir: Option<String>,
 
-    /// Request timeout in milliseconds.
-    /// @default 30000
+    /// Request timeout in seconds.
+    /// @default 30
     pub timeout: Option<u32>,
 
     /// Randomize the browser fingerprint slightly.
@@ -1199,7 +1210,7 @@ impl KoonProxy {
             profile,
             header_mode,
             ca_dir: opts.ca_dir,
-            timeout_secs: (opts.timeout.unwrap_or(30000) / 1000) as u64,
+            timeout_secs: opts.timeout.unwrap_or(30) as u64,
         };
 
         let server = ProxyServer::start(config)

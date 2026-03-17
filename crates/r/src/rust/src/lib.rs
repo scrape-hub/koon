@@ -9,7 +9,20 @@ use tokio::runtime::Runtime;
 /// Convert an HttpResponse to an R list with status, ok, headers, body, version, url, text.
 fn response_to_list(resp: koon_core::HttpResponse) -> List {
     let ok = resp.status >= 200 && resp.status < 300;
-    let text = String::from_utf8_lossy(&resp.body).into_owned();
+
+    let content_type: Robj = resp
+        .headers
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
+        .map(|(_, v)| -> Robj { v.into() })
+        .unwrap_or_else(|| ().into());
+
+    let ct_str = resp
+        .headers
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
+        .map(|(_, v)| v.as_str());
+    let text = koon_core::decode_body_text(&resp.body, ct_str);
 
     let header_names: Vec<String> = resp.headers.iter().map(|(n, _)| n.clone()).collect();
     let header_values: Vec<String> = resp.headers.iter().map(|(_, v)| v.clone()).collect();
@@ -27,6 +40,7 @@ fn response_to_list(resp: koon_core::HttpResponse) -> List {
         url = resp.url,
         body = Raw::from_bytes(&resp.body),
         text = text,
+        content_type = content_type,
         headers = headers_df,
         bytes_sent = resp.bytes_sent as f64,
         bytes_received = resp.bytes_received as f64,
@@ -115,7 +129,7 @@ impl Koon {
     /// @param proxy Optional proxy URL (e.g. "socks5://127.0.0.1:1080").
     /// @param proxies Optional character vector of proxy URLs for round-robin rotation.
     ///   Takes priority over `proxy`.
-    /// @param timeout Request timeout in milliseconds (default: 30000).
+    /// @param timeout Request timeout in seconds (default: 30).
     /// @param randomize Logical; randomize fingerprint slightly (default: FALSE).
     /// @param headers Optional named character vector of custom headers.
     /// @param local_address Optional local IP address to bind outgoing connections to.
@@ -148,9 +162,9 @@ impl Koon {
             profile.tls.danger_accept_invalid_certs = true;
         }
 
-        let timeout_ms = match timeout {
+        let timeout_s = match timeout {
             NotNull(t) => t as u64,
-            Null => 30000,
+            Null => 30,
         };
 
         let custom_headers = parse_headers_robj(&headers);
@@ -161,7 +175,7 @@ impl Koon {
         let do_session = match session_resumption { NotNull(v) => v, Null => true };
 
         let mut builder = Client::builder(profile)
-            .timeout(Duration::from_millis(timeout_ms))
+            .timeout(Duration::from_secs(timeout_s))
             .headers(custom_headers)
             .follow_redirects(do_follow)
             .max_redirects(max_redir)

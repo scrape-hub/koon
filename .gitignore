@@ -48,6 +48,7 @@ crates/r/src/rust/Cargo.lock
 .playwright-mcp/
 
 # Local investigation notes and test scripts (not for repo)
+investigation/
 AKAMAI_INVESTIGATION.md
 captured-browser-request.json
 test-*.cjs

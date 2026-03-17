@@ -29,6 +29,54 @@ pub struct HttpResponse {
     pub remote_address: Option<String>,
 }
 
+impl HttpResponse {
+    /// Decode the response body as text, respecting the charset from the Content-Type header.
+    /// Falls back to UTF-8 if no charset is specified or the charset is unknown.
+    pub fn text(&self) -> String {
+        let ct = self
+            .headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
+            .map(|(_, v)| v.as_str());
+        decode_body_text(&self.body, ct)
+    }
+
+    /// Extract the charset from the Content-Type header (e.g. `"utf-8"` from
+    /// `"text/html; charset=utf-8"`). Returns `None` if no charset is specified.
+    pub fn charset(&self) -> Option<&str> {
+        let ct = self
+            .headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
+            .map(|(_, v)| v.as_str())?;
+        parse_charset(ct)
+    }
+}
+
+/// Decode a response body as text using the charset from the Content-Type header value.
+/// Falls back to UTF-8 if `content_type` is `None`, has no charset parameter,
+/// or specifies an unknown encoding.
+pub fn decode_body_text(body: &[u8], content_type: Option<&str>) -> String {
+    let charset = content_type.and_then(parse_charset);
+    let label = charset.unwrap_or("utf-8");
+    let encoding = encoding_rs::Encoding::for_label(label.as_bytes()).unwrap_or(encoding_rs::UTF_8);
+    let (decoded, _, _) = encoding.decode(body);
+    decoded.into_owned()
+}
+
+/// Parse the charset value from a Content-Type header string.
+/// E.g. `"text/html; charset=shift_jis"` → `Some("shift_jis")`.
+fn parse_charset(content_type: &str) -> Option<&str> {
+    content_type.split(';').find_map(|part| {
+        let part = part.trim();
+        if part.len() > 8 && part[..8].eq_ignore_ascii_case("charset=") {
+            Some(part[8..].trim().trim_matches('"'))
+        } else {
+            None
+        }
+    })
+}
+
 /// Estimate the serialized size of HTTP headers.
 ///
 /// Each header contributes `name.len() + ": ".len() + value.len() + "\r\n".len()`.

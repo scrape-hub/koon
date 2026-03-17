@@ -5,6 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "Browser impersonation HTTP client with TLS and HTTP/2 fingerprint spoofing"
+repository = "https://github.com/scrape-hub/koon"
+homepage = "https://github.com/scrape-hub/koon"
+keywords = ["tls", "fingerprint", "http2", "browser", "impersonation"]
+categories = ["web-programming::http-client", "network-programming"]
 
 [features]
 default = ["socks"]
@@ -69,6 +73,9 @@ rand = "0.9"
 
 # Base64 encoding (session export/import)
 base64 = "0.22"
+
+# Character encoding (charset-aware text decoding)
+encoding_rs = "0.8"
 
 # Utilities
 url = "2"

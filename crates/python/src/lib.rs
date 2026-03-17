@@ -23,15 +23,12 @@ fn to_koon_err(e: koon_core::Error) -> PyErr {
 }
 
 /// Run a future with an optional per-request timeout.
-async fn run_with_timeout<F>(
-    future: F,
-    timeout_ms: Option<u32>,
-) -> PyResult<koon_core::HttpResponse>
+async fn run_with_timeout<F>(future: F, timeout_s: Option<u32>) -> PyResult<koon_core::HttpResponse>
 where
     F: Future<Output = Result<koon_core::HttpResponse, koon_core::Error>>,
 {
-    if let Some(ms) = timeout_ms {
-        tokio::time::timeout(Duration::from_millis(ms as u64), future)
+    if let Some(s) = timeout_s {
+        tokio::time::timeout(Duration::from_secs(s as u64), future)
             .await
             .map_err(|_| KoonError::new_err("[TIMEOUT] Request timed out".to_string()))?
             .map_err(to_koon_err)
@@ -80,7 +77,7 @@ impl Koon {
     ///         "chromemobile145", "firefoxmobile148", "safarimobile183", "okhttp4").
     ///     profile_json: Custom browser profile as JSON string (overrides `browser`).
     ///     proxy: Proxy URL (http://, https://, socks5://).
-    ///     timeout: Request timeout in milliseconds.
+    ///     timeout: Request timeout in seconds.
     ///     ignore_tls_errors: Skip TLS certificate verification.
     ///     headers: Additional headers as {name: value} dict.
     ///     follow_redirects: Automatically follow HTTP redirects.
@@ -92,7 +89,7 @@ impl Koon {
     ///     local_address: Bind outgoing connections to a specific local IP address.
     ///     proxies: List of proxy URLs for round-robin rotation (takes priority over `proxy`).
     #[new]
-    #[pyo3(signature = (browser="chrome", *, profile_json=None, proxy=None, proxies=None, timeout=30000, ignore_tls_errors=false, headers=None, follow_redirects=true, max_redirects=10, cookie_jar=true, randomize=false, session_resumption=true, doh=None, local_address=None, on_request=None, on_response=None, on_redirect=None, retries=0, locale=None, proxy_headers=None, ip_version=None))]
+    #[pyo3(signature = (browser="chrome", *, profile_json=None, proxy=None, proxies=None, timeout=30, ignore_tls_errors=false, headers=None, follow_redirects=true, max_redirects=10, cookie_jar=true, randomize=false, session_resumption=true, doh=None, local_address=None, on_request=None, on_response=None, on_redirect=None, retries=0, locale=None, proxy_headers=None, ip_version=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         browser: &str,
@@ -135,7 +132,7 @@ impl Koon {
             headers.unwrap_or_default().into_iter().collect();
 
         let mut builder = Client::builder(profile)
-            .timeout(Duration::from_millis(timeout as u64))
+            .timeout(Duration::from_secs(timeout as u64))
             .headers(custom_headers)
             .follow_redirects(follow_redirects)
             .max_redirects(max_redirects)
@@ -303,7 +300,7 @@ impl Koon {
     /// Args:
     ///     url: The URL to request.
     ///     headers: Optional dict of per-request headers.
-    ///     timeout: Optional per-request timeout in milliseconds.
+    ///     timeout: Optional per-request timeout in seconds.
     #[pyo3(signature = (url, *, headers=None, timeout=None))]
     fn get<'py>(
         &self,
@@ -327,7 +324,7 @@ impl Koon {
     ///     url: The URL to request.
     ///     body: Optional request body as str or bytes.
     ///     headers: Optional dict of per-request headers.
-    ///     timeout: Optional per-request timeout in milliseconds.
+    ///     timeout: Optional per-request timeout in seconds.
     #[pyo3(signature = (url, body=None, *, headers=None, timeout=None))]
     fn post<'py>(
         &self,
@@ -353,7 +350,7 @@ impl Koon {
     ///     url: The URL to request.
     ///     body: Optional request body as str or bytes.
     ///     headers: Optional dict of per-request headers.
-    ///     timeout: Optional per-request timeout in milliseconds.
+    ///     timeout: Optional per-request timeout in seconds.
     #[pyo3(signature = (url, body=None, *, headers=None, timeout=None))]
     fn put<'py>(
         &self,
@@ -378,7 +375,7 @@ impl Koon {
     /// Args:
     ///     url: The URL to request.
     ///     headers: Optional dict of per-request headers.
-    ///     timeout: Optional per-request timeout in milliseconds.
+    ///     timeout: Optional per-request timeout in seconds.
     #[pyo3(signature = (url, *, headers=None, timeout=None))]
     fn delete<'py>(
         &self,
@@ -402,7 +399,7 @@ impl Koon {
     ///     url: The URL to request.
     ///     body: Optional request body as str or bytes.
     ///     headers: Optional dict of per-request headers.
-    ///     timeout: Optional per-request timeout in milliseconds.
+    ///     timeout: Optional per-request timeout in seconds.
     #[pyo3(signature = (url, body=None, *, headers=None, timeout=None))]
     fn patch<'py>(
         &self,
@@ -427,7 +424,7 @@ impl Koon {
     /// Args:
     ///     url: The URL to request.
     ///     headers: Optional dict of per-request headers.
-    ///     timeout: Optional per-request timeout in milliseconds.
+    ///     timeout: Optional per-request timeout in seconds.
     #[pyo3(signature = (url, *, headers=None, timeout=None))]
     fn head<'py>(
         &self,
@@ -452,7 +449,7 @@ impl Koon {
     ///     url: The URL to request.
     ///     body: Optional request body as str or bytes.
     ///     headers: Optional dict of per-request headers.
-    ///     timeout: Optional per-request timeout in milliseconds.
+    ///     timeout: Optional per-request timeout in seconds.
     #[pyo3(signature = (method, url, body=None, *, headers=None, timeout=None))]
     fn request<'py>(
         &self,
@@ -516,6 +513,10 @@ impl Koon {
             } else if let Some(value_obj) = field.get("value") {
                 let value: String = value_obj.extract(py)?;
                 parts.push((name, value, String::new(), Vec::new()));
+            } else {
+                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "Field '{name}' must have either 'value' (text) or 'file_data' (bytes)"
+                )));
             }
         }
 
@@ -663,20 +664,24 @@ impl KoonResponse {
         PyBytes::new(py, &self.body_bytes)
     }
 
-    /// Response body decoded as UTF-8 text.
+    /// Content-Type header value (e.g. "text/html; charset=utf-8"), or None if absent.
     #[getter]
-    fn text(&self) -> PyResult<String> {
-        String::from_utf8(self.body_bytes.clone()).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "Response body is not valid UTF-8: {e}"
-            ))
-        })
+    fn content_type(&self) -> Option<String> {
+        self.header("content-type")
+    }
+
+    /// Response body decoded as text, respecting the charset from the Content-Type header.
+    /// Falls back to UTF-8 if no charset is specified.
+    #[getter]
+    fn text(&self) -> String {
+        let ct = self.header("content-type");
+        koon_core::decode_body_text(&self.body_bytes, ct.as_deref())
     }
 
     /// Parse response body as JSON (delegates to Python's json.loads).
     fn json<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let json_mod = py.import("json")?;
-        let text = self.text()?;
+        let text = self.text();
         json_mod.call_method1("loads", (text,))
     }
 
@@ -930,7 +935,7 @@ struct KoonProxy {
 impl KoonProxy {
     /// Start a new MITM proxy server.
     #[staticmethod]
-    #[pyo3(signature = (*, browser="chrome", profile_json=None, listen_addr=None, header_mode=None, ca_dir=None, timeout=30000, randomize=false))]
+    #[pyo3(signature = (*, browser="chrome", profile_json=None, listen_addr=None, header_mode=None, ca_dir=None, timeout=30, randomize=false))]
     #[allow(clippy::too_many_arguments)]
     fn start<'py>(
         py: Python<'py>,
@@ -962,7 +967,7 @@ impl KoonProxy {
             profile,
             header_mode: hm,
             ca_dir,
-            timeout_secs: (timeout / 1000) as u64,
+            timeout_secs: timeout as u64,
         };
 
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
