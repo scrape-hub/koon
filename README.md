@@ -222,8 +222,9 @@ console.log(client.userAgent);  // "Mozilla/5.0 ... Chrome/145..."
 // Response
 console.log(r1.ok);                             // true (status 2xx)
 console.log(r1.status);                         // 200
-console.log(r1.text());                         // body as UTF-8 string
+console.log(r1.text());                         // body as string (charset-aware)
 console.log(r1.json());                         // parsed JSON
+console.log(r1.contentType);                    // "application/json" or null
 console.log(r1.header('content-type'));          // case-insensitive header lookup
 console.log(r1.body);                           // raw Buffer
 console.log(r1.tlsResumed);                     // TLS session was reused
@@ -309,8 +310,9 @@ async def main():
     # Response
     print(r.ok)                 # True (status 2xx)
     print(r.status)             # 200
-    print(r.text)               # body as string (property)
+    print(r.text)               # body as string (charset-aware)
     print(r.json())             # parsed JSON
+    print(r.content_type)       # "application/json" or None
     print(r.header("content-type"))  # case-insensitive header lookup
     print(r.tls_resumed)        # TLS session was reused
     print(r.connection_reused)  # pooled connection was reused
@@ -382,9 +384,10 @@ resp <- client$head("https://httpbin.org/get")
 resp$ok         # TRUE (status 2xx)
 resp$status     # 200
 resp$version    # "HTTP/2.0"
-resp$text       # body as string
-resp$body       # raw vector
-resp$headers    # data.frame with name + value columns
+resp$text           # body as string (charset-aware)
+resp$content_type   # "application/json" or NULL
+resp$body           # raw vector
+resp$headers        # data.frame with name + value columns
 
 # Parse JSON (via jsonlite)
 data <- jsonlite::fromJSON(resp$text)

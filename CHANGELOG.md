@@ -11,9 +11,6 @@ First public release.
 
 ### Features
 
-- **`contentType` getter** on responses (Node.js, Python, R) — convenience accessor for the Content-Type header value
-- **Charset-aware `text()` decoding** — responses now respect the charset from the Content-Type header (e.g. Shift_JIS, ISO-8859-1, Windows-1252) instead of assuming UTF-8. Powered by `encoding_rs` (Mozilla's encoding engine). Falls back to UTF-8 when no charset is specified.
-
 - **175 browser profiles** — Chrome 131–145, Firefox 135–148, Safari 15.6–18.3, Edge 131–145, Opera 124–127, OkHttp 4/5
 - **Mobile profiles** — Chrome Mobile (Android), Firefox Mobile (Android), Safari Mobile (iOS) with platform-specific TLS/H2 fingerprints
 - **TLS fingerprinting** — Cipher list, curves, sigalgs, extension order, GREASE, ALPS, cert compression (Brotli/Zlib/Zstd), delegated credentials. JA3/JA4 verified against real browser captures
@@ -36,7 +33,8 @@ First public release.
 - **Custom redirect hook** — Intercept and stop redirects (captcha detection, geo-block handling)
 - **Request hooks** — `onRequest`/`onResponse` observe-only callbacks for logging
 - **Per-request headers and timeout** — Override defaults per request
-- **Ergonomic response API** — `ok`, `text()`, `json()`, `header()` on every response
+- **Ergonomic response API** — `ok`, `text()`, `json()`, `header()`, `contentType` on every response
+- **Charset-aware `text()` decoding** — respects the charset from the Content-Type header (Shift_JIS, ISO-8859-1, Windows-1252, etc.) via `encoding_rs`. Falls back to UTF-8
 - **Structured errors** — Machine-readable `[CODE]` prefix (TIMEOUT, TLS_ERROR, PROXY_ERROR, etc.)
 - **Connection info** — `tlsResumed`, `connectionReused`, `remoteAddress` on responses
 - **Bandwidth tracking** — Per-request and cumulative byte counters
