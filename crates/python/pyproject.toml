@@ -9,7 +9,7 @@ description = "Browser impersonation HTTP client with TLS/HTTP2 fingerprint spoo
 requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "scrape-hub" }]
-readme = "../../README.md"
+readme = "README.md"
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
