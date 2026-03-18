@@ -2,11 +2,11 @@ const { platform, arch } = process;
 const platformArch = `${platform}-${arch}`;
 
 const packages = {
-  'win32-x64': 'koonjs-win32-x64-msvc',
-  'linux-x64': 'koonjs-linux-x64-gnu',
-  'darwin-x64': 'koonjs-darwin-x64',
-  'darwin-arm64': 'koonjs-darwin-arm64',
-  'linux-arm64': 'koonjs-linux-arm64-gnu',
+  'win32-x64': '@koonjs/win32-x64-msvc',
+  'linux-x64': '@koonjs/linux-x64-gnu',
+  'darwin-x64': '@koonjs/darwin-x64',
+  'darwin-arm64': '@koonjs/darwin-arm64',
+  'linux-arm64': '@koonjs/linux-arm64-gnu',
 };
 
 const localFiles = {

@@ -1,5 +1,5 @@
 {
-  "name": "koonjs-darwin-x64",
+  "name": "@koonjs/darwin-x64",
   "version": "0.6.1",
   "os": ["darwin"],
   "cpu": ["x64"],
