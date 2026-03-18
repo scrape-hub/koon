@@ -361,7 +361,7 @@ jobs:
   publish-npm:
     needs: [build-node-windows, build-node-linux, build-node-macos-arm64, build-node-macos-x64]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
 
@@ -403,7 +403,7 @@ jobs:
   publish-pypi:
     needs: [build-python-windows, build-python-linux, sdist]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/setup-python@v5
         with:
