@@ -4,21 +4,55 @@ build-backend = "maturin"
 
 [project]
 name = "koon"
-version = "0.6.2"
-description = "Browser impersonation HTTP client with TLS/HTTP2 fingerprint spoofing"
+version = "0.6.3"
+description = "Browser-impersonating HTTP client with TLS, HTTP/2, and HTTP/3 fingerprint spoofing. Passes Akamai & Cloudflare."
 requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "Wedge" }]
 readme = "README.md"
+keywords = [
+    "tls-fingerprint",
+    "browser-impersonation",
+    "http2-fingerprint",
+    "anti-bot",
+    "web-scraping",
+    "akamai",
+    "cloudflare",
+    "ja3",
+    "ja4",
+    "http-client",
+    "proxy",
+    "scraping",
+    "stealth",
+    "curl-impersonate",
+    "boringssl",
+]
 classifiers = [
+    "Development Status :: 4 - Beta",
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Internet :: WWW/HTTP :: Session",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Framework :: AsyncIO",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Intended Audience :: Developers",
+    "Typing :: Typed",
 ]
 
 [project.urls]
 Homepage = "https://github.com/scrape-hub/koon"
+Documentation = "https://github.com/scrape-hub/koon#quick-start"
 Repository = "https://github.com/scrape-hub/koon"
 Issues = "https://github.com/scrape-hub/koon/issues"
 Changelog = "https://github.com/scrape-hub/koon/blob/master/CHANGELOG.md"

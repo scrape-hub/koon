@@ -112,4 +112,5 @@
 #' }
 #'
 #' @name Koon
+#' @export Koon
 NULL

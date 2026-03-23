@@ -5,6 +5,21 @@ All notable changes to koon will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.3] - 2026-03-23
+
+### Fixed
+
+- **KoonSync event loop** (Python) — coroutine creation now deferred inside running event loop, fixing `RuntimeError: no running event loop`
+- **R error handling** — request errors no longer crash the R session; errors are catchable via `tryCatch()`
+- **R `Koon` export** — `Koon` class is now properly exported and callable without full namespace prefix
+- **R default arguments** — optional parameters (`proxy`, `headers`, `timeout`, etc.) now default to `NULL` instead of being required
+
+### Changed
+
+- **SEO metadata** — added keywords, classifiers, and descriptions to PyPI, npm, and crates.io for better discoverability
+- **npm README** — package now includes the full README on the npm page
+- **CI** — added macOS Python wheel builds (arm64 + x64); npm publish now copies README into package
+
 ## [0.6.2] - 2026-03-23
 
 ### Fixed
@@ -24,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Node.js: modular platform packages** — Native binaries are now distributed as separate npm packages (`koonjs-win32-x64-msvc`, `koonjs-linux-x64-gnu`, `koonjs-darwin-arm64`, `koonjs-darwin-x64`) via `optionalDependencies`. npm installs only the binary for your platform, reducing download size from ~30 MB to ~8 MB.
 - **macOS support** — Added macOS binaries for Apple Silicon (arm64) and Intel (x64) to the Node.js package and CLI
 
+[0.6.3]: https://github.com/scrape-hub/koon/releases/tag/v0.6.3
 [0.6.2]: https://github.com/scrape-hub/koon/releases/tag/v0.6.2
 [0.6.1]: https://github.com/scrape-hub/koon/releases/tag/v0.6.1
 

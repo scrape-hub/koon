@@ -4,10 +4,10 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Browser impersonation HTTP client with TLS and HTTP/2 fingerprint spoofing"
+description = "Browser-impersonating HTTP client — TLS, HTTP/2, HTTP/3 fingerprint spoofing. Passes Akamai & Cloudflare. 175 browser profiles."
 repository = "https://github.com/scrape-hub/koon"
 homepage = "https://github.com/scrape-hub/koon"
-keywords = ["tls", "fingerprint", "http2", "browser", "impersonation"]
+keywords = ["tls-fingerprint", "browser-impersonation", "anti-bot", "web-scraping", "http-client"]
 categories = ["web-programming::http-client", "network-programming"]
 
 [features]

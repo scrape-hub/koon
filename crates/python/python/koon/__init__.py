@@ -23,8 +23,16 @@ class KoonSync:
         self._client = Koon(*args, **kwargs)
         self._loop = asyncio.new_event_loop()
 
-    def _run(self, coro):
-        return self._loop.run_until_complete(coro)
+    def _run(self, async_fn, *args, **kwargs):
+        """Run an async method synchronously.
+
+        The coroutine must be created INSIDE a running event loop
+        (pyo3-async-runtimes requirement), so we wrap the call in
+        an async function and run that via run_until_complete.
+        """
+        async def _wrapper():
+            return await async_fn(*args, **kwargs)
+        return self._loop.run_until_complete(_wrapper())
 
     @property
     def user_agent(self):
@@ -59,35 +67,35 @@ class KoonSync:
 
     def get(self, url, *, headers=None, timeout=None, proxy=None):
         """Perform a blocking HTTP GET request."""
-        return self._run(self._client.get(url, headers=headers, timeout=timeout, proxy=proxy))
+        return self._run(self._client.get, url, headers=headers, timeout=timeout, proxy=proxy)
 
     def post(self, url, body=None, *, headers=None, timeout=None, proxy=None):
         """Perform a blocking HTTP POST request."""
-        return self._run(self._client.post(url, body, headers=headers, timeout=timeout, proxy=proxy))
+        return self._run(self._client.post, url, body, headers=headers, timeout=timeout, proxy=proxy)
 
     def put(self, url, body=None, *, headers=None, timeout=None, proxy=None):
         """Perform a blocking HTTP PUT request."""
-        return self._run(self._client.put(url, body, headers=headers, timeout=timeout, proxy=proxy))
+        return self._run(self._client.put, url, body, headers=headers, timeout=timeout, proxy=proxy)
 
     def delete(self, url, *, headers=None, timeout=None, proxy=None):
         """Perform a blocking HTTP DELETE request."""
-        return self._run(self._client.delete(url, headers=headers, timeout=timeout, proxy=proxy))
+        return self._run(self._client.delete, url, headers=headers, timeout=timeout, proxy=proxy)
 
     def patch(self, url, body=None, *, headers=None, timeout=None, proxy=None):
         """Perform a blocking HTTP PATCH request."""
-        return self._run(self._client.patch(url, body, headers=headers, timeout=timeout, proxy=proxy))
+        return self._run(self._client.patch, url, body, headers=headers, timeout=timeout, proxy=proxy)
 
     def head(self, url, *, headers=None, timeout=None, proxy=None):
         """Perform a blocking HTTP HEAD request."""
-        return self._run(self._client.head(url, headers=headers, timeout=timeout, proxy=proxy))
+        return self._run(self._client.head, url, headers=headers, timeout=timeout, proxy=proxy)
 
     def request(self, method, url, body=None, *, headers=None, timeout=None, proxy=None):
         """Perform a blocking HTTP request with a custom method."""
-        return self._run(self._client.request(method, url, body, headers=headers, timeout=timeout, proxy=proxy))
+        return self._run(self._client.request, method, url, body, headers=headers, timeout=timeout, proxy=proxy)
 
     def post_multipart(self, url, fields):
         """Perform a blocking HTTP POST with multipart/form-data body."""
-        return self._run(self._client.post_multipart(url, fields))
+        return self._run(self._client.post_multipart, url, fields)
 
     def close(self):
         """Close the event loop and release resources."""

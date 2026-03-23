@@ -284,7 +284,7 @@ impl Koon {
         let resp = self
             .runtime
             .block_on(self.client.request_with_headers("GET".parse().unwrap(), url, None, extra))
-            .unwrap_or_else(|e| panic!("GET {} failed: {}", url, e));
+            .unwrap_or_else(|e| panic!("{e}"));
         self.fire_on_response_r(&resp);
         response_to_list(resp)
     }
@@ -302,7 +302,7 @@ impl Koon {
         let resp = self
             .runtime
             .block_on(self.client.request_with_headers("POST".parse().unwrap(), url, body_bytes, extra))
-            .unwrap_or_else(|e| panic!("POST {} failed: {}", url, e));
+            .unwrap_or_else(|e| panic!("{e}"));
         self.fire_on_response_r(&resp);
         response_to_list(resp)
     }
@@ -320,7 +320,7 @@ impl Koon {
         let resp = self
             .runtime
             .block_on(self.client.request_with_headers("PUT".parse().unwrap(), url, body_bytes, extra))
-            .unwrap_or_else(|e| panic!("PUT {} failed: {}", url, e));
+            .unwrap_or_else(|e| panic!("{e}"));
         self.fire_on_response_r(&resp);
         response_to_list(resp)
     }
@@ -336,7 +336,7 @@ impl Koon {
         let resp = self
             .runtime
             .block_on(self.client.request_with_headers("DELETE".parse().unwrap(), url, None, extra))
-            .unwrap_or_else(|e| panic!("DELETE {} failed: {}", url, e));
+            .unwrap_or_else(|e| panic!("{e}"));
         self.fire_on_response_r(&resp);
         response_to_list(resp)
     }
@@ -354,7 +354,7 @@ impl Koon {
         let resp = self
             .runtime
             .block_on(self.client.request_with_headers("PATCH".parse().unwrap(), url, body_bytes, extra))
-            .unwrap_or_else(|e| panic!("PATCH {} failed: {}", url, e));
+            .unwrap_or_else(|e| panic!("{e}"));
         self.fire_on_response_r(&resp);
         response_to_list(resp)
     }
@@ -370,7 +370,7 @@ impl Koon {
         let resp = self
             .runtime
             .block_on(self.client.request_with_headers("HEAD".parse().unwrap(), url, None, extra))
-            .unwrap_or_else(|e| panic!("HEAD {} failed: {}", url, e));
+            .unwrap_or_else(|e| panic!("{e}"));
         self.fire_on_response_r(&resp);
         response_to_list(resp)
     }

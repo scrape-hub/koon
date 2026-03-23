@@ -1,7 +1,7 @@
 {
   "name": "koonjs",
-  "version": "0.6.2",
-  "description": "Browser-impersonating HTTP client with TLS/HTTP2 fingerprint spoofing",
+  "version": "0.6.3",
+  "description": "Browser-impersonating HTTP client — TLS, HTTP/2, HTTP/3 fingerprint spoofing. Passes Akamai & Cloudflare. 175 browser profiles.",
   "main": "index.js",
   "types": "index.d.ts",
   "license": "MIT",
@@ -18,13 +18,14 @@
   },
   "files": [
     "index.js",
-    "index.d.ts"
+    "index.d.ts",
+    "README.md"
   ],
   "optionalDependencies": {
-    "@koonjs/win32-x64-msvc": "0.6.2",
-    "@koonjs/linux-x64-gnu": "0.6.2",
-    "@koonjs/darwin-arm64": "0.6.2",
-    "@koonjs/darwin-x64": "0.6.2"
+    "@koonjs/win32-x64-msvc": "0.6.3",
+    "@koonjs/linux-x64-gnu": "0.6.3",
+    "@koonjs/darwin-arm64": "0.6.3",
+    "@koonjs/darwin-x64": "0.6.3"
   },
   "scripts": {
     "build": "cargo build --release -p koon-node && node -e \"require('fs').copyFileSync(require('path').resolve(__dirname,'../../target/release/koon_node.dll'), require('path').resolve(__dirname,'koon.win32-x64-msvc.node'))\"",
@@ -33,15 +34,23 @@
     "test": "node ../../test_node.cjs"
   },
   "keywords": [
-    "tls",
-    "fingerprint",
-    "http2",
-    "browser",
-    "impersonation",
+    "tls-fingerprint",
+    "browser-impersonation",
+    "http2-fingerprint",
     "anti-bot",
+    "web-scraping",
     "akamai",
     "cloudflare",
     "ja3",
-    "ja4"
+    "ja4",
+    "http-client",
+    "proxy",
+    "scraping",
+    "stealth",
+    "curl-impersonate",
+    "boringssl",
+    "http3",
+    "quic",
+    "websocket"
   ]
 }

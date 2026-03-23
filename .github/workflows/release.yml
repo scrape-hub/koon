@@ -452,6 +452,9 @@ jobs:
             npm publish "$dir" --access public
           done
 
+      - name: Copy README into node package
+        run: cp README.md crates/node/README.md
+
       - name: Publish main package
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
