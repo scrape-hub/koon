@@ -62,3 +62,4 @@ todo/
 # Capture tool: raw/processed profiles (internal reference data)
 tools/capture/raw/
 tools/capture/profiles/
+tools/
