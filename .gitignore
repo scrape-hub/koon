@@ -50,7 +50,15 @@ crates/r/src/rust/Cargo.lock
 # Local investigation notes and test scripts (not for repo)
 investigation/
 AKAMAI_INVESTIGATION.md
+FEATURE_REQUESTS.md
 captured-browser-request.json
 test-*.cjs
+test_*.cjs
+test_*.py
+test_*.sh
 compare-*.cjs
 todo/
+
+# Capture tool: raw/processed profiles (internal reference data)
+tools/capture/raw/
+tools/capture/profiles/
