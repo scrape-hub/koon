@@ -212,6 +212,64 @@ jobs:
           name: wheels-x86_64-unknown-linux-gnu
           path: dist/*.whl
 
+  # ─── Python wheel (macOS arm64 / Apple Silicon) ───────────────────
+  build-python-macos-arm64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: aarch64-apple-darwin
+          args: --release --out dist --find-interpreter --manifest-path crates/python/Cargo.toml
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-aarch64-apple-darwin
+          path: dist/*.whl
+
+  # ─── Python wheel (macOS x64 / Intel) ────────────────────────────
+  build-python-macos-x64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: x86_64-apple-darwin
+          args: --release --out dist --find-interpreter --manifest-path crates/python/Cargo.toml
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-x86_64-apple-darwin
+          path: dist/*.whl
+
   # ─── CLI binary (Windows x64) ──────────────────────────────────────
   build-cli-windows:
     runs-on: windows-latest
@@ -402,7 +460,7 @@ jobs:
 
   # ─── Publish to PyPI ────────────────────────────────────────────────
   publish-pypi:
-    needs: [build-python-windows, build-python-linux, sdist]
+    needs: [build-python-windows, build-python-linux, build-python-macos-arm64, build-python-macos-x64, sdist]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
@@ -436,7 +494,7 @@ jobs:
 
   # ─── GitHub Release with binaries ───────────────────────────────────
   publish-github:
-    needs: [build-node-windows, build-node-linux, build-node-macos-arm64, build-node-macos-x64, build-python-windows, build-python-linux, build-cli-windows, build-cli-linux, build-cli-macos-arm64, build-cli-macos-x64, sdist]
+    needs: [build-node-windows, build-node-linux, build-node-macos-arm64, build-node-macos-x64, build-python-windows, build-python-linux, build-python-macos-arm64, build-python-macos-x64, build-cli-windows, build-cli-linux, build-cli-macos-arm64, build-cli-macos-x64, sdist]
     runs-on: ubuntu-latest
     permissions:
       contents: write
