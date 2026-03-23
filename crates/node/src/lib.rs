@@ -122,7 +122,7 @@ pub struct KoonOptions {
     pub ip_version: Option<u32>,
 }
 
-/// Per-request options (headers, timeout).
+/// Per-request options (headers, timeout, proxy).
 /// These override constructor-level defaults for a single request.
 #[napi(object)]
 #[derive(Default)]
@@ -135,6 +135,10 @@ pub struct KoonRequestOptions {
     /// Per-request timeout in seconds.
     /// Overrides the constructor-level timeout for this request only.
     pub timeout: Option<u32>,
+
+    /// Per-request proxy URL (http://, https://, socks5://).
+    /// Overrides the constructor-level proxy for this request only.
+    pub proxy: Option<String>,
 }
 
 /// A single HTTP header (name-value pair).
@@ -177,6 +181,12 @@ impl KoonResponse {
     /// HTTP status code.
     #[napi(getter)]
     pub fn status(&self) -> u32 {
+        self.status_val
+    }
+
+    /// Alias for `status` (compatibility with fetch/axios conventions).
+    #[napi(getter, js_name = "statusCode")]
+    pub fn status_code(&self) -> u32 {
         self.status_val
     }
 
@@ -700,10 +710,15 @@ impl Koon {
         let opts = options.unwrap_or_default();
         let extra_headers: Vec<(String, String)> =
             opts.headers.unwrap_or_default().into_iter().collect();
+        let proxy_url = opts.proxy;
 
-        let future = self
-            .client
-            .request_with_headers(method, &url, body_bytes, extra_headers);
+        let future = self.client.request_with_headers_and_proxy(
+            method,
+            &url,
+            body_bytes,
+            extra_headers,
+            proxy_url.as_deref(),
+        );
 
         let response = if let Some(timeout_s) = opts.timeout {
             tokio_timeout(Duration::from_secs(timeout_s as u64), future)
@@ -754,12 +769,14 @@ impl Koon {
         let mut extra_headers: Vec<(String, String)> =
             opts.headers.unwrap_or_default().into_iter().collect();
         extra_headers.push(("content-type".into(), content_type));
+        let proxy_url = opts.proxy;
 
-        let future = self.client.request_with_headers(
+        let future = self.client.request_with_headers_and_proxy(
             "POST".parse().unwrap(),
             &url,
             Some(body),
             extra_headers,
+            proxy_url.as_deref(),
         );
 
         let response = if let Some(timeout_s) = opts.timeout {
@@ -966,6 +983,12 @@ impl KoonStreamingResponse {
     /// HTTP status code.
     #[napi(getter)]
     pub fn status(&self) -> u32 {
+        self.status_val
+    }
+
+    /// Alias for `status` (compatibility with fetch/axios conventions).
+    #[napi(getter, js_name = "statusCode")]
+    pub fn status_code(&self) -> u32 {
         self.status_val
     }
 

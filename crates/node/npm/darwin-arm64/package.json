@@ -1,6 +1,6 @@
 {
   "name": "@koonjs/darwin-arm64",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "os": ["darwin"],
   "cpu": ["arm64"],
   "main": "koon.darwin-arm64.node",

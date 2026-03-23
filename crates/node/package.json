@@ -1,6 +1,6 @@
 {
   "name": "koonjs",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Browser-impersonating HTTP client with TLS/HTTP2 fingerprint spoofing",
   "main": "index.js",
   "types": "index.d.ts",
@@ -21,10 +21,10 @@
     "index.d.ts"
   ],
   "optionalDependencies": {
-    "@koonjs/win32-x64-msvc": "0.6.1",
-    "@koonjs/linux-x64-gnu": "0.6.1",
-    "@koonjs/darwin-arm64": "0.6.1",
-    "@koonjs/darwin-x64": "0.6.1"
+    "@koonjs/win32-x64-msvc": "0.6.2",
+    "@koonjs/linux-x64-gnu": "0.6.2",
+    "@koonjs/darwin-arm64": "0.6.2",
+    "@koonjs/darwin-x64": "0.6.2"
   },
   "scripts": {
     "build": "cargo build --release -p koon-node && node -e \"require('fs').copyFileSync(require('path').resolve(__dirname,'../../target/release/koon_node.dll'), require('path').resolve(__dirname,'koon.win32-x64-msvc.node'))\"",

@@ -67,6 +67,8 @@ export interface KoonOptions {
 export class KoonResponse {
   /** HTTP status code. */
   readonly status: number;
+  /** Alias for `status` (compatibility with fetch/axios conventions). */
+  readonly statusCode: number;
   /** Response headers as [name, value] pairs. */
   readonly headers: Array<{ name: string; value: string }>;
   /** Response body as Buffer. */
@@ -110,6 +112,8 @@ export interface KoonRequestOptions {
   headers?: Record<string, string>;
   /** Per-request timeout in seconds. Overrides constructor-level timeout. */
   timeout?: number;
+  /** Per-request proxy URL (http://, https://, socks5://). Overrides constructor-level proxy. */
+  proxy?: string;
 }
 
 export interface KoonMultipartField {
@@ -165,6 +169,8 @@ export class Koon {
 
 export class KoonStreamingResponse {
   readonly status: number;
+  /** Alias for `status`. */
+  readonly statusCode: number;
   readonly headers: Array<{ name: string; value: string }>;
   readonly version: string;
   readonly url: string;

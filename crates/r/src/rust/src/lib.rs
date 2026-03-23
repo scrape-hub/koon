@@ -35,6 +35,7 @@ fn response_to_list(resp: koon_core::HttpResponse) -> List {
 
     list!(
         status = resp.status as i32,
+        status_code = resp.status as i32,
         ok = ok,
         version = resp.version,
         url = resp.url,

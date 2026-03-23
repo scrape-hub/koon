@@ -22,10 +22,35 @@ impl super::Client {
         body: Option<Vec<u8>>,
         extra_headers: Vec<(String, String)>,
     ) -> Result<HttpResponse, Error> {
+        self.request_with_headers_and_proxy(method, url, body, extra_headers, None)
+            .await
+    }
+
+    /// Like `request_with_headers`, but allows overriding the proxy for this
+    /// single request. Pass a proxy URL string (e.g. "http://user:pass@host:port")
+    /// to use a different proxy than the one configured on the client.
+    pub async fn request_with_headers_and_proxy(
+        &self,
+        method: Method,
+        url: &str,
+        body: Option<Vec<u8>>,
+        extra_headers: Vec<(String, String)>,
+        proxy_url: Option<&str>,
+    ) -> Result<HttpResponse, Error> {
+        let proxy_override = match proxy_url {
+            Some(url) => Some(crate::proxy::ProxyConfig::parse(url)?),
+            None => None,
+        };
         let mut last_error = None;
         for attempt in 0..=self.max_retries {
             match self
-                .do_request_with_redirects(method.clone(), url, body.clone(), extra_headers.clone())
+                .do_request_with_redirects(
+                    method.clone(),
+                    url,
+                    body.clone(),
+                    extra_headers.clone(),
+                    proxy_override.as_ref(),
+                )
                 .await
             {
                 Ok(resp) => return Ok(resp),
@@ -46,6 +71,7 @@ impl super::Client {
         url: &str,
         body: Option<Vec<u8>>,
         extra_headers: Vec<(String, String)>,
+        proxy_override: Option<&crate::proxy::ProxyConfig>,
     ) -> Result<HttpResponse, Error> {
         let mut current_url: Uri = url
             .parse()
@@ -71,6 +97,7 @@ impl super::Client {
                     current_body.clone(),
                     cookie_header.as_deref(),
                     &extra_headers,
+                    proxy_override,
                 )
                 .await?;
 
@@ -157,6 +184,7 @@ impl super::Client {
         body: Option<Vec<u8>>,
         cookie_header: Option<&str>,
         extra_headers: &[(String, String)],
+        proxy_override: Option<&crate::proxy::ProxyConfig>,
     ) -> Result<HttpResponse, Error> {
         let host = uri
             .host()
@@ -176,8 +204,19 @@ impl super::Client {
             ));
         }
 
-        // Select proxy once for this request (rotation picks the next one)
-        let (proxy_idx, proxy_ref) = self.select_proxy();
+        // Use per-request proxy override, or fall back to client's proxy selection
+        let (proxy_idx, proxy_ref) = if let Some(override_proxy) = proxy_override {
+            // Per-request proxy: derive pool key from proxy URL hash so each
+            // distinct proxy gets its own pool slot. Offset by 1<<48 to avoid
+            // collision with rotation indices (0, 1, 2, ...).
+            use std::hash::{Hash, Hasher};
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            override_proxy.url.as_str().hash(&mut hasher);
+            let idx = (hasher.finish() as usize) | (1 << 48);
+            (Some(idx), Some(override_proxy))
+        } else {
+            self.select_proxy()
+        };
 
         // 1. Try cached H3 connection from pool
         if let Some((mut sender, pool_addr)) = self.pool.try_get_h3(host, port, proxy_idx) {

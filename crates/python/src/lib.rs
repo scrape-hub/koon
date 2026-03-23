@@ -301,18 +301,26 @@ impl Koon {
     ///     url: The URL to request.
     ///     headers: Optional dict of per-request headers.
     ///     timeout: Optional per-request timeout in seconds.
-    #[pyo3(signature = (url, *, headers=None, timeout=None))]
+    ///     proxy: Optional per-request proxy URL (overrides constructor proxy).
+    #[pyo3(signature = (url, *, headers=None, timeout=None, proxy=None))]
     fn get<'py>(
         &self,
         py: Python<'py>,
         url: String,
         headers: Option<HashMap<String, String>>,
         timeout: Option<u32>,
+        proxy: Option<String>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let client = self.client.clone();
         let extra: Vec<(String, String)> = headers.unwrap_or_default().into_iter().collect();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let future = client.request_with_headers("GET".parse().unwrap(), &url, None, extra);
+            let future = client.request_with_headers_and_proxy(
+                "GET".parse().unwrap(),
+                &url,
+                None,
+                extra,
+                proxy.as_deref(),
+            );
             let resp = run_with_timeout(future, timeout).await?;
             Ok(KoonResponse::from_core(resp))
         })
@@ -325,7 +333,8 @@ impl Koon {
     ///     body: Optional request body as str or bytes.
     ///     headers: Optional dict of per-request headers.
     ///     timeout: Optional per-request timeout in seconds.
-    #[pyo3(signature = (url, body=None, *, headers=None, timeout=None))]
+    ///     proxy: Optional per-request proxy URL (overrides constructor proxy).
+    #[pyo3(signature = (url, body=None, *, headers=None, timeout=None, proxy=None))]
     fn post<'py>(
         &self,
         py: Python<'py>,
@@ -333,12 +342,19 @@ impl Koon {
         body: Option<Py<PyAny>>,
         headers: Option<HashMap<String, String>>,
         timeout: Option<u32>,
+        proxy: Option<String>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let body = extract_body(py, body)?;
         let client = self.client.clone();
         let extra: Vec<(String, String)> = headers.unwrap_or_default().into_iter().collect();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let future = client.request_with_headers("POST".parse().unwrap(), &url, body, extra);
+            let future = client.request_with_headers_and_proxy(
+                "POST".parse().unwrap(),
+                &url,
+                body,
+                extra,
+                proxy.as_deref(),
+            );
             let resp = run_with_timeout(future, timeout).await?;
             Ok(KoonResponse::from_core(resp))
         })
@@ -351,7 +367,8 @@ impl Koon {
     ///     body: Optional request body as str or bytes.
     ///     headers: Optional dict of per-request headers.
     ///     timeout: Optional per-request timeout in seconds.
-    #[pyo3(signature = (url, body=None, *, headers=None, timeout=None))]
+    ///     proxy: Optional per-request proxy URL (overrides constructor proxy).
+    #[pyo3(signature = (url, body=None, *, headers=None, timeout=None, proxy=None))]
     fn put<'py>(
         &self,
         py: Python<'py>,
@@ -359,12 +376,19 @@ impl Koon {
         body: Option<Py<PyAny>>,
         headers: Option<HashMap<String, String>>,
         timeout: Option<u32>,
+        proxy: Option<String>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let body = extract_body(py, body)?;
         let client = self.client.clone();
         let extra: Vec<(String, String)> = headers.unwrap_or_default().into_iter().collect();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let future = client.request_with_headers("PUT".parse().unwrap(), &url, body, extra);
+            let future = client.request_with_headers_and_proxy(
+                "PUT".parse().unwrap(),
+                &url,
+                body,
+                extra,
+                proxy.as_deref(),
+            );
             let resp = run_with_timeout(future, timeout).await?;
             Ok(KoonResponse::from_core(resp))
         })
@@ -376,18 +400,26 @@ impl Koon {
     ///     url: The URL to request.
     ///     headers: Optional dict of per-request headers.
     ///     timeout: Optional per-request timeout in seconds.
-    #[pyo3(signature = (url, *, headers=None, timeout=None))]
+    ///     proxy: Optional per-request proxy URL (overrides constructor proxy).
+    #[pyo3(signature = (url, *, headers=None, timeout=None, proxy=None))]
     fn delete<'py>(
         &self,
         py: Python<'py>,
         url: String,
         headers: Option<HashMap<String, String>>,
         timeout: Option<u32>,
+        proxy: Option<String>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let client = self.client.clone();
         let extra: Vec<(String, String)> = headers.unwrap_or_default().into_iter().collect();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let future = client.request_with_headers("DELETE".parse().unwrap(), &url, None, extra);
+            let future = client.request_with_headers_and_proxy(
+                "DELETE".parse().unwrap(),
+                &url,
+                None,
+                extra,
+                proxy.as_deref(),
+            );
             let resp = run_with_timeout(future, timeout).await?;
             Ok(KoonResponse::from_core(resp))
         })
@@ -400,7 +432,8 @@ impl Koon {
     ///     body: Optional request body as str or bytes.
     ///     headers: Optional dict of per-request headers.
     ///     timeout: Optional per-request timeout in seconds.
-    #[pyo3(signature = (url, body=None, *, headers=None, timeout=None))]
+    ///     proxy: Optional per-request proxy URL (overrides constructor proxy).
+    #[pyo3(signature = (url, body=None, *, headers=None, timeout=None, proxy=None))]
     fn patch<'py>(
         &self,
         py: Python<'py>,
@@ -408,12 +441,19 @@ impl Koon {
         body: Option<Py<PyAny>>,
         headers: Option<HashMap<String, String>>,
         timeout: Option<u32>,
+        proxy: Option<String>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let body = extract_body(py, body)?;
         let client = self.client.clone();
         let extra: Vec<(String, String)> = headers.unwrap_or_default().into_iter().collect();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let future = client.request_with_headers("PATCH".parse().unwrap(), &url, body, extra);
+            let future = client.request_with_headers_and_proxy(
+                "PATCH".parse().unwrap(),
+                &url,
+                body,
+                extra,
+                proxy.as_deref(),
+            );
             let resp = run_with_timeout(future, timeout).await?;
             Ok(KoonResponse::from_core(resp))
         })
@@ -425,18 +465,26 @@ impl Koon {
     ///     url: The URL to request.
     ///     headers: Optional dict of per-request headers.
     ///     timeout: Optional per-request timeout in seconds.
-    #[pyo3(signature = (url, *, headers=None, timeout=None))]
+    ///     proxy: Optional per-request proxy URL (overrides constructor proxy).
+    #[pyo3(signature = (url, *, headers=None, timeout=None, proxy=None))]
     fn head<'py>(
         &self,
         py: Python<'py>,
         url: String,
         headers: Option<HashMap<String, String>>,
         timeout: Option<u32>,
+        proxy: Option<String>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let client = self.client.clone();
         let extra: Vec<(String, String)> = headers.unwrap_or_default().into_iter().collect();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let future = client.request_with_headers("HEAD".parse().unwrap(), &url, None, extra);
+            let future = client.request_with_headers_and_proxy(
+                "HEAD".parse().unwrap(),
+                &url,
+                None,
+                extra,
+                proxy.as_deref(),
+            );
             let resp = run_with_timeout(future, timeout).await?;
             Ok(KoonResponse::from_core(resp))
         })
@@ -450,7 +498,8 @@ impl Koon {
     ///     body: Optional request body as str or bytes.
     ///     headers: Optional dict of per-request headers.
     ///     timeout: Optional per-request timeout in seconds.
-    #[pyo3(signature = (method, url, body=None, *, headers=None, timeout=None))]
+    ///     proxy: Optional per-request proxy URL (overrides constructor proxy).
+    #[pyo3(signature = (method, url, body=None, *, headers=None, timeout=None, proxy=None))]
     fn request<'py>(
         &self,
         py: Python<'py>,
@@ -459,6 +508,7 @@ impl Koon {
         body: Option<Py<PyAny>>,
         headers: Option<HashMap<String, String>>,
         timeout: Option<u32>,
+        proxy: Option<String>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let body = extract_body(py, body)?;
         let client = self.client.clone();
@@ -469,7 +519,8 @@ impl Koon {
                     "Invalid HTTP method: {method}"
                 ))
             })?;
-            let future = client.request_with_headers(method, &url, body, extra);
+            let future =
+                client.request_with_headers_and_proxy(method, &url, body, extra, proxy.as_deref());
             let resp = run_with_timeout(future, timeout).await?;
             Ok(KoonResponse::from_core(resp))
         })
@@ -646,6 +697,12 @@ impl KoonResponse {
 
 #[pymethods]
 impl KoonResponse {
+    /// Alias for `status` (compatibility with requests/httpx conventions).
+    #[getter]
+    fn status_code(&self) -> u16 {
+        self.status
+    }
+
     /// Whether the response status is 2xx (success).
     #[getter]
     fn ok(&self) -> bool {

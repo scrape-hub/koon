@@ -157,11 +157,27 @@ impl super::Client {
                     .await
                     .map_err(|e| Error::Proxy(format!("Failed to connect to proxy: {e}")))?;
 
-                // Send CONNECT request with optional proxy headers
+                // Send CONNECT request with proxy auth and optional proxy headers
                 let mut connect_req = format!(
                     "CONNECT {target_host}:{target_port} HTTP/1.1\r\n\
                      Host: {target_host}:{target_port}\r\n"
                 );
+
+                // Auto-inject Proxy-Authorization from URL credentials unless
+                // the caller already set one via proxy_headers
+                let has_manual_auth = self
+                    .proxy_headers
+                    .iter()
+                    .any(|(k, _)| k.eq_ignore_ascii_case("proxy-authorization"));
+                if !has_manual_auth {
+                    if let Some(auth) = &proxy.auth {
+                        use base64::Engine;
+                        let encoded = base64::engine::general_purpose::STANDARD
+                            .encode(format!("{}:{}", auth.username, auth.password));
+                        connect_req.push_str(&format!("Proxy-Authorization: Basic {encoded}\r\n"));
+                    }
+                }
+
                 for (name, value) in &self.proxy_headers {
                     connect_req.push_str(&format!("{name}: {value}\r\n"));
                 }

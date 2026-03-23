@@ -36,7 +36,7 @@ cargo install koon-cli
 
 **Node.js**
 ```javascript
-const { Koon } = require('koonjs');
+import { Koon } from 'koonjs';
 
 const client = new Koon({ browser: 'chrome145' });
 const resp = await client.get('https://httpbin.org/json');
@@ -47,10 +47,10 @@ console.log(resp.json());  // parsed JSON
 
 **Python**
 ```python
-from koon import Koon
+from koon import KoonSync
 
-client = Koon("chrome145")
-resp = await client.get("https://httpbin.org/json")
+client = KoonSync("chrome145")
+resp = client.get("https://httpbin.org/json")
 print(resp.ok)      # True
 print(resp.json())  # parsed JSON
 ```
@@ -161,7 +161,7 @@ Format: `{browser}{version}{-os}` — all parts except the browser name are opti
 - **WebSocket** — `wss://` connections with browser-matching TLS handshake
 - **Streaming responses** — chunked body streaming with async iterator support
 - **Multipart form-data** — file uploads with custom content types
-- **Per-request headers and timeout** — override defaults per request without affecting the client
+- **Per-request headers, timeout, and proxy** — override defaults per request without affecting the client
 - **Ergonomic response API** — `ok`, `text()`, `json()`, `header()` on every response
 - **Session persistence** — save/load cookies and TLS session tickets to JSON
 - **Fingerprint randomization** — slight jitter on UA build number, accept-language q-values, H2 window sizes
@@ -182,13 +182,14 @@ Format: `{browser}{version}{-os}` — all parts except the browser name are opti
 - **IPv4/IPv6 toggle** — restrict DNS resolution to a specific IP version
 - **Mobile browser profiles** — Chrome Mobile (Android), Firefox Mobile (Android), Safari Mobile (iOS) with platform-specific TLS/H2 fingerprints
 - **OkHttp profiles** — Android app impersonation (OkHttp 4.x, 5.x) with Conscrypt TLS stack fingerprint
+- **Sync Python API** — `KoonSync` wrapper for all HTTP methods without `asyncio` (WebSocket and streaming remain async-only)
 
 ## Usage
 
 ### Node.js
 
 ```javascript
-const { Koon } = require('koonjs');
+import { Koon } from 'koonjs';
 
 // Browser profile + options
 const client = new Koon({
@@ -232,10 +233,11 @@ console.log(r1.connectionReused);               // pooled connection was reused
 console.log(r1.remoteAddress);                   // remote peer IP, or null for H3
 console.log(r1.bytesSent, r1.bytesReceived);    // bandwidth per request
 
-// Per-request headers and timeout
+// Per-request headers, timeout, and proxy
 const r7 = await client.get('https://httpbin.org/get', {
   headers: { 'Authorization': 'Bearer token' },
-  timeout: 5,  // 5s timeout for this request only
+  timeout: 5,                                 // 5s timeout for this request only
+  proxy: 'http://user:pass@other-proxy:8080', // override proxy for this request
 });
 
 // Cookies persist automatically
@@ -272,7 +274,7 @@ await client.postMultipart('https://httpbin.org/post', [
 ]);
 
 // MITM proxy
-const { KoonProxy } = require('koonjs');
+import { KoonProxy } from 'koonjs';
 const proxy = await KoonProxy.start({ browser: 'chrome145', listenAddr: '127.0.0.1:8080' });
 console.log(proxy.url);         // http://127.0.0.1:8080
 console.log(proxy.caCertPath);  // path to CA cert for trust
@@ -281,84 +283,80 @@ await proxy.shutdown();
 
 ### Python
 
+`KoonSync` provides a blocking API — no `asyncio` needed:
+
 ```python
-import asyncio
+from koon import KoonSync
+
+# Browser profile + options
+client = KoonSync("chrome145",
+    headers={"X-Custom": "value"},
+    retries=3,                                   # retry on transport errors
+    locale="fr-FR",                              # Accept-Language for proxy geo
+    ip_version=4,                                # force IPv4 DNS resolution
+    proxy_headers={"X-Session-Id": "abc123"},    # CONNECT tunnel headers
+    on_redirect=lambda s, u, h: "captcha" not in u,
+)
+
+# HTTP methods
+r = client.get("https://httpbin.org/get")
+r = client.post("https://httpbin.org/post", "data")
+r = client.put("https://httpbin.org/put", "data")
+r = client.delete("https://httpbin.org/delete")
+r = client.patch("https://httpbin.org/patch", "data")
+r = client.head("https://httpbin.org/get")
+
+# Response
+print(r.ok)                 # True (status 2xx)
+print(r.status)             # 200
+print(r.text)               # body as string (charset-aware)
+print(r.json())             # parsed JSON
+print(r.content_type)       # e.g. "text/html; charset=utf-8"
+print(r.header("content-type"))  # case-insensitive header lookup
+print(r.tls_resumed)        # TLS session was reused
+print(r.connection_reused)  # pooled connection was reused
+print(r.bytes_sent, r.bytes_received)  # bandwidth per request
+
+# Per-request headers, timeout, and proxy
+r = client.get("https://httpbin.org/get",
+    headers={"Authorization": "Bearer token"},
+    timeout=5,                                   # 5s timeout for this request only
+    proxy="http://user:pass@other-proxy:8080",   # override proxy for this request
+)
+
+# Cookies persist automatically
+client.get("https://httpbin.org/cookies/set/name/value")
+r = client.get("https://httpbin.org/cookies")
+
+# Clear cookies (keeps TLS sessions and connection pool)
+client.clear_cookies()
+
+# Session save/load
+session = client.save_session()
+client2 = KoonSync("chrome145")
+client2.load_session(session)
+
+# User-Agent (useful for Puppeteer/Playwright sync)
+print(client.user_agent)  # "Mozilla/5.0 ... Chrome/145..."
+```
+
+For async code, use `Koon` instead — same API, but all request methods are coroutines:
+
+```python
 from koon import Koon
 
-async def main():
-    client = Koon("chrome145",
-        headers={"X-Custom": "value"},
-        local_address="192.168.1.100",
-        retries=3,  # retry on transport errors
-        locale="fr-FR",  # Accept-Language for proxy geo
-        ip_version=4,  # force IPv4 DNS resolution
-        proxy_headers={"X-Session-Id": "abc123"},  # CONNECT tunnel headers
-        on_redirect=lambda s, u, h: "captcha" not in u,  # stop on captcha redirect
-    )
+client = Koon("chrome145")
+resp = await client.get("https://httpbin.org/get")
 
-    # HTTP methods
-    r = await client.get("https://httpbin.org/get")
-    r = await client.post("https://httpbin.org/post", "data")
-    r = await client.put("https://httpbin.org/put", "data")
-    r = await client.delete("https://httpbin.org/delete")
-    r = await client.patch("https://httpbin.org/patch", "data")
-    r = await client.head("https://httpbin.org/get")
+# WebSocket (async only)
+ws = await client.websocket("wss://echo.websocket.org")
+await ws.send("hello")
+msg = await ws.receive()
+await ws.close()
 
-    # User-Agent (useful for Puppeteer/Playwright sync)
-    print(client.user_agent)  # "Mozilla/5.0 ... Chrome/145..."
-
-    # Response
-    print(r.ok)                 # True (status 2xx)
-    print(r.status)             # 200
-    print(r.text)               # body as string (charset-aware)
-    print(r.json())             # parsed JSON
-    print(r.content_type)       # e.g. "text/html; charset=utf-8"
-    print(r.header("content-type"))  # case-insensitive header lookup
-    print(r.tls_resumed)        # TLS session was reused
-    print(r.connection_reused)  # pooled connection was reused
-    print(r.bytes_sent, r.bytes_received)  # bandwidth per request
-
-    # Per-request headers and timeout
-    r = await client.get("https://httpbin.org/get",
-        headers={"Authorization": "Bearer token"},
-        timeout=5,  # 5s timeout for this request only
-    )
-
-    # Cookies persist automatically
-    await client.get("https://httpbin.org/cookies/set/name/value")
-    r = await client.get("https://httpbin.org/cookies")
-
-    # Clear cookies (keeps TLS sessions and connection pool)
-    client.clear_cookies()
-
-    # Session save/load
-    session = client.save_session()
-    client2 = Koon("chrome145")
-    client2.load_session(session)
-
-    # WebSocket
-    ws = await client.websocket("wss://echo.websocket.org")
-    await ws.send("hello")
-    msg = await ws.receive()
-    await ws.close()
-
-    # Streaming
-    stream = await client.request_streaming("GET", "https://example.com/large")
-    body = await stream.collect()
-
-    # Multipart upload
-    await client.post_multipart("https://httpbin.org/post", [
-        {"name": "field", "value": "text"},
-        {"name": "file", "file_data": b"...", "filename": "upload.txt", "content_type": "text/plain"},
-    ])
-
-    # MITM proxy
-    from koon import KoonProxy
-    proxy = await KoonProxy.start(browser="chrome145", listen_addr="127.0.0.1:8080")
-    print(proxy.url)
-    await proxy.shutdown()
-
-asyncio.run(main())
+# Streaming (async only)
+stream = await client.request_streaming("GET", "https://example.com/large")
+body = await stream.collect()
 ```
 
 ### R
@@ -370,6 +368,7 @@ library(koon)
 client <- Koon$new("chrome145", proxy = "socks5://127.0.0.1:1080", randomize = TRUE,
                     local_address = "192.168.1.100", retries = 3L,
                     locale = "fr-FR", ip_version = 4L,
+                    proxy_headers = c(`X-Session-Id` = "abc123"),
                     on_redirect = function(status, url, headers) !grepl("captcha", url))
 
 # HTTP methods (synchronous)

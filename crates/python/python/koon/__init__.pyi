@@ -87,41 +87,41 @@ class Koon:
         """Clear all cookies from the cookie jar. Keeps TLS sessions and connection pool."""
         ...
     async def get(
-        self, url: str, *, headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None
+        self, url: str, *, headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None, proxy: Optional[str] = None
     ) -> "KoonResponse":
         """Perform an HTTP GET request."""
         ...
     async def post(
         self, url: str, body: Optional[Union[str, bytes]] = None, *,
-        headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None
+        headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None, proxy: Optional[str] = None
     ) -> "KoonResponse":
         """Perform an HTTP POST request."""
         ...
     async def put(
         self, url: str, body: Optional[Union[str, bytes]] = None, *,
-        headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None
+        headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None, proxy: Optional[str] = None
     ) -> "KoonResponse":
         """Perform an HTTP PUT request."""
         ...
     async def delete(
-        self, url: str, *, headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None
+        self, url: str, *, headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None, proxy: Optional[str] = None
     ) -> "KoonResponse":
         """Perform an HTTP DELETE request."""
         ...
     async def patch(
         self, url: str, body: Optional[Union[str, bytes]] = None, *,
-        headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None
+        headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None, proxy: Optional[str] = None
     ) -> "KoonResponse":
         """Perform an HTTP PATCH request."""
         ...
     async def head(
-        self, url: str, *, headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None
+        self, url: str, *, headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None, proxy: Optional[str] = None
     ) -> "KoonResponse":
         """Perform an HTTP HEAD request."""
         ...
     async def request(
         self, method: str, url: str, body: Optional[Union[str, bytes]] = None, *,
-        headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None
+        headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None, proxy: Optional[str] = None
     ) -> "KoonResponse":
         """Perform an HTTP request with a custom method."""
         ...
@@ -151,6 +151,10 @@ class KoonResponse:
     @property
     def status(self) -> int:
         """HTTP status code (e.g. 200, 404)."""
+        ...
+    @property
+    def status_code(self) -> int:
+        """Alias for ``status`` (compatibility with requests/httpx conventions)."""
         ...
     @property
     def ok(self) -> bool:
@@ -329,3 +333,81 @@ class KoonError(RuntimeError):
     The message format is ``[CODE] description``, e.g. ``[TIMEOUT] Request timed out``.
     """
     ...
+
+class KoonSync:
+    """Synchronous wrapper around the async Koon client.
+
+    Provides the same API as Koon but with blocking methods.
+    Ideal for scripts, data science, and non-async code.
+
+    Usage::
+
+        from koon import KoonSync
+        client = KoonSync("chrome145")
+        resp = client.get("https://httpbin.org/get")
+        print(resp.status)
+    """
+
+    def __init__(
+        self,
+        browser: str = "chrome",
+        *,
+        profile_json: Optional[str] = None,
+        proxy: Optional[str] = None,
+        proxies: Optional[list[str]] = None,
+        timeout: int = 30,
+        ignore_tls_errors: bool = False,
+        headers: Optional[dict[str, str]] = None,
+        follow_redirects: bool = True,
+        max_redirects: int = 10,
+        cookie_jar: bool = True,
+        randomize: bool = False,
+        session_resumption: bool = True,
+        doh: Optional[str] = None,
+        local_address: Optional[str] = None,
+        on_request: Optional[Callable[[str, str], None]] = None,
+        on_response: Optional[Callable[[int, str, Sequence[Tuple[str, str]]], None]] = None,
+        on_redirect: Optional[Callable[[int, str, Sequence[Tuple[str, str]]], bool]] = None,
+        retries: int = 0,
+        locale: Optional[str] = None,
+        proxy_headers: Optional[dict[str, str]] = None,
+        ip_version: Optional[int] = None,
+    ) -> None: ...
+    @property
+    def user_agent(self) -> Optional[str]: ...
+    def export_profile(self) -> str: ...
+    def save_session(self) -> str: ...
+    def load_session(self, json: str) -> None: ...
+    def save_session_to_file(self, path: str) -> None: ...
+    def load_session_from_file(self, path: str) -> None: ...
+    def total_bytes_sent(self) -> int: ...
+    def total_bytes_received(self) -> int: ...
+    def reset_counters(self) -> None: ...
+    def clear_cookies(self) -> None: ...
+    def get(self, url: str, *, headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None, proxy: Optional[str] = None) -> KoonResponse:
+        """Perform a blocking HTTP GET request."""
+        ...
+    def post(self, url: str, body: Optional[Union[str, bytes]] = None, *, headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None, proxy: Optional[str] = None) -> KoonResponse:
+        """Perform a blocking HTTP POST request."""
+        ...
+    def put(self, url: str, body: Optional[Union[str, bytes]] = None, *, headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None, proxy: Optional[str] = None) -> KoonResponse:
+        """Perform a blocking HTTP PUT request."""
+        ...
+    def delete(self, url: str, *, headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None, proxy: Optional[str] = None) -> KoonResponse:
+        """Perform a blocking HTTP DELETE request."""
+        ...
+    def patch(self, url: str, body: Optional[Union[str, bytes]] = None, *, headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None, proxy: Optional[str] = None) -> KoonResponse:
+        """Perform a blocking HTTP PATCH request."""
+        ...
+    def head(self, url: str, *, headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None, proxy: Optional[str] = None) -> KoonResponse:
+        """Perform a blocking HTTP HEAD request."""
+        ...
+    def request(self, method: str, url: str, body: Optional[Union[str, bytes]] = None, *, headers: Optional[dict[str, str]] = None, timeout: Optional[int] = None, proxy: Optional[str] = None) -> KoonResponse:
+        """Perform a blocking HTTP request with a custom method."""
+        ...
+    def post_multipart(self, url: str, fields: list[dict[str, Any]]) -> KoonResponse:
+        """Perform a blocking HTTP POST with multipart/form-data body."""
+        ...
+    def close(self) -> None:
+        """Close the event loop and release resources."""
+        ...

@@ -1,6 +1,6 @@
 {
   "name": "@koonjs/linux-x64-gnu",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "os": ["linux"],
   "cpu": ["x64"],
   "main": "koon.linux-x64-gnu.node",

@@ -5,6 +5,18 @@ All notable changes to koon will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.2] - 2026-03-23
+
+### Fixed
+
+- **Proxy auth for HTTP CONNECT** — Credentials from the proxy URL (`http://user:pass@host:port`) are now automatically sent as `Proxy-Authorization: Basic` header in the CONNECT request. Previously required manual `proxy_headers`. SOCKS5 auth was not affected.
+
+### Added
+
+- **`status_code` alias** (Node.js, Python, R) — `response.status_code` as alias for `response.status`
+- **`KoonSync` Python wrapper** — Synchronous API for Python (`from koon import KoonSync`). Covers all HTTP methods without requiring `asyncio`. WebSocket and streaming remain async-only.
+- **Per-request proxy** (Node.js, Python) — `proxy` parameter on `.get()`, `.post()` etc. allows switching proxies per request without creating a new client
+
 ## [0.6.1] - 2026-03-18
 
 ### Changed
@@ -12,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Node.js: modular platform packages** — Native binaries are now distributed as separate npm packages (`koonjs-win32-x64-msvc`, `koonjs-linux-x64-gnu`, `koonjs-darwin-arm64`, `koonjs-darwin-x64`) via `optionalDependencies`. npm installs only the binary for your platform, reducing download size from ~30 MB to ~8 MB.
 - **macOS support** — Added macOS binaries for Apple Silicon (arm64) and Intel (x64) to the Node.js package and CLI
 
+[0.6.2]: https://github.com/scrape-hub/koon/releases/tag/v0.6.2
 [0.6.1]: https://github.com/scrape-hub/koon/releases/tag/v0.6.1
 
 ## [0.6.0] - 2026-03-17
