@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "koon"
-version = "0.6.3"
+version = "0.7.0"
 description = "Browser-impersonating HTTP client with TLS, HTTP/2, and HTTP/3 fingerprint spoofing. Passes Akamai & Cloudflare."
 requires-python = ">=3.9"
 license = { text = "MIT" }

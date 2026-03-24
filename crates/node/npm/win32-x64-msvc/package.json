@@ -1,6 +1,6 @@
 {
   "name": "@koonjs/win32-x64-msvc",
-  "version": "0.6.3",
+  "version": "0.7.0",
   "os": ["win32"],
   "cpu": ["x64"],
   "main": "koon.win32-x64-msvc.node",
