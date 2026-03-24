@@ -21,7 +21,7 @@ jobs:
   build-node-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag || github.ref }}
 
@@ -47,7 +47,7 @@ jobs:
              "crates/node/koon.win32-x64-msvc.node"
 
       - name: Upload node artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: node-x86_64-pc-windows-msvc
           path: crates/node/koon.win32-x64-msvc.node
@@ -56,7 +56,7 @@ jobs:
   build-node-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag || github.ref }}
 
@@ -82,7 +82,7 @@ jobs:
              "crates/node/koon.linux-x64-gnu.node"
 
       - name: Upload node artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: node-x86_64-unknown-linux-gnu
           path: crates/node/koon.linux-x64-gnu.node
@@ -91,7 +91,7 @@ jobs:
   build-node-macos-arm64:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag || github.ref }}
 
@@ -114,7 +114,7 @@ jobs:
              "crates/node/koon.darwin-arm64.node"
 
       - name: Upload node artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: node-aarch64-apple-darwin
           path: crates/node/koon.darwin-arm64.node
@@ -123,7 +123,7 @@ jobs:
   build-node-macos-x64:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag || github.ref }}
 
@@ -146,7 +146,7 @@ jobs:
              "crates/node/koon.darwin-x64.node"
 
       - name: Upload node artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: node-x86_64-apple-darwin
           path: crates/node/koon.darwin-x64.node
@@ -155,7 +155,7 @@ jobs:
   build-python-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag || github.ref }}
 
@@ -177,7 +177,7 @@ jobs:
           args: --release --out dist --find-interpreter --manifest-path crates/python/Cargo.toml
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: wheels-x86_64-pc-windows-msvc
           path: dist/*.whl
@@ -186,7 +186,7 @@ jobs:
   build-python-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag || github.ref }}
 
@@ -207,7 +207,7 @@ jobs:
           manylinux: auto
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: wheels-x86_64-unknown-linux-gnu
           path: dist/*.whl
@@ -216,7 +216,7 @@ jobs:
   build-python-macos-arm64:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag || github.ref }}
 
@@ -236,7 +236,7 @@ jobs:
           args: --release --out dist --find-interpreter --manifest-path crates/python/Cargo.toml
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: wheels-aarch64-apple-darwin
           path: dist/*.whl
@@ -245,7 +245,7 @@ jobs:
   build-python-macos-x64:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag || github.ref }}
 
@@ -265,7 +265,7 @@ jobs:
           args: --release --out dist --find-interpreter --manifest-path crates/python/Cargo.toml
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: wheels-x86_64-apple-darwin
           path: dist/*.whl
@@ -274,7 +274,7 @@ jobs:
   build-cli-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag || github.ref }}
 
@@ -298,7 +298,7 @@ jobs:
         run: cp "target/x86_64-pc-windows-msvc/release/koon.exe" koon-windows-x64.exe
 
       - name: Upload CLI artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: cli-x86_64-pc-windows-msvc
           path: koon-windows-x64.exe
@@ -307,7 +307,7 @@ jobs:
   build-cli-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag || github.ref }}
 
@@ -331,7 +331,7 @@ jobs:
         run: cp "target/x86_64-unknown-linux-gnu/release/koon" koon-linux-x64
 
       - name: Upload CLI artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: cli-x86_64-unknown-linux-gnu
           path: koon-linux-x64
@@ -340,7 +340,7 @@ jobs:
   build-cli-macos-arm64:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag || github.ref }}
 
@@ -361,7 +361,7 @@ jobs:
         run: cp "target/aarch64-apple-darwin/release/koon" koon-macos-arm64
 
       - name: Upload CLI artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: cli-aarch64-apple-darwin
           path: koon-macos-arm64
@@ -370,7 +370,7 @@ jobs:
   build-cli-macos-x64:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag || github.ref }}
 
@@ -391,7 +391,7 @@ jobs:
         run: cp "target/x86_64-apple-darwin/release/koon" koon-macos-x64
 
       - name: Upload CLI artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: cli-x86_64-apple-darwin
           path: koon-macos-x64
@@ -400,7 +400,7 @@ jobs:
   sdist:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag || github.ref }}
 
@@ -411,7 +411,7 @@ jobs:
           args: --out dist --manifest-path crates/python/Cargo.toml
 
       - name: Upload sdist
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: sdist
           path: dist/*.tar.gz
@@ -422,15 +422,15 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "20"
           registry-url: https://registry.npmjs.org
 
       - name: Download node artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: node-*
           path: artifacts/
@@ -475,14 +475,14 @@ jobs:
         run: pip install maturin
 
       - name: Download wheel artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: wheels-*
           path: dist/
           merge-multiple: true
 
       - name: Download sdist
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: sdist
           path: dist/
@@ -502,12 +502,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: artifacts/
 
