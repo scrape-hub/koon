@@ -500,6 +500,7 @@ impl Koon {
     ///     timeout: Optional per-request timeout in seconds.
     ///     proxy: Optional per-request proxy URL (overrides constructor proxy).
     #[pyo3(signature = (method, url, body=None, *, headers=None, timeout=None, proxy=None))]
+    #[allow(clippy::too_many_arguments)]
     fn request<'py>(
         &self,
         py: Python<'py>,
