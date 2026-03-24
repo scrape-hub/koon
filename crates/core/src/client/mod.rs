@@ -28,7 +28,7 @@ pub type OnResponseHook = Arc<dyn Fn(u16, &str, &[(String, String)]) + Send + Sy
 /// Arguments: `(status_code, redirect_url, response_headers)`.
 pub type OnRedirectHook = Arc<dyn Fn(u16, &str, &[(String, String)]) -> bool + Send + Sync>;
 
-use boring2::ssl::SslConnector;
+use btls::ssl::SslConnector;
 use h3_quinn::quinn;
 use http::{Method, Uri};
 

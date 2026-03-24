@@ -53,7 +53,7 @@ impl BrowserProfile {
     ///
     /// Accepts formats like:
     /// - `"chrome"`, `"firefox"`, `"safari"`, `"edge"`, `"opera"` — latest version, default OS
-    /// - `"chrome145"`, `"firefox147"` — specific version, default OS (Windows; Safari: macOS)
+    /// - `"chrome145"`, `"firefox147"` — specific version, default OS (macOS for all browsers)
     /// - `"chrome145-windows"`, `"chrome145-macos"`, `"chrome145-linux"` — specific version + OS (dash-separated)
     /// - `"chrome145windows"`, `"chrome145macos"` — specific version + OS (no dash, for Node.js/Python compat)
     /// - `"safari183"`, `"safari18.3"` — Safari version formats

@@ -154,12 +154,12 @@ pub(crate) async fn connect(
     ),
     Error,
 > {
-    // Build client config with QUIC transport parameters from profile
+    // Build client config with QUIC transport parameters and TLS fingerprint from profile
     let quic_config = profile
         .quic
         .as_ref()
         .ok_or_else(|| Error::Quic("No QuicConfig in profile".into()))?;
-    let client_config = quic::transport::build_client_config(quic_config)?;
+    let client_config = quic::transport::build_client_config(quic_config, &profile.tls)?;
 
     // Resolve address
     let addr = tokio::net::lookup_host(format!("{host}:{port}"))
@@ -175,9 +175,16 @@ pub(crate) async fn connect(
         .await
         .map_err(|e| Error::Quic(format!("QUIC connection failed: {e}")))?;
 
-    // Build HTTP/3 connection
+    // Build HTTP/3 connection with browser-matching settings.
+    // Chrome sends max_field_section_size in H3 SETTINGS and enables GREASE.
     let quinn_conn = h3_quinn::Connection::new(connection);
-    let (driver, send_request) = h3::client::new(quinn_conn)
+    let max_field = quic_config.max_field_section_size.unwrap_or(262144);
+    let (driver, send_request) = h3::client::builder()
+        .max_field_section_size(max_field)
+        // GREASE disabled: h3 crate sends GREASE frames AFTER DATA frames,
+        // which Cloudflare rejects with 400. Known bug: https://github.com/hyperium/h3/issues/206
+        .send_grease(false)
+        .build(quinn_conn)
         .await
         .map_err(|e| Error::Http3(format!("H3 handshake failed: {e}")))?;
 

@@ -202,10 +202,10 @@ impl Chrome {
             ));
         }
         let os = match os {
-            Some("macos") => Os::MacOS,
+            Some("windows") => Os::Windows,
             Some("linux") => Os::Linux,
             Some("android") => Os::Android,
-            _ => Os::Windows,
+            _ => Os::MacOS, // macOS default — less blocked by WAFs than Windows
         };
         Ok(chrome_profile(major, os))
     }

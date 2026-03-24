@@ -24,6 +24,14 @@ pub(super) fn resolve_redirect(base: &Uri, location: &str) -> Result<Uri, Error>
             .map_err(|_| Error::Url(url::ParseError::EmptyHost));
     }
 
+    // Protocol-relative URL (e.g. "//de.indeed.com?r=us")
+    if location.starts_with("//") {
+        let scheme = base.scheme_str().unwrap_or("https");
+        return format!("{scheme}:{location}")
+            .parse()
+            .map_err(|_| Error::Url(url::ParseError::EmptyHost));
+    }
+
     // Relative URL — resolve against base
     let scheme = base.scheme_str().unwrap_or("https");
     let authority = base.authority().map(|a| a.as_str()).unwrap_or("");

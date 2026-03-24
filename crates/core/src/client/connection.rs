@@ -2,7 +2,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 
 use tokio::net::{TcpSocket, TcpStream};
-use tokio_boring2::SslStream;
+use tokio_btls::SslStream;
 
 use super::IpVersion;
 use crate::error::Error;
@@ -245,7 +245,7 @@ impl super::Client {
             ech_config.as_deref(),
         )?;
 
-        let mut stream = tokio_boring2::SslStream::new(ssl, tcp)?;
+        let mut stream = tokio_btls::SslStream::new(ssl, tcp)?;
         match Pin::new(&mut stream).connect().await {
             Ok(()) => Ok(stream),
             Err(e) => {
@@ -285,7 +285,7 @@ impl super::Client {
             Some(retry_configs),
         )?;
 
-        let mut stream = tokio_boring2::SslStream::new(ssl, tcp)?;
+        let mut stream = tokio_btls::SslStream::new(ssl, tcp)?;
         Pin::new(&mut stream)
             .connect()
             .await

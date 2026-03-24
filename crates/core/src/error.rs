@@ -4,9 +4,9 @@ use std::fmt;
 #[derive(Debug)]
 pub enum Error {
     /// BoringSSL TLS handshake or session error.
-    Tls(boring2::ssl::Error),
+    Tls(btls::ssl::Error),
     /// BoringSSL internal error stack.
-    TlsStack(boring2::error::ErrorStack),
+    TlsStack(btls::error::ErrorStack),
     /// HTTP/2 protocol error (stream reset, flow control, etc.).
     Http2(http2::Error),
     /// QUIC transport error.
@@ -133,14 +133,14 @@ impl Error {
     }
 }
 
-impl From<boring2::ssl::Error> for Error {
-    fn from(e: boring2::ssl::Error) -> Self {
+impl From<btls::ssl::Error> for Error {
+    fn from(e: btls::ssl::Error) -> Self {
         Error::Tls(e)
     }
 }
 
-impl From<boring2::error::ErrorStack> for Error {
-    fn from(e: boring2::error::ErrorStack) -> Self {
+impl From<btls::error::ErrorStack> for Error {
+    fn from(e: btls::error::ErrorStack) -> Self {
         Error::TlsStack(e)
     }
 }

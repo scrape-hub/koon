@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use base64::Engine;
-use boring2::ssl::SslSession;
+use btls::ssl::SslSession;
 use serde::{Deserialize, Serialize};
 
 /// Exported TLS session cache data for save/load.

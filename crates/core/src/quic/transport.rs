@@ -1,16 +1,19 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use quinn::crypto::rustls::QuicClientConfig;
-use quinn::{ClientConfig, Endpoint, EndpointConfig, TransportConfig, VarInt};
+use btls::ssl::{SslContextBuilder, SslMethod, SslOptions, SslVerifyMode};
+use quinn::{ClientConfig, Endpoint, TransportConfig, VarInt};
+use quinn_btls::ClientConfig as QuicBtlsConfig;
 
 use super::config::QuicConfig;
 use crate::error::Error;
+use crate::tls::cert_compression::{BrotliCertCompressor, ZlibCertCompressor, ZstdCertCompressor};
+use crate::tls::config::{CertCompression, TlsConfig};
 
 /// Build a Quinn `Endpoint` configured for client-side QUIC connections.
 /// Takes a `QuicConfig` for endpoint-level settings like `grease_quic_bit`.
 pub(crate) fn build_endpoint(quic_config: &QuicConfig) -> Result<Endpoint, Error> {
-    let mut endpoint_config = EndpointConfig::default();
+    let mut endpoint_config = quinn_btls::helpers::default_endpoint_config();
     endpoint_config.grease_quic_bit(quic_config.grease_quic_bit);
     endpoint_config
         .max_udp_payload_size(quic_config.max_udp_payload_size)
@@ -30,23 +33,94 @@ pub(crate) fn build_endpoint(quic_config: &QuicConfig) -> Result<Endpoint, Error
     Ok(endpoint)
 }
 
-/// Build a Quinn `ClientConfig` with transport parameters matching a browser profile.
-pub(crate) fn build_client_config(quic_config: &QuicConfig) -> Result<ClientConfig, Error> {
-    let mut crypto = rustls::ClientConfig::builder()
-        .with_webpki_verifier(
-            rustls::client::WebPkiServerVerifier::builder(Arc::new(
-                rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned()),
-            ))
-            .build()
-            .map_err(|e| Error::Quic(format!("Failed to build verifier: {e}")))?,
-        )
-        .with_no_client_auth();
+/// Build a Quinn `ClientConfig` with BoringSSL crypto and per-browser TLS
+/// fingerprint matching the H2 path.
+///
+/// Uses quinn-btls `Config::from_builder()` with a pre-configured SslContextBuilder
+/// that carries the browser's cipher list, curves, sigalgs, cert compression, etc.
+/// This ensures the QUIC TLS ClientHello matches the browser profile — Firefox H3
+/// gets Firefox TLS, Chrome H3 gets Chrome TLS.
+pub(crate) fn build_client_config(
+    quic_config: &QuicConfig,
+    tls_config: &TlsConfig,
+) -> Result<ClientConfig, Error> {
+    let mut builder = SslContextBuilder::new(SslMethod::tls())?;
 
-    // ALPN must be set to "h3" for HTTP/3 over QUIC
-    crypto.alpn_protocols = vec![b"h3".to_vec()];
+    // === TLS 1.3 cipher order preservation ===
+    // Must be called BEFORE set_cipher_list() to take effect.
+    if tls_config.preserve_tls13_cipher_order {
+        builder.set_preserve_tls13_cipher_list(true);
+    }
 
-    let quic_crypto = QuicClientConfig::try_from(crypto)
-        .map_err(|e| Error::Quic(format!("Failed to build QUIC crypto: {e}")))?;
+    // === Cipher suites (directly affects JA3/JA4 hash) ===
+    builder.set_cipher_list(&tls_config.cipher_list)?;
+
+    // === Curves / Supported Groups ===
+    builder.set_curves_list(&tls_config.curves)?;
+
+    // === Signature algorithms ===
+    builder.set_sigalgs_list(&tls_config.sigalgs)?;
+
+    // === GREASE (Chrome-like random extensions) ===
+    builder.set_grease_enabled(tls_config.grease);
+
+    // === Extension permutation (Chrome 110+) ===
+    builder.set_permute_extensions(tls_config.permute_extensions);
+
+    // === OCSP stapling ===
+    if tls_config.ocsp_stapling {
+        builder.enable_ocsp_stapling();
+    }
+
+    // === Signed Certificate Timestamps ===
+    if tls_config.signed_cert_timestamps {
+        builder.enable_signed_cert_timestamps();
+    }
+
+    // === Pre-shared key ===
+    if !tls_config.pre_shared_key {
+        builder.set_options(SslOptions::NO_PSK_DHE_KE);
+    }
+
+    // === Certificate compression (RFC 8879) ===
+    for algo in &tls_config.cert_compression {
+        match algo {
+            CertCompression::Brotli => {
+                builder.add_certificate_compression_algorithm(BrotliCertCompressor)?;
+            }
+            CertCompression::Zlib => {
+                builder.add_certificate_compression_algorithm(ZlibCertCompressor)?;
+            }
+            CertCompression::Zstd => {
+                builder.add_certificate_compression_algorithm(ZstdCertCompressor)?;
+            }
+        }
+    }
+
+    // === Delegated credentials ===
+    if let Some(ref dc_sigalgs) = tls_config.delegated_credentials {
+        builder.set_delegated_credentials(dc_sigalgs)?;
+    }
+
+    // === Record size limit (RFC 8449) ===
+    if let Some(limit) = tls_config.record_size_limit {
+        builder.set_record_size_limit(limit);
+    }
+
+    // === Certificate verification via webpki-root-certs ===
+    // BoringSSL's set_default_verify_paths() finds no CAs on Windows.
+    // We inject Mozilla's root CA bundle directly.
+    if tls_config.danger_accept_invalid_certs {
+        builder.set_verify(SslVerifyMode::NONE);
+    } else {
+        builder.set_verify(SslVerifyMode::PEER);
+        load_root_certs(&mut builder)?;
+    }
+
+    // Build quinn-btls config from our pre-configured builder.
+    // from_builder() enforces TLS 1.3 and applies QUIC method/callbacks/session cache.
+    let quic_crypto = QuicBtlsConfig::from_builder(builder)
+        .map_err(|e| Error::Quic(format!("QUIC crypto error: {e}")))?;
 
     let mut client_config = ClientConfig::new(Arc::new(quic_crypto));
 
@@ -85,4 +159,21 @@ pub(crate) fn build_client_config(quic_config: &QuicConfig) -> Result<ClientConf
     client_config.transport_config(Arc::new(transport));
 
     Ok(client_config)
+}
+
+/// Load Mozilla's root CA certificates into the SSL context builder.
+fn load_root_certs(builder: &mut SslContextBuilder) -> Result<(), Error> {
+    use btls::x509::X509;
+    use btls::x509::store::X509StoreBuilder;
+
+    let mut store_builder = X509StoreBuilder::new()?;
+
+    for cert_der in webpki_root_certs::TLS_SERVER_ROOT_CERTS {
+        if let Ok(x509) = X509::from_der(cert_der.as_ref()) {
+            let _ = store_builder.add_cert(x509);
+        }
+    }
+
+    builder.set_verify_cert_store(store_builder.build())?;
+    Ok(())
 }

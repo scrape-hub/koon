@@ -5,14 +5,14 @@ use std::str::FromStr;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use boring2::ssl::{SslConnector, SslMethod, SslVerifyMode};
+use btls::ssl::{SslConnector, SslMethod, SslVerifyMode};
 use hickory_proto::op::{Edns, Message, MessageType, OpCode, Query};
 use hickory_proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
 use hickory_proto::rr::record_data::RData;
 use hickory_proto::rr::{DNSClass, Name, RecordType};
 use hickory_proto::serialize::binary::{BinDecodable, BinEncodable};
 use tokio::net::TcpStream;
-use tokio_boring2::SslStream;
+use tokio_btls::SslStream;
 
 use crate::Error;
 
@@ -88,12 +88,12 @@ impl DohResolver {
     pub fn new(config: DohConfig) -> Result<Self, Error> {
         // Minimal TLS config — NOT the browser fingerprint.
         // This is just for the DoH connection, not for user traffic.
-        let mut builder = SslConnector::builder(SslMethod::tls_client())?;
+        let mut builder = SslConnector::builder(SslMethod::tls())?;
         builder.set_verify(SslVerifyMode::PEER);
 
         // Load root certs
-        use boring2::x509::X509;
-        use boring2::x509::store::X509StoreBuilder;
+        use btls::x509::X509;
+        use btls::x509::store::X509StoreBuilder;
         let mut store_builder = X509StoreBuilder::new()?;
         for cert_der in webpki_root_certs::TLS_SERVER_ROOT_CERTS {
             if let Ok(x509) = X509::from_der(cert_der.as_ref()) {

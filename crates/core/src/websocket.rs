@@ -5,7 +5,7 @@ use std::time::Duration;
 use http::{HeaderMap, HeaderName, HeaderValue, Method, Uri};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::net::TcpStream;
-use tokio_boring2::SslStream;
+use tokio_btls::SslStream;
 use tungstenite::protocol::Role;
 
 use crate::error::Error;

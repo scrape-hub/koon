@@ -16,9 +16,13 @@ socks = ["dep:tokio-socks"]
 doh = ["dep:hickory-proto"]
 
 [dependencies]
-# TLS via BoringSSL
-boring2 = "5.0.0-alpha.13"
-tokio-boring2 = { version = "5.0.0-alpha.13", features = ["read_uninit"] }
+# TLS via BoringSSL (fork with quinn-btls from_builder() for per-browser H3 TLS fingerprint)
+btls = { git = "https://github.com/scrape-hub/btls.git", rev = "3ff178d2" }
+tokio-btls = { git = "https://github.com/scrape-hub/btls.git", rev = "3ff178d2" }
+quinn-btls = { git = "https://github.com/scrape-hub/btls.git", rev = "3ff178d2" }
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio"] }
+h3 = "0.0.8"
+h3-quinn = "0.0.10"
 
 # HTTP/2 with frame-level control (fork with HeadersOrder support)
 http2 = { git = "https://github.com/scrape-hub/http2.git", tag = "v0.5.12-headers-order", features = ["unstable"] }
@@ -28,14 +32,6 @@ http = "1"
 http-body = "1"
 http-body-util = "0.1"
 bytes = "1"
-
-# QUIC / HTTP/3
-quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-ring"] }
-h3 = "0.0.8"
-h3-quinn = "0.0.10"
-rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
-rustls-pemfile = "2"
-webpki-roots = "1"
 
 # Async runtime
 tokio = { version = "1", features = ["net", "time", "rt", "rt-multi-thread", "macros"] }

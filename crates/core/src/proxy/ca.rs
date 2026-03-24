@@ -2,13 +2,13 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use boring2::asn1::Asn1Time;
-use boring2::bn::{BigNum, MsbOption};
-use boring2::hash::MessageDigest;
-use boring2::pkey::{PKey, Private};
-use boring2::rsa::Rsa;
-use boring2::x509::extension::{BasicConstraints, KeyUsage, SubjectAlternativeName};
-use boring2::x509::{X509, X509Name};
+use btls::asn1::Asn1Time;
+use btls::bn::{BigNum, MsbOption};
+use btls::hash::MessageDigest;
+use btls::pkey::{PKey, Private};
+use btls::rsa::Rsa;
+use btls::x509::extension::{BasicConstraints, KeyUsage, SubjectAlternativeName};
+use btls::x509::{X509, X509Name};
 
 use crate::error::Error;
 

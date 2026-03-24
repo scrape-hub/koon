@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use bytes::Bytes;
 use http2::client::SendRequest;
 use tokio::net::TcpStream;
-use tokio_boring2::SslStream;
+use tokio_btls::SslStream;
 
 /// Pool key: one connection per origin (host + port) + proxy index.
 /// When proxy rotation is active, each proxy gets its own connections per origin.

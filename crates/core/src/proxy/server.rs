@@ -4,7 +4,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
-use boring2::ssl::{SslAcceptor, SslMethod};
+use btls::ssl::{SslAcceptor, SslMethod};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
@@ -306,9 +306,9 @@ async fn handle_connect(
     let acceptor = acceptor_builder.build();
 
     // 3. TLS accept
-    let ssl = boring2::ssl::Ssl::new(acceptor.context())
+    let ssl = btls::ssl::Ssl::new(acceptor.context())
         .map_err(|e| Error::Proxy(format!("Ssl::new failed: {e}")))?;
-    let mut tls_stream = tokio_boring2::SslStream::new(ssl, stream)
+    let mut tls_stream = tokio_btls::SslStream::new(ssl, stream)
         .map_err(|e| Error::Proxy(format!("SslStream::new failed: {e}")))?;
 
     Pin::new(&mut tls_stream)

@@ -1,7 +1,7 @@
 use http::{HeaderName, HeaderValue, Method, Uri};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
-use tokio_boring2::SslStream;
+use tokio_btls::SslStream;
 
 use crate::error::Error;
 use crate::http1;

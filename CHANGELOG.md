@@ -5,6 +5,26 @@ All notable changes to koon will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - 2026-03-24
+
+### Changed
+
+- **BoringSSL migration** — Migrated from `boring2` to `btls` v0.5.5 (same author, new crate name). Affects `btls`, `tokio-btls`, and new `quinn-btls` fork for QUIC.
+- **HTTP/3 per-browser TLS fingerprint** — QUIC/H3 connections now use the same TLS configuration as H2 (cipher list, curves, sigalgs, GREASE, cert compression, delegated credentials, record size limit). Previously H3 always used Chrome-default TLS regardless of profile. Firefox H3 now sends Firefox TLS (3 TLS 1.3 ciphers, no GREASE, record_size_limit), Chrome H3 sends Chrome TLS, etc.
+- **Default OS changed to macOS** — Chrome, Firefox, Edge, and Opera profiles now default to macOS when no OS is specified (e.g. `Chrome::v145()` returns macOS). Windows and Linux remain available via explicit constructors. Validated with 89-site testsuite: no regressions vs. Windows profiles.
+- **HTTP/3 certificate verification enabled** — QUIC connections now verify server certificates via `webpki-root-certs` (Mozilla CA bundle), replacing the previous `verify_peer(false)` workaround that was needed because BoringSSL's `set_default_verify_paths()` fails on Windows.
+
+### Fixed
+
+- **Protocol-relative redirect URLs** — Redirects to `//host/path` URLs (without scheme) are now handled correctly, inheriting the scheme from the original request.
+- **HTTP/3 Cloudflare compatibility** — Fixed GREASE frame ordering bug in h3 crate (hyperium/h3#206) that caused Cloudflare to reject H3 requests with 400. GREASE is now disabled for H3 connections. Also added `max_field_section_size` to H3 SETTINGS.
+
+### Internal
+
+- **quinn-btls fork** — Created [scrape-hub/btls](https://github.com/scrape-hub/btls) fork adding `Config::from_builder(SslContextBuilder)` to quinn-btls, enabling custom TLS configuration for QUIC. `Config::new()` delegates to `from_builder()` internally — no breaking change to the upstream API.
+
+[0.7.0]: https://github.com/scrape-hub/koon/releases/tag/v0.7.0
+
 ## [0.6.3] - 2026-03-23
 
 ### Fixed

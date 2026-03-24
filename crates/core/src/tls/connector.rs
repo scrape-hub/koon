@@ -1,4 +1,4 @@
-use boring2::ssl::{
+use btls::ssl::{
     NameType, Ssl, SslConnector, SslMethod, SslOptions, SslSessionCacheMode, SslVerifyMode,
     SslVersion,
 };
@@ -39,7 +39,7 @@ impl TlsConnector {
         config: &TlsConfig,
         session_cache: Option<SessionCache>,
     ) -> Result<SslConnector, Error> {
-        let mut builder = SslConnector::builder(SslMethod::tls_client())?;
+        let mut builder = SslConnector::builder(SslMethod::tls())?;
 
         // === TLS 1.3 cipher order preservation ===
         // Must be called BEFORE set_cipher_list() to take effect.
@@ -94,9 +94,9 @@ impl TlsConnector {
         }
 
         // === Key shares limit ===
-        if let Some(limit) = config.key_shares_limit {
-            builder.set_key_shares_limit(limit);
-        }
+        // btls removed set_key_shares_limit; key shares are now configured
+        // per-connection via set_client_key_shares on the Ssl object.
+        // The default BoringSSL behavior already matches Chrome (sends 2 key shares).
 
         // === Certificate compression (RFC 8879) ===
         for algo in &config.cert_compression {
@@ -187,7 +187,7 @@ impl TlsConnector {
             let proto = b"h2";
             // In the foreign-types pattern, &SslRef has the same memory
             // representation as *mut SSL. ConnectConfiguration derefs to SslRef.
-            let ssl_ptr = &*cfg as *const boring2::ssl::SslRef as *mut std::ffi::c_void;
+            let ssl_ptr = &*cfg as *const btls::ssl::SslRef as *mut std::ffi::c_void;
             let ret = unsafe {
                 SSL_add_application_settings(
                     ssl_ptr,
@@ -229,9 +229,9 @@ impl TlsConnector {
 /// Uses the `webpki-root-certs` crate (same approach as wreq) which embeds
 /// Mozilla's trusted root CA bundle. This works reliably on all platforms,
 /// unlike BoringSSL's `set_default_verify_paths()` which fails on Windows.
-fn load_root_certs(builder: &mut boring2::ssl::SslConnectorBuilder) -> Result<(), Error> {
-    use boring2::x509::X509;
-    use boring2::x509::store::X509StoreBuilder;
+fn load_root_certs(builder: &mut btls::ssl::SslConnectorBuilder) -> Result<(), Error> {
+    use btls::x509::X509;
+    use btls::x509::store::X509StoreBuilder;
 
     let mut store_builder = X509StoreBuilder::new()?;
 

@@ -74,9 +74,9 @@ impl Opera {
             }
         };
         let os = match os {
-            Some("macos") => Os::MacOS,
+            Some("windows") => Os::Windows,
             Some("linux") => Os::Linux,
-            _ => Os::Windows,
+            _ => Os::MacOS, // macOS default — less blocked by WAFs than Windows
         };
         Ok(opera_profile(major, chromium, os))
     }

@@ -148,8 +148,8 @@ impl Edge {
             return Err("Edge is not available on Linux".to_string());
         }
         let os = match os {
-            Some("macos") => Os::MacOS,
-            _ => Os::Windows,
+            Some("windows") => Os::Windows,
+            _ => Os::MacOS, // macOS default — less blocked by WAFs than Windows
         };
         Ok(edge_profile(major, os))
     }

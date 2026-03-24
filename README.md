@@ -109,8 +109,8 @@ Format: `{browser}{version}{-os}` — all parts except the browser name are opti
 
 **Desktop browsers with OS variants:**
 
-| Browser | Default (Windows) | Windows | macOS | Linux |
-|---------|-------------------|---------|-------|-------|
+| Browser | Default (macOS) | Windows | macOS | Linux |
+|---------|----------------|---------|-------|-------|
 | Chrome 145 | `chrome145` | `chrome145-windows` | `chrome145-macos` | `chrome145-linux` |
 | Firefox 148 | `firefox148` | `firefox148-windows` | `firefox148-macos` | `firefox148-linux` |
 | Edge 145 | `edge145` | `edge145-windows` | `edge145-macos` | — |
@@ -136,11 +136,11 @@ Format: `{browser}{version}{-os}` — all parts except the browser name are opti
 
 | Shorthand | Resolves to |
 |-----------|-------------|
-| `chrome` | Chrome 145 Windows |
-| `firefox` | Firefox 148 Windows |
+| `chrome` | Chrome 145 macOS |
+| `firefox` | Firefox 148 macOS |
 | `safari` | Safari 18.3 macOS |
-| `edge` | Edge 145 Windows |
-| `opera` | Opera 127 Windows |
+| `edge` | Edge 145 macOS |
+| `opera` | Opera 127 macOS |
 | `chrome-mobile` | Chrome Mobile 145 Android |
 | `firefox-mobile` | Firefox Mobile 148 Android |
 | `safari-mobile` | Safari Mobile 18.3 iOS |

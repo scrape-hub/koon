@@ -1,35 +1,49 @@
-use boring2::ssl::{CertificateCompressionAlgorithm, CertificateCompressor};
+use btls::ssl::{CertificateCompressionAlgorithm, CertificateCompressor};
 
 /// Brotli certificate decompressor for RFC 8879 `compress_certificate` extension.
+#[derive(Debug)]
 pub struct BrotliCertCompressor;
 
 impl CertificateCompressor for BrotliCertCompressor {
-    const ALGORITHM: CertificateCompressionAlgorithm = CertificateCompressionAlgorithm::BROTLI;
-    const CAN_COMPRESS: bool = false;
-    const CAN_DECOMPRESS: bool = true;
+    fn algorithm(&self) -> CertificateCompressionAlgorithm {
+        CertificateCompressionAlgorithm::BROTLI
+    }
 
-    fn decompress<W>(&self, input: &[u8], output: &mut W) -> std::io::Result<()>
-    where
-        W: std::io::Write,
-    {
-        brotli::BrotliDecompress(&mut std::io::Cursor::new(input), output)?;
+    fn compress(&self, input: &[u8], output: &mut dyn std::io::Write) -> std::io::Result<()> {
+        // We only decompress (client-side). Compression stub for trait compliance.
+        let _ = (input, output);
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "compression not implemented",
+        ))
+    }
+
+    fn decompress(&self, input: &[u8], output: &mut dyn std::io::Write) -> std::io::Result<()> {
+        let mut buf = Vec::new();
+        brotli::BrotliDecompress(&mut std::io::Cursor::new(input), &mut buf)?;
+        output.write_all(&buf)?;
         Ok(())
     }
 }
 
 /// Zlib certificate decompressor for RFC 8879 `compress_certificate` extension.
-/// Firefox advertises Zlib cert compression support.
+#[derive(Debug)]
 pub struct ZlibCertCompressor;
 
 impl CertificateCompressor for ZlibCertCompressor {
-    const ALGORITHM: CertificateCompressionAlgorithm = CertificateCompressionAlgorithm::ZLIB;
-    const CAN_COMPRESS: bool = false;
-    const CAN_DECOMPRESS: bool = true;
+    fn algorithm(&self) -> CertificateCompressionAlgorithm {
+        CertificateCompressionAlgorithm::ZLIB
+    }
 
-    fn decompress<W>(&self, input: &[u8], output: &mut W) -> std::io::Result<()>
-    where
-        W: std::io::Write,
-    {
+    fn compress(&self, input: &[u8], output: &mut dyn std::io::Write) -> std::io::Result<()> {
+        let _ = (input, output);
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "compression not implemented",
+        ))
+    }
+
+    fn decompress(&self, input: &[u8], output: &mut dyn std::io::Write) -> std::io::Result<()> {
         use std::io::Read;
         let mut decoder = flate2::read::ZlibDecoder::new(input);
         let mut buf = Vec::new();
@@ -40,18 +54,23 @@ impl CertificateCompressor for ZlibCertCompressor {
 }
 
 /// Zstd certificate decompressor for RFC 8879 `compress_certificate` extension.
-/// Firefox advertises Zstd cert compression support.
+#[derive(Debug)]
 pub struct ZstdCertCompressor;
 
 impl CertificateCompressor for ZstdCertCompressor {
-    const ALGORITHM: CertificateCompressionAlgorithm = CertificateCompressionAlgorithm::ZSTD;
-    const CAN_COMPRESS: bool = false;
-    const CAN_DECOMPRESS: bool = true;
+    fn algorithm(&self) -> CertificateCompressionAlgorithm {
+        CertificateCompressionAlgorithm::ZSTD
+    }
 
-    fn decompress<W>(&self, input: &[u8], output: &mut W) -> std::io::Result<()>
-    where
-        W: std::io::Write,
-    {
+    fn compress(&self, input: &[u8], output: &mut dyn std::io::Write) -> std::io::Result<()> {
+        let _ = (input, output);
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "compression not implemented",
+        ))
+    }
+
+    fn decompress(&self, input: &[u8], output: &mut dyn std::io::Write) -> std::io::Result<()> {
         use std::io::Read;
         let mut decoder = zstd::Decoder::new(input)?;
         let mut buf = Vec::new();
