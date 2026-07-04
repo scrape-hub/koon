@@ -80,9 +80,9 @@ export class KoonResponse {
   /** Whether the status code is 2xx (success). */
   readonly ok: boolean;
   /** Approximate bytes sent for this request (headers + body). */
-  readonly bytesSent: number;
+  readonly bytesSent: bigint;
   /** Approximate bytes received for this response (headers + body, pre-decompression). */
-  readonly bytesReceived: number;
+  readonly bytesReceived: bigint;
   /** Whether TLS session resumption was used for this connection. */
   readonly tlsResumed: boolean;
   /** Whether an existing pooled connection was reused. */
@@ -175,12 +175,12 @@ export class KoonStreamingResponse {
   readonly version: string;
   readonly url: string;
   /** Approximate bytes sent for this request. */
-  readonly bytesSent: number;
+  readonly bytesSent: bigint;
   /** Remote IP address of the peer, or null for H3/QUIC. */
   readonly remoteAddress: string | null;
 
   /** Approximate bytes received so far (headers + body chunks consumed). */
-  bytesReceived(): number;
+  bytesReceived(): bigint;
   nextChunk(): Promise<Buffer | null>;
   collect(): Promise<Buffer>;
 }
