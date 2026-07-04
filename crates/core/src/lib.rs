@@ -13,6 +13,7 @@ pub mod proxy;
 pub mod quic;
 pub mod streaming;
 pub mod tls;
+pub(crate) mod util;
 pub mod websocket;
 
 pub use client::{

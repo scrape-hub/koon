@@ -118,6 +118,48 @@ impl Koon {
             let _ = f.call(pairlist!(resp.status as i32, &resp.url, headers_df));
         }
     }
+
+    /// Shared request execution path for all HTTP methods.
+    ///
+    /// Fires the on_request/on_response callbacks, blocks on the async request
+    /// (optionally wrapped in a per-request timeout), and converts the response
+    /// to an R list. Errors are surfaced as R errors carrying the structured
+    /// error code (e.g. "[TIMEOUT] ...", "[TLS_ERROR] ...").
+    fn execute(
+        &self,
+        method: &str,
+        url: &str,
+        body: Option<Vec<u8>>,
+        extra: Vec<(String, String)>,
+        timeout: Nullable<i32>,
+    ) -> List {
+        self.fire_on_request_r(method, url);
+        let parsed_method = method
+            .parse()
+            .unwrap_or_else(|_| panic!("Invalid HTTP method: {method}"));
+        // Only positive per-request timeouts apply; <= 0 / NULL means "no override".
+        let timeout_secs: Option<u64> = match timeout {
+            NotNull(t) if t > 0 => Some(t as u64),
+            _ => None,
+        };
+        let resp = self
+            .runtime
+            .block_on(async {
+                let fut = self
+                    .client
+                    .request_with_headers(parsed_method, url, body, extra);
+                match timeout_secs {
+                    Some(s) => match tokio::time::timeout(Duration::from_secs(s), fut).await {
+                        Ok(r) => r,
+                        Err(_) => Err(koon_core::Error::Timeout),
+                    },
+                    None => fut.await,
+                }
+            })
+            .unwrap_or_else(|e| panic!("[{}] {}", e.code(), e));
+        self.fire_on_response_r(&resp);
+        response_to_list(resp)
+    }
 }
 
 #[extendr]
@@ -127,6 +169,8 @@ impl Koon {
     /// @param browser Character string specifying the browser profile
     ///   (e.g. "chrome145", "firefox148", "safari183", "chromemobile145",
     ///   "firefoxmobile148", "safarimobile183", "okhttp4").
+    /// @param profile_json Optional custom browser profile as a JSON string
+    ///   (e.g. from `export_profile()`). Overrides `browser` when supplied.
     /// @param proxy Optional proxy URL (e.g. "socks5://127.0.0.1:1080").
     /// @param proxies Optional character vector of proxy URLs for round-robin rotation.
     ///   Takes priority over `proxy`.
@@ -151,9 +195,14 @@ impl Koon {
     /// @param ignore_tls_errors Logical; skip TLS certificate verification (default: FALSE).
     /// @param doh Optional DNS-over-HTTPS provider ("cloudflare" or "google").
     /// @return A new Koon client object.
-    fn new(browser: &str, proxy: Nullable<String>, proxies: Robj, timeout: Nullable<i32>, randomize: Nullable<bool>, headers: Robj, local_address: Nullable<String>, on_request: Robj, on_response: Robj, on_redirect: Robj, retries: Nullable<i32>, locale: Nullable<String>, proxy_headers: Robj, ip_version: Nullable<i32>, follow_redirects: Nullable<bool>, max_redirects: Nullable<i32>, cookie_jar: Nullable<bool>, session_resumption: Nullable<bool>, ignore_tls_errors: Nullable<bool>, doh: Nullable<String>) -> Self {
-        let mut profile = BrowserProfile::resolve(browser)
-            .unwrap_or_else(|e| panic!("Unknown browser profile '{}': {}", browser, e));
+    fn new(browser: &str, profile_json: Nullable<String>, proxy: Nullable<String>, proxies: Robj, timeout: Nullable<i32>, randomize: Nullable<bool>, headers: Robj, local_address: Nullable<String>, on_request: Robj, on_response: Robj, on_redirect: Robj, retries: Nullable<i32>, locale: Nullable<String>, proxy_headers: Robj, ip_version: Nullable<i32>, follow_redirects: Nullable<bool>, max_redirects: Nullable<i32>, cookie_jar: Nullable<bool>, session_resumption: Nullable<bool>, ignore_tls_errors: Nullable<bool>, doh: Nullable<String>) -> Self {
+        let mut profile = if let NotNull(ref json) = profile_json {
+            BrowserProfile::from_json(json)
+                .unwrap_or_else(|e| panic!("Invalid profile_json: {}", e))
+        } else {
+            BrowserProfile::resolve(browser)
+                .unwrap_or_else(|e| panic!("Unknown browser profile '{}': {}", browser, e))
+        };
 
         if let NotNull(true) = randomize {
             profile.randomize();
@@ -164,14 +213,16 @@ impl Koon {
         }
 
         let timeout_s = match timeout {
-            NotNull(t) => t as u64,
+            // Negative timeouts would wrap to a near-infinite u64; clamp to 0,
+            // which the core interprets as "no timeout".
+            NotNull(t) => if t < 0 { 0u64 } else { t as u64 },
             Null => 30,
         };
 
         let custom_headers = parse_headers_robj(&headers);
 
         let do_follow = match follow_redirects { NotNull(v) => v, Null => true };
-        let max_redir = match max_redirects { NotNull(v) => v as u32, Null => 10 };
+        let max_redir = match max_redirects { NotNull(v) => v.max(0) as u32, Null => 10 };
         let do_cookies = match cookie_jar { NotNull(v) => v, Null => true };
         let do_session = match session_resumption { NotNull(v) => v, Null => true };
 
@@ -277,16 +328,11 @@ impl Koon {
     ///
     /// @param url The URL to request.
     /// @param headers Optional named character vector of per-request headers.
+    /// @param timeout Optional per-request timeout in seconds (overrides the client default).
     /// @return A list with components: status, version, url, body (raw), text, headers (data.frame).
-    fn get(&self, url: &str, headers: Robj) -> List {
-        self.fire_on_request_r("GET", url);
+    fn get(&self, url: &str, headers: Robj, timeout: Nullable<i32>) -> List {
         let extra = parse_headers_robj(&headers);
-        let resp = self
-            .runtime
-            .block_on(self.client.request_with_headers("GET".parse().unwrap(), url, None, extra))
-            .unwrap_or_else(|e| panic!("{e}"));
-        self.fire_on_response_r(&resp);
-        response_to_list(resp)
+        self.execute("GET", url, None, extra, timeout)
     }
 
     /// Perform an HTTP POST request.
@@ -294,17 +340,12 @@ impl Koon {
     /// @param url The URL to request.
     /// @param body Optional character string or raw vector with the request body.
     /// @param headers Optional named character vector of per-request headers.
+    /// @param timeout Optional per-request timeout in seconds (overrides the client default).
     /// @return A list with components: status, version, url, body (raw), text, headers (data.frame).
-    fn post(&self, url: &str, body: Robj, headers: Robj) -> List {
-        self.fire_on_request_r("POST", url);
+    fn post(&self, url: &str, body: Robj, headers: Robj, timeout: Nullable<i32>) -> List {
         let body_bytes = extract_body_robj(&body);
         let extra = parse_headers_robj(&headers);
-        let resp = self
-            .runtime
-            .block_on(self.client.request_with_headers("POST".parse().unwrap(), url, body_bytes, extra))
-            .unwrap_or_else(|e| panic!("{e}"));
-        self.fire_on_response_r(&resp);
-        response_to_list(resp)
+        self.execute("POST", url, body_bytes, extra, timeout)
     }
 
     /// Perform an HTTP PUT request.
@@ -312,33 +353,23 @@ impl Koon {
     /// @param url The URL to request.
     /// @param body Optional character string or raw vector with the request body.
     /// @param headers Optional named character vector of per-request headers.
+    /// @param timeout Optional per-request timeout in seconds (overrides the client default).
     /// @return A list with components: status, version, url, body (raw), text, headers (data.frame).
-    fn put(&self, url: &str, body: Robj, headers: Robj) -> List {
-        self.fire_on_request_r("PUT", url);
+    fn put(&self, url: &str, body: Robj, headers: Robj, timeout: Nullable<i32>) -> List {
         let body_bytes = extract_body_robj(&body);
         let extra = parse_headers_robj(&headers);
-        let resp = self
-            .runtime
-            .block_on(self.client.request_with_headers("PUT".parse().unwrap(), url, body_bytes, extra))
-            .unwrap_or_else(|e| panic!("{e}"));
-        self.fire_on_response_r(&resp);
-        response_to_list(resp)
+        self.execute("PUT", url, body_bytes, extra, timeout)
     }
 
     /// Perform an HTTP DELETE request.
     ///
     /// @param url The URL to request.
     /// @param headers Optional named character vector of per-request headers.
+    /// @param timeout Optional per-request timeout in seconds (overrides the client default).
     /// @return A list with components: status, version, url, body (raw), text, headers (data.frame).
-    fn delete(&self, url: &str, headers: Robj) -> List {
-        self.fire_on_request_r("DELETE", url);
+    fn delete(&self, url: &str, headers: Robj, timeout: Nullable<i32>) -> List {
         let extra = parse_headers_robj(&headers);
-        let resp = self
-            .runtime
-            .block_on(self.client.request_with_headers("DELETE".parse().unwrap(), url, None, extra))
-            .unwrap_or_else(|e| panic!("{e}"));
-        self.fire_on_response_r(&resp);
-        response_to_list(resp)
+        self.execute("DELETE", url, None, extra, timeout)
     }
 
     /// Perform an HTTP PATCH request.
@@ -346,33 +377,37 @@ impl Koon {
     /// @param url The URL to request.
     /// @param body Optional character string or raw vector with the request body.
     /// @param headers Optional named character vector of per-request headers.
+    /// @param timeout Optional per-request timeout in seconds (overrides the client default).
     /// @return A list with components: status, version, url, body (raw), text, headers (data.frame).
-    fn patch(&self, url: &str, body: Robj, headers: Robj) -> List {
-        self.fire_on_request_r("PATCH", url);
+    fn patch(&self, url: &str, body: Robj, headers: Robj, timeout: Nullable<i32>) -> List {
         let body_bytes = extract_body_robj(&body);
         let extra = parse_headers_robj(&headers);
-        let resp = self
-            .runtime
-            .block_on(self.client.request_with_headers("PATCH".parse().unwrap(), url, body_bytes, extra))
-            .unwrap_or_else(|e| panic!("{e}"));
-        self.fire_on_response_r(&resp);
-        response_to_list(resp)
+        self.execute("PATCH", url, body_bytes, extra, timeout)
     }
 
     /// Perform an HTTP HEAD request.
     ///
     /// @param url The URL to request.
     /// @param headers Optional named character vector of per-request headers.
+    /// @param timeout Optional per-request timeout in seconds (overrides the client default).
     /// @return A list with components: status, version, url, body (raw), text, headers (data.frame).
-    fn head(&self, url: &str, headers: Robj) -> List {
-        self.fire_on_request_r("HEAD", url);
+    fn head(&self, url: &str, headers: Robj, timeout: Nullable<i32>) -> List {
         let extra = parse_headers_robj(&headers);
-        let resp = self
-            .runtime
-            .block_on(self.client.request_with_headers("HEAD".parse().unwrap(), url, None, extra))
-            .unwrap_or_else(|e| panic!("{e}"));
-        self.fire_on_response_r(&resp);
-        response_to_list(resp)
+        self.execute("HEAD", url, None, extra, timeout)
+    }
+
+    /// Perform an HTTP request with a custom method.
+    ///
+    /// @param method HTTP method string (e.g. "GET", "POST", "OPTIONS", "TRACE").
+    /// @param url The URL to request.
+    /// @param body Optional character string or raw vector with the request body.
+    /// @param headers Optional named character vector of per-request headers.
+    /// @param timeout Optional per-request timeout in seconds (overrides the client default).
+    /// @return A list with components: status, version, url, body (raw), text, headers (data.frame).
+    fn request(&self, method: &str, url: &str, body: Robj, headers: Robj, timeout: Nullable<i32>) -> List {
+        let body_bytes = extract_body_robj(&body);
+        let extra = parse_headers_robj(&headers);
+        self.execute(method, url, body_bytes, extra, timeout)
     }
 
     /// Save the current session (cookies + TLS sessions) as a JSON string.

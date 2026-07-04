@@ -8,6 +8,7 @@ use crate::profile::BrowserProfile;
 use crate::quic;
 
 /// Perform an HTTP/3 request over an existing QUIC connection.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn send_request(
     connection: &mut h3::client::SendRequest<h3_quinn::OpenStreams, Bytes>,
     method: Method,
@@ -16,6 +17,7 @@ pub(crate) async fn send_request(
     custom_headers: &[(String, String)],
     body: Option<Vec<u8>>,
     cookie_header: Option<&str>,
+    timeout: std::time::Duration,
 ) -> Result<HttpResponse, Error> {
     let authority = uri.authority().map(|a| a.as_str()).unwrap_or("");
     let scheme = uri.scheme_str().unwrap_or("https");
@@ -95,33 +97,38 @@ pub(crate) async fn send_request(
         .await
         .map_err(|e| Error::Http3(format!("Failed to finish H3 stream: {e}")))?;
 
-    // Receive response
-    let response = stream
-        .recv_response()
-        .await
-        .map_err(|e| Error::Http3(format!("Failed to receive H3 response: {e}")))?;
+    // Receive response + body, bounded by the timeout so a server that sends
+    // headers then stalls or trickles the body can't hang the request forever.
+    let (status, resp_headers, body_data) = tokio::time::timeout(timeout, async {
+        let response = stream
+            .recv_response()
+            .await
+            .map_err(|e| Error::Http3(format!("Failed to receive H3 response: {e}")))?;
 
-    let status = response.status().as_u16();
-    let resp_headers: Vec<(String, String)> = response
-        .headers()
-        .iter()
-        .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
-        .collect();
+        let status = response.status().as_u16();
+        let resp_headers: Vec<(String, String)> = response
+            .headers()
+            .iter()
+            .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
+            .collect();
 
-    // Read body
-    let mut body_data = Vec::new();
-    while let Some(mut chunk) = stream
-        .recv_data()
-        .await
-        .map_err(|e| Error::Http3(format!("Failed to read H3 body: {e}")))?
-    {
-        while chunk.has_remaining() {
-            let bytes = chunk.chunk();
-            body_data.extend_from_slice(bytes);
-            let len = bytes.len();
-            chunk.advance(len);
+        let mut body_data = Vec::new();
+        while let Some(mut chunk) = stream
+            .recv_data()
+            .await
+            .map_err(|e| Error::Http3(format!("Failed to read H3 body: {e}")))?
+        {
+            while chunk.has_remaining() {
+                let bytes = chunk.chunk();
+                body_data.extend_from_slice(bytes);
+                let len = bytes.len();
+                chunk.advance(len);
+            }
         }
-    }
+        Ok::<_, Error>((status, resp_headers, body_data))
+    })
+    .await
+    .map_err(|_| Error::Timeout)??;
 
     let raw_body_len = body_data.len() as u64;
     let resp_header_size = crate::client::estimate_headers_size(&resp_headers);

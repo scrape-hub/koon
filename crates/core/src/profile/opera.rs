@@ -7,7 +7,7 @@ use super::chrome::{
 ///
 /// Opera uses the same Chromium engine as Chrome, so TLS/H2/QUIC are identical.
 /// Only headers differ (brand string + `OPR/` user-agent suffix).
-/// Supports Opera 124–127 (Chromium 140–143).
+/// Supports Opera 124–133 (Chromium 140–149).
 pub struct Opera;
 
 impl Opera {
@@ -55,9 +55,75 @@ impl Opera {
         opera_profile(127, 143, Os::Linux)
     }
 
-    /// Latest Opera profile (currently v127 on Windows).
+    // ========== Opera 128 (Chromium 144) ==========
+    pub fn v128_windows() -> BrowserProfile {
+        opera_profile(128, 144, Os::Windows)
+    }
+    pub fn v128_macos() -> BrowserProfile {
+        opera_profile(128, 144, Os::MacOS)
+    }
+    pub fn v128_linux() -> BrowserProfile {
+        opera_profile(128, 144, Os::Linux)
+    }
+
+    // ========== Opera 129 (Chromium 145) ==========
+    pub fn v129_windows() -> BrowserProfile {
+        opera_profile(129, 145, Os::Windows)
+    }
+    pub fn v129_macos() -> BrowserProfile {
+        opera_profile(129, 145, Os::MacOS)
+    }
+    pub fn v129_linux() -> BrowserProfile {
+        opera_profile(129, 145, Os::Linux)
+    }
+
+    // ========== Opera 130 (Chromium 146) ==========
+    pub fn v130_windows() -> BrowserProfile {
+        opera_profile(130, 146, Os::Windows)
+    }
+    pub fn v130_macos() -> BrowserProfile {
+        opera_profile(130, 146, Os::MacOS)
+    }
+    pub fn v130_linux() -> BrowserProfile {
+        opera_profile(130, 146, Os::Linux)
+    }
+
+    // ========== Opera 131 (Chromium 147) ==========
+    pub fn v131_windows() -> BrowserProfile {
+        opera_profile(131, 147, Os::Windows)
+    }
+    pub fn v131_macos() -> BrowserProfile {
+        opera_profile(131, 147, Os::MacOS)
+    }
+    pub fn v131_linux() -> BrowserProfile {
+        opera_profile(131, 147, Os::Linux)
+    }
+
+    // ========== Opera 132 (Chromium 148) ==========
+    pub fn v132_windows() -> BrowserProfile {
+        opera_profile(132, 148, Os::Windows)
+    }
+    pub fn v132_macos() -> BrowserProfile {
+        opera_profile(132, 148, Os::MacOS)
+    }
+    pub fn v132_linux() -> BrowserProfile {
+        opera_profile(132, 148, Os::Linux)
+    }
+
+    // ========== Opera 133 (Chromium 149) ==========
+    pub fn v133_windows() -> BrowserProfile {
+        opera_profile(133, 149, Os::Windows)
+    }
+    pub fn v133_macos() -> BrowserProfile {
+        opera_profile(133, 149, Os::MacOS)
+    }
+    pub fn v133_linux() -> BrowserProfile {
+        opera_profile(133, 149, Os::Linux)
+    }
+
+    /// Latest Opera profile (currently v133 on Windows).
     pub fn latest() -> BrowserProfile {
-        Self::v127_windows()
+        Self::v133_windows()
     }
 
     /// Resolve an Opera profile by version number and optional OS.
@@ -67,9 +133,15 @@ impl Opera {
             125 => 141,
             126 => 142,
             127 => 143,
+            128 => 144,
+            129 => 145,
+            130 => 146,
+            131 => 147,
+            132 => 148,
+            133 => 149,
             _ => {
                 return Err(format!(
-                    "Unsupported Opera version: {major}. Supported: 124-127"
+                    "Unsupported Opera version: {major}. Supported: 124-133"
                 ));
             }
         };
@@ -81,7 +153,7 @@ impl Opera {
         Ok(opera_profile(major, chromium, os))
     }
 
-    pub(super) const LATEST_VERSION: u32 = 127;
+    pub(super) const LATEST_VERSION: u32 = 133;
 }
 
 #[derive(Clone, Copy)]

@@ -13,6 +13,7 @@ use super::response::{HttpResponse, decompress_body};
 impl super::Client {
     /// Send an HTTP/1.1 request on an existing TLS stream.
     /// Returns the response and whether the connection supports keep-alive.
+    #[allow(clippy::too_many_arguments)]
     pub(super) async fn send_on_h1(
         &self,
         stream: &mut SslStream<TcpStream>,
@@ -20,13 +21,14 @@ impl super::Client {
         uri: &Uri,
         body: Option<Vec<u8>>,
         cookie_header: Option<&str>,
+        custom_headers: &[(String, String)],
         extra_headers: &[(String, String)],
     ) -> Result<(HttpResponse, bool), Error> {
         let authority = uri.authority().map(|a| a.as_str()).unwrap_or("");
 
         let headers = headers::build_request_headers(
             &self.profile.headers,
-            &self.custom_headers,
+            custom_headers,
             extra_headers,
             cookie_header,
             &["host", "cookie"],

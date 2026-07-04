@@ -18,19 +18,21 @@ koon_browsers <- function() .Call(wrap__koon_browsers)
 
 Koon <- new.env(parent = emptyenv())
 
-Koon$new <- function(browser, proxy, proxies, timeout, randomize, headers, local_address, on_request, on_response, on_redirect, retries, locale, proxy_headers, ip_version, follow_redirects, max_redirects, cookie_jar, session_resumption, ignore_tls_errors, doh) .Call(wrap__Koon__new, browser, proxy, proxies, timeout, randomize, headers, local_address, on_request, on_response, on_redirect, retries, locale, proxy_headers, ip_version, follow_redirects, max_redirects, cookie_jar, session_resumption, ignore_tls_errors, doh)
+Koon$new <- function(browser, profile_json, proxy, proxies, timeout, randomize, headers, local_address, on_request, on_response, on_redirect, retries, locale, proxy_headers, ip_version, follow_redirects, max_redirects, cookie_jar, session_resumption, ignore_tls_errors, doh) .Call(wrap__Koon__new, browser, profile_json, proxy, proxies, timeout, randomize, headers, local_address, on_request, on_response, on_redirect, retries, locale, proxy_headers, ip_version, follow_redirects, max_redirects, cookie_jar, session_resumption, ignore_tls_errors, doh)
 
-Koon$get <- function(url, headers) .Call(wrap__Koon__get, self, url, headers)
+Koon$get <- function(url, headers, timeout) .Call(wrap__Koon__get, self, url, headers, timeout)
 
-Koon$post <- function(url, body, headers) .Call(wrap__Koon__post, self, url, body, headers)
+Koon$post <- function(url, body, headers, timeout) .Call(wrap__Koon__post, self, url, body, headers, timeout)
 
-Koon$put <- function(url, body, headers) .Call(wrap__Koon__put, self, url, body, headers)
+Koon$put <- function(url, body, headers, timeout) .Call(wrap__Koon__put, self, url, body, headers, timeout)
 
-Koon$delete <- function(url, headers) .Call(wrap__Koon__delete, self, url, headers)
+Koon$delete <- function(url, headers, timeout) .Call(wrap__Koon__delete, self, url, headers, timeout)
 
-Koon$patch <- function(url, body, headers) .Call(wrap__Koon__patch, self, url, body, headers)
+Koon$patch <- function(url, body, headers, timeout) .Call(wrap__Koon__patch, self, url, body, headers, timeout)
 
-Koon$head <- function(url, headers) .Call(wrap__Koon__head, self, url, headers)
+Koon$head <- function(url, headers, timeout) .Call(wrap__Koon__head, self, url, headers, timeout)
+
+Koon$request <- function(method, url, body, headers, timeout) .Call(wrap__Koon__request, self, method, url, body, headers, timeout)
 
 Koon$save_session <- function() .Call(wrap__Koon__save_session, self)
 

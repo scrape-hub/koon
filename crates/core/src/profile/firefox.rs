@@ -8,7 +8,7 @@ use super::BrowserProfile;
 
 /// Firefox browser profile factory.
 ///
-/// Supports Firefox 135–148. TLS/H2/QUIC fingerprint is identical across all
+/// Supports Firefox 135–152. TLS/H2/QUIC fingerprint is identical across all
 /// versions (verified via capture tool). Only User-Agent differs per version.
 pub struct Firefox;
 
@@ -167,26 +167,70 @@ impl Firefox {
         firefox_profile(148, Os::Linux)
     }
 
+    // ========== Firefox 149 ==========
+    pub fn v149_windows() -> BrowserProfile {
+        firefox_profile(149, Os::Windows)
+    }
+    pub fn v149_macos() -> BrowserProfile {
+        firefox_profile(149, Os::MacOS)
+    }
+    pub fn v149_linux() -> BrowserProfile {
+        firefox_profile(149, Os::Linux)
+    }
+
+    // ========== Firefox 150 ==========
+    pub fn v150_windows() -> BrowserProfile {
+        firefox_profile(150, Os::Windows)
+    }
+    pub fn v150_macos() -> BrowserProfile {
+        firefox_profile(150, Os::MacOS)
+    }
+    pub fn v150_linux() -> BrowserProfile {
+        firefox_profile(150, Os::Linux)
+    }
+
+    // ========== Firefox 151 ==========
+    pub fn v151_windows() -> BrowserProfile {
+        firefox_profile(151, Os::Windows)
+    }
+    pub fn v151_macos() -> BrowserProfile {
+        firefox_profile(151, Os::MacOS)
+    }
+    pub fn v151_linux() -> BrowserProfile {
+        firefox_profile(151, Os::Linux)
+    }
+
+    // ========== Firefox 152 ==========
+    pub fn v152_windows() -> BrowserProfile {
+        firefox_profile(152, Os::Windows)
+    }
+    pub fn v152_macos() -> BrowserProfile {
+        firefox_profile(152, Os::MacOS)
+    }
+    pub fn v152_linux() -> BrowserProfile {
+        firefox_profile(152, Os::Linux)
+    }
+
     // ========== Firefox Mobile (Android) — latest ==========
-    pub fn v148_android() -> BrowserProfile {
-        firefox_profile(148, Os::Android)
+    pub fn v152_android() -> BrowserProfile {
+        firefox_profile(152, Os::Android)
     }
 
-    /// Latest Firefox profile (currently v148 on Windows).
+    /// Latest Firefox profile (currently v152 on Windows).
     pub fn latest() -> BrowserProfile {
-        Self::v148_windows()
+        Self::v152_windows()
     }
 
-    /// Latest Firefox Mobile profile (currently v148 on Android).
+    /// Latest Firefox Mobile profile (currently v152 on Android).
     pub fn latest_android() -> BrowserProfile {
-        Self::v148_android()
+        Self::v152_android()
     }
 
     /// Resolve a Firefox profile by version number and optional OS.
     pub(super) fn resolve(major: u32, os: Option<&str>) -> Result<BrowserProfile, String> {
-        if !(135..=148).contains(&major) {
+        if !(135..=152).contains(&major) {
             return Err(format!(
-                "Unsupported Firefox version: {major}. Supported: 135-148"
+                "Unsupported Firefox version: {major}. Supported: 135-152"
             ));
         }
         let os = match os {
@@ -198,7 +242,7 @@ impl Firefox {
         Ok(firefox_profile(major, os))
     }
 
-    pub(super) const LATEST_VERSION: u32 = 148;
+    pub(super) const LATEST_VERSION: u32 = 152;
 }
 
 // ========== Internal: OS enum ==========

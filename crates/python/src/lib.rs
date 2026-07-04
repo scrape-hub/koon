@@ -295,6 +295,12 @@ impl Koon {
         self.client.clear_cookies();
     }
 
+    /// Close all pooled connections and release resources.
+    /// The client can still be used afterward — new connections open as needed.
+    fn close(&self) {
+        self.client.close();
+    }
+
     /// Perform an HTTP GET request.
     ///
     /// Args:
@@ -531,11 +537,22 @@ impl Koon {
     ///
     /// Each field is a dict with 'name' (required), plus either 'value' (text)
     /// or 'file_data' (bytes) + optional 'filename' and 'content_type'.
+    ///
+    /// Args:
+    ///     url: The URL to request.
+    ///     fields: List of field dicts (see above).
+    ///     headers: Optional dict of per-request headers.
+    ///     timeout: Optional per-request timeout in seconds.
+    ///     proxy: Optional per-request proxy URL (overrides constructor proxy).
+    #[pyo3(signature = (url, fields, *, headers=None, timeout=None, proxy=None))]
     fn post_multipart<'py>(
         &self,
         py: Python<'py>,
         url: String,
         fields: Vec<HashMap<String, Py<PyAny>>>,
+        headers: Option<HashMap<String, String>>,
+        timeout: Option<u32>,
+        proxy: Option<String>,
     ) -> PyResult<Bound<'py, PyAny>> {
         // Build Multipart from field dicts while we still have the GIL
         let mut parts = Vec::new();
@@ -573,6 +590,7 @@ impl Koon {
         }
 
         let client = self.client.clone();
+        let mut extra: Vec<(String, String)> = headers.unwrap_or_default().into_iter().collect();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let mut mp = Multipart::new();
             for (name, second, third, data) in parts {
@@ -584,32 +602,69 @@ impl Koon {
                     mp = mp.file(name, second, third, data);
                 }
             }
-            let resp = client.post_multipart(&url, mp).await.map_err(to_koon_err)?;
+            // Build the body and route through request_with_headers_and_proxy so
+            // per-request headers/timeout/proxy are honored (mirrors the Node binding).
+            let (body, content_type) = mp.build();
+            extra.push(("content-type".to_string(), content_type));
+            let future = client.request_with_headers_and_proxy(
+                "POST".parse().unwrap(),
+                &url,
+                Some(body),
+                extra,
+                proxy.as_deref(),
+            );
+            let resp = run_with_timeout(future, timeout).await?;
             Ok(KoonResponse::from_core(resp))
         })
     }
 
     /// Perform a streaming HTTP request.
     /// Returns a KoonStreamingResponse. Does NOT follow redirects.
-    #[pyo3(signature = (method, url, body=None))]
+    ///
+    /// Args:
+    ///     method: HTTP method string (e.g. "GET", "POST").
+    ///     url: The URL to request.
+    ///     body: Optional request body as bytes.
+    ///     headers: Optional dict of per-request headers.
+    ///     timeout: Optional per-request timeout in seconds.
+    ///     proxy: Optional per-request proxy URL (overrides constructor proxy).
+    #[pyo3(signature = (method, url, body=None, *, headers=None, timeout=None, proxy=None))]
+    #[allow(clippy::too_many_arguments)]
     fn request_streaming<'py>(
         &self,
         py: Python<'py>,
         method: String,
         url: String,
         body: Option<Vec<u8>>,
+        headers: Option<HashMap<String, String>>,
+        timeout: Option<u32>,
+        proxy: Option<String>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let client = self.client.clone();
+        let extra: Vec<(String, String)> = headers.unwrap_or_default().into_iter().collect();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let method: http::Method = method.parse().map_err(|_| {
                 PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
                     "Invalid HTTP method: {method}"
                 ))
             })?;
-            let resp = client
-                .request_streaming(method, &url, body)
-                .await
-                .map_err(to_koon_err)?;
+            let future = client.request_streaming_with_headers_and_proxy(
+                method,
+                &url,
+                body,
+                extra,
+                proxy.as_deref(),
+            );
+            // StreamingResponse isn't an HttpResponse, so apply the timeout inline
+            // instead of via run_with_timeout.
+            let resp = if let Some(s) = timeout {
+                tokio::time::timeout(Duration::from_secs(s as u64), future)
+                    .await
+                    .map_err(|_| KoonError::new_err("[TIMEOUT] Request timed out".to_string()))?
+                    .map_err(to_koon_err)?
+            } else {
+                future.await.map_err(to_koon_err)?
+            };
 
             let bytes_sent = resp.bytes_sent();
             let remote_addr = resp.remote_address.clone();
@@ -792,8 +847,10 @@ impl KoonStreamingResponse {
     /// Approximate bytes received so far (headers + body chunks consumed).
     #[getter]
     fn bytes_received(&self) -> u64 {
-        let guard = self.inner.blocking_lock();
-        guard.as_ref().map(|r| r.bytes_received()).unwrap_or(0)
+        match self.inner.try_lock() {
+            Ok(g) => g.as_ref().map(|r| r.bytes_received()).unwrap_or(0),
+            Err(_) => 0,
+        }
     }
 
     /// Get the next body chunk. Returns None when the body is complete.
@@ -987,6 +1044,8 @@ struct KoonProxy {
     /// Path to the generated CA certificate file.
     #[pyo3(get)]
     ca_cert_path: String,
+    /// Cached CA certificate PEM bytes (captured at start() to avoid locking).
+    ca_cert_pem_bytes: Vec<u8>,
 }
 
 #[pymethods]
@@ -1033,24 +1092,22 @@ impl KoonProxy {
             let port = server.port();
             let url = server.url();
             let ca_cert_path = server.ca_cert_path().to_string_lossy().to_string();
+            let ca_cert_pem_bytes = server.ca_cert_pem().map_err(to_py_err)?;
 
             Ok(KoonProxy {
                 inner: Arc::new(tokio::sync::Mutex::new(Some(server))),
                 port,
                 url,
                 ca_cert_path,
+                ca_cert_pem_bytes,
             })
         })
     }
 
     /// CA certificate as PEM bytes.
-    fn ca_cert_pem<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
-        let guard = self.inner.blocking_lock();
-        let server = guard.as_ref().ok_or_else(|| {
-            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Proxy is shut down")
-        })?;
-        let pem = server.ca_cert_pem().map_err(to_py_err)?;
-        Ok(PyBytes::new(py, &pem))
+    /// Cached at start(), so it remains available even after shutdown().
+    fn ca_cert_pem<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
+        PyBytes::new(py, &self.ca_cert_pem_bytes)
     }
 
     /// Shut down the proxy server.

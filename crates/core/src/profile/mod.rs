@@ -71,7 +71,7 @@ impl BrowserProfile {
                 } else {
                     let major: u32 = rest.parse().map_err(|_| {
                         format!(
-                            "Invalid Chrome Mobile version: '{rest}'. Expected a number (131-145)"
+                            "Invalid Chrome Mobile version: '{rest}'. Expected a number (131-150)"
                         )
                     })?;
                     Chrome::resolve(major, Some("android"))
@@ -94,7 +94,7 @@ impl BrowserProfile {
                 } else {
                     let major: u32 = rest.parse().map_err(|_| {
                         format!(
-                            "Invalid Firefox Mobile version: '{rest}'. Expected a number (135-148)"
+                            "Invalid Firefox Mobile version: '{rest}'. Expected a number (135-152)"
                         )
                     })?;
                     Firefox::resolve(major, Some("android"))
@@ -114,7 +114,7 @@ impl BrowserProfile {
                 Chrome::resolve(Chrome::LATEST_VERSION, os)
             } else {
                 let major: u32 = rest.parse().map_err(|_| {
-                    format!("Invalid Chrome version: '{rest}'. Expected a number (131-145)")
+                    format!("Invalid Chrome version: '{rest}'. Expected a number (131-150)")
                 })?;
                 Chrome::resolve(major, os)
             };
@@ -125,7 +125,7 @@ impl BrowserProfile {
                 Firefox::resolve(Firefox::LATEST_VERSION, os)
             } else {
                 let major: u32 = rest.parse().map_err(|_| {
-                    format!("Invalid Firefox version: '{rest}'. Expected a number (135-148)")
+                    format!("Invalid Firefox version: '{rest}'. Expected a number (135-152)")
                 })?;
                 Firefox::resolve(major, os)
             };
@@ -140,7 +140,7 @@ impl BrowserProfile {
                 Edge::resolve(Edge::LATEST_VERSION, os)
             } else {
                 let major: u32 = rest.parse().map_err(|_| {
-                    format!("Invalid Edge version: '{rest}'. Expected a number (131-145)")
+                    format!("Invalid Edge version: '{rest}'. Expected a number (131-149)")
                 })?;
                 Edge::resolve(major, os)
             };
@@ -151,7 +151,7 @@ impl BrowserProfile {
                 Opera::resolve(Opera::LATEST_VERSION, os)
             } else {
                 let major: u32 = rest.parse().map_err(|_| {
-                    format!("Invalid Opera version: '{rest}'. Expected a number (124-127)")
+                    format!("Invalid Opera version: '{rest}'. Expected a number (124-133)")
                 })?;
                 Opera::resolve(major, os)
             };

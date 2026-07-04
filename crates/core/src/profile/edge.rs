@@ -7,7 +7,7 @@ use super::chrome::{
 ///
 /// Edge uses the same Chromium engine as Chrome, so TLS and H2 are identical.
 /// Only headers differ (brand string + user-agent suffix).
-/// Supports Edge 131–145 (same Chromium versions).
+/// Supports Edge 131–149 (same Chromium versions).
 pub struct Edge;
 
 impl Edge {
@@ -131,17 +131,49 @@ impl Edge {
         edge_profile(145, Os::MacOS)
     }
 
-    /// Latest Edge profile (currently v145 on Windows).
+    // ========== Edge 146 ==========
+    pub fn v146_windows() -> BrowserProfile {
+        edge_profile(146, Os::Windows)
+    }
+    pub fn v146_macos() -> BrowserProfile {
+        edge_profile(146, Os::MacOS)
+    }
+
+    // ========== Edge 147 ==========
+    pub fn v147_windows() -> BrowserProfile {
+        edge_profile(147, Os::Windows)
+    }
+    pub fn v147_macos() -> BrowserProfile {
+        edge_profile(147, Os::MacOS)
+    }
+
+    // ========== Edge 148 ==========
+    pub fn v148_windows() -> BrowserProfile {
+        edge_profile(148, Os::Windows)
+    }
+    pub fn v148_macos() -> BrowserProfile {
+        edge_profile(148, Os::MacOS)
+    }
+
+    // ========== Edge 149 ==========
+    pub fn v149_windows() -> BrowserProfile {
+        edge_profile(149, Os::Windows)
+    }
+    pub fn v149_macos() -> BrowserProfile {
+        edge_profile(149, Os::MacOS)
+    }
+
+    /// Latest Edge profile (currently v149 on Windows).
     pub fn latest() -> BrowserProfile {
-        Self::v145_windows()
+        Self::v149_windows()
     }
 
     /// Resolve an Edge profile by version number and optional OS.
     /// Edge is available on Windows and macOS only.
     pub(super) fn resolve(major: u32, os: Option<&str>) -> Result<BrowserProfile, String> {
-        if !(131..=145).contains(&major) {
+        if !(131..=149).contains(&major) {
             return Err(format!(
-                "Unsupported Edge version: {major}. Supported: 131-145"
+                "Unsupported Edge version: {major}. Supported: 131-149"
             ));
         }
         if os == Some("linux") {
@@ -154,7 +186,7 @@ impl Edge {
         Ok(edge_profile(major, os))
     }
 
-    pub(super) const LATEST_VERSION: u32 = 145;
+    pub(super) const LATEST_VERSION: u32 = 149;
 }
 
 #[derive(Clone, Copy)]

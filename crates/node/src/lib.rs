@@ -169,8 +169,8 @@ pub struct KoonResponse {
     body_val: Vec<u8>,
     version_val: String,
     url_val: String,
-    bytes_sent_val: u32,
-    bytes_received_val: u32,
+    bytes_sent_val: i64,
+    bytes_received_val: i64,
     tls_resumed_val: bool,
     connection_reused_val: bool,
     remote_address_val: Option<String>,
@@ -259,14 +259,14 @@ impl KoonResponse {
 
     /// Approximate bytes sent for this request (headers + body).
     #[napi(getter)]
-    pub fn bytes_sent(&self) -> u32 {
-        self.bytes_sent_val
+    pub fn bytes_sent(&self) -> BigInt {
+        BigInt::from(self.bytes_sent_val)
     }
 
     /// Approximate bytes received for this response (headers + body, pre-decompression).
     #[napi(getter)]
-    pub fn bytes_received(&self) -> u32 {
-        self.bytes_received_val
+    pub fn bytes_received(&self) -> BigInt {
+        BigInt::from(self.bytes_received_val)
     }
 
     /// Whether TLS session resumption was used for this connection.
@@ -323,8 +323,8 @@ fn response_to_napi(response: koon_core::HttpResponse) -> KoonResponse {
         body_val: response.body,
         version_val: response.version,
         url_val: response.url,
-        bytes_sent_val: response.bytes_sent as u32,
-        bytes_received_val: response.bytes_received as u32,
+        bytes_sent_val: response.bytes_sent as i64,
+        bytes_received_val: response.bytes_received as i64,
         tls_resumed_val: response.tls_resumed,
         connection_reused_val: response.connection_reused,
         remote_address_val: response.remote_address,
@@ -374,7 +374,7 @@ impl Koon {
         } else {
             match opts.browser {
                 Some(ref b) => BrowserProfile::resolve(b).map_err(napi::Error::from_reason)?,
-                None => BrowserProfile::resolve("chrome").unwrap(),
+                None => BrowserProfile::resolve("chrome").map_err(napi::Error::from_reason)?,
             }
         };
 
@@ -821,10 +821,15 @@ impl Koon {
         let opts = options.unwrap_or_default();
         let extra_headers: Vec<(String, String)> =
             opts.headers.unwrap_or_default().into_iter().collect();
+        let proxy_url = opts.proxy;
 
-        let future =
-            self.client
-                .request_streaming_with_headers(method, &url, body_bytes, extra_headers);
+        let future = self.client.request_streaming_with_headers_and_proxy(
+            method,
+            &url,
+            body_bytes,
+            extra_headers,
+            proxy_url.as_deref(),
+        );
 
         let resp = if let Some(timeout_s) = opts.timeout {
             tokio_timeout(Duration::from_secs(timeout_s as u64), future)
@@ -844,7 +849,7 @@ impl Koon {
             })
             .collect();
 
-        let bytes_sent = resp.bytes_sent() as u32;
+        let bytes_sent = resp.bytes_sent() as i64;
         let remote_addr = resp.remote_address.clone();
         Ok(KoonStreamingResponse {
             status_val: resp.status as u32,
@@ -974,7 +979,7 @@ pub struct KoonStreamingResponse {
     headers_val: Vec<KoonHeader>,
     version_val: String,
     url_val: String,
-    bytes_sent_val: u32,
+    bytes_sent_val: i64,
     remote_address_val: Option<String>,
 }
 
@@ -1012,8 +1017,8 @@ impl KoonStreamingResponse {
 
     /// Approximate bytes sent for this request.
     #[napi(getter)]
-    pub fn bytes_sent(&self) -> u32 {
-        self.bytes_sent_val
+    pub fn bytes_sent(&self) -> BigInt {
+        BigInt::from(self.bytes_sent_val)
     }
 
     /// Remote IP address of the peer (e.g. "1.2.3.4" or "::1"), or null for H3/QUIC.
@@ -1024,12 +1029,11 @@ impl KoonStreamingResponse {
 
     /// Approximate bytes received so far (headers + body chunks consumed).
     #[napi]
-    pub fn bytes_received(&self) -> u32 {
-        let guard = self.inner.blocking_lock();
-        guard
-            .as_ref()
-            .map(|r| r.bytes_received() as u32)
-            .unwrap_or(0)
+    pub fn bytes_received(&self) -> BigInt {
+        match self.inner.try_lock() {
+            Ok(g) => BigInt::from(g.as_ref().map(|r| r.bytes_received()).unwrap_or(0)),
+            Err(_) => BigInt::from(0u64),
+        }
     }
 
     /// Get the next body chunk. Returns null when the body is complete.
@@ -1198,6 +1202,7 @@ pub struct KoonProxy {
     port_val: u16,
     url_val: String,
     ca_cert_path_val: String,
+    ca_cert_pem_val: Vec<u8>,
 }
 
 #[napi]
@@ -1213,7 +1218,7 @@ impl KoonProxy {
         } else {
             match opts.browser {
                 Some(ref b) => BrowserProfile::resolve(b).map_err(napi::Error::from_reason)?,
-                None => BrowserProfile::resolve("chrome").unwrap(),
+                None => BrowserProfile::resolve("chrome").map_err(napi::Error::from_reason)?,
             }
         };
 
@@ -1243,12 +1248,16 @@ impl KoonProxy {
         let port_val = server.port();
         let url_val = server.url();
         let ca_cert_path_val = server.ca_cert_path().to_string_lossy().to_string();
+        let ca_cert_pem_val = server
+            .ca_cert_pem()
+            .map_err(|e| napi::Error::from_reason(format!("Failed to get CA cert: {e}")))?;
 
         Ok(KoonProxy {
             inner: tokio::sync::Mutex::new(Some(server)),
             port_val,
             url_val,
             ca_cert_path_val,
+            ca_cert_pem_val,
         })
     }
 
@@ -1274,14 +1283,7 @@ impl KoonProxy {
     /// CA certificate as PEM bytes.
     #[napi]
     pub fn ca_cert_pem(&self) -> Result<Buffer> {
-        let guard = self.inner.blocking_lock();
-        let server = guard
-            .as_ref()
-            .ok_or_else(|| napi::Error::from_reason("Proxy is shut down"))?;
-        let pem = server
-            .ca_cert_pem()
-            .map_err(|e| napi::Error::from_reason(format!("Failed to get CA cert: {e}")))?;
-        Ok(pem.into())
+        Ok(Buffer::from(self.ca_cert_pem_val.clone()))
     }
 
     /// Shut down the proxy server.

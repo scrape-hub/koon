@@ -185,18 +185,58 @@ impl super::Client {
 
                 use tokio::io::{AsyncReadExt, AsyncWriteExt};
                 let mut stream = stream;
-                stream
-                    .write_all(connect_req.as_bytes())
+
+                // Write the CONNECT request and read the proxy's response up to
+                // the end of the headers. Bounded by the client timeout so a
+                // silent proxy can't hang the connection forever.
+                let handshake = async {
+                    stream
+                        .write_all(connect_req.as_bytes())
+                        .await
+                        .map_err(Error::Io)?;
+
+                    let mut buf = Vec::with_capacity(1024);
+                    let mut chunk = [0u8; 1024];
+                    loop {
+                        let n = stream.read(&mut chunk).await.map_err(Error::Io)?;
+                        if n == 0 {
+                            break; // EOF before headers completed
+                        }
+                        buf.extend_from_slice(&chunk[..n]);
+                        if buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                            break; // end of status line + headers
+                        }
+                        if buf.len() > 64 * 1024 {
+                            break; // guard against an unbounded proxy response
+                        }
+                    }
+                    Ok::<Vec<u8>, Error>(buf)
+                };
+
+                let buf = tokio::time::timeout(self.timeout, handshake)
                     .await
-                    .map_err(Error::Io)?;
+                    .map_err(|_| Error::Timeout)??;
+                let response = String::from_utf8_lossy(&buf);
 
-                // Read response (simple parsing, just check for 200)
-                let mut buf = vec![0u8; 4096];
-                let n = stream.read(&mut buf).await.map_err(Error::Io)?;
-                let response = String::from_utf8_lossy(&buf[..n]);
+                // Parse the status line ("HTTP/1.1 200 Connection established")
+                // properly instead of substring-matching "200", which would
+                // also match a 200 appearing in a date, reason phrase, or a
+                // "502 ... 200ms" error body.
+                let status_ok = response
+                    .lines()
+                    .next()
+                    .and_then(|line| {
+                        let mut parts = line.split_whitespace();
+                        let _version = parts.next()?;
+                        Some(parts.next()? == "200")
+                    })
+                    .unwrap_or(false);
 
-                if !response.contains("200") {
-                    return Err(Error::Proxy(format!("CONNECT tunnel failed: {response}")));
+                if !status_ok {
+                    let status_line = response.lines().next().unwrap_or("").trim().to_string();
+                    return Err(Error::Proxy(format!(
+                        "CONNECT tunnel failed: {status_line}"
+                    )));
                 }
 
                 Ok(stream)

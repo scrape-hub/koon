@@ -40,18 +40,18 @@ impl SessionCache {
 
     /// Store a session for the given hostname (replaces any existing).
     pub fn insert(&self, host: &str, session: SslSession) {
-        self.inner.lock().unwrap().insert(host.to_string(), session);
+        crate::util::lock_recover(&self.inner).insert(host.to_string(), session);
     }
 
     /// Retrieve a cached session for the given hostname.
     pub fn get(&self, host: &str) -> Option<SslSession> {
-        self.inner.lock().unwrap().get(host).cloned()
+        crate::util::lock_recover(&self.inner).get(host).cloned()
     }
 
     /// Export all cached sessions as base64-encoded DER data.
     pub fn export(&self) -> SessionCacheExport {
         let engine = base64::engine::general_purpose::STANDARD;
-        let map = self.inner.lock().unwrap();
+        let map = crate::util::lock_recover(&self.inner);
         let mut sessions = HashMap::new();
         for (host, session) in map.iter() {
             if let Ok(der) = session.to_der() {
@@ -65,7 +65,7 @@ impl SessionCache {
     /// Existing sessions are replaced.
     pub fn import(&self, export: &SessionCacheExport) {
         let engine = base64::engine::general_purpose::STANDARD;
-        let mut map = self.inner.lock().unwrap();
+        let mut map = crate::util::lock_recover(&self.inner);
         for (host, b64) in &export.sessions {
             if let Ok(der) = engine.decode(b64) {
                 if let Ok(session) = SslSession::from_der(&der) {

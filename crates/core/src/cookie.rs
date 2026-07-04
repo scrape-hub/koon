@@ -150,7 +150,7 @@ impl CookieJar {
 
         // Sort by path length descending (more specific paths first), then by creation order
         let mut sorted = matching;
-        sorted.sort_by(|a, b| b.path.len().cmp(&a.path.len()));
+        sorted.sort_by_key(|c| std::cmp::Reverse(c.path.len()));
 
         let header = sorted
             .iter()
@@ -272,6 +272,20 @@ fn parse_set_cookie(
         domain = domain.to_lowercase();
     }
 
+    // RFC 6265 §5.3: a cookie with an explicit Domain must domain-match the
+    // request host and must not be scoped to a public suffix. Without this,
+    // a response from one host could set or overwrite cookies for an unrelated
+    // host (`evil.com` setting `Domain=bank.com`) or share a cookie across an
+    // entire eTLD (`foo.co.uk` setting `Domain=co.uk`) — cookie injection.
+    if domain_explicit {
+        if !domain_matches(request_host, &domain) {
+            return None;
+        }
+        if domain.contains('.') && is_public_suffix(&domain) {
+            return None;
+        }
+    }
+
     // Default path: use the directory of the request path
     if path.is_empty() {
         path = default_path(request_path);
@@ -353,6 +367,18 @@ fn days_from_civil(year: i64, month: u32, day: u32) -> Option<i64> {
     Some(era * 146097 + doe as i64 - 719468)
 }
 
+/// Check whether a domain is itself a public suffix (eTLD) such as `com` or
+/// `co.uk`. Cookies must not be scoped to a public suffix — that would let one
+/// site set cookies readable by every sibling under the same eTLD.
+///
+/// Uses the embedded Public Suffix List. Returns `false` for unknown/private
+/// TLDs so it never over-blocks legitimate cookies.
+fn is_public_suffix(domain: &str) -> bool {
+    psl::suffix(domain.as_bytes())
+        .map(|suffix| suffix.as_bytes().eq_ignore_ascii_case(domain.as_bytes()))
+        .unwrap_or(false)
+}
+
 /// Domain matching per RFC 6265: the cookie domain must be a suffix of the request host.
 fn domain_matches(request_host: &str, cookie_domain: &str) -> bool {
     let host = request_host.to_lowercase();
@@ -412,6 +438,59 @@ mod tests {
         assert!(domain_matches("sub.www.example.com", "example.com"));
         assert!(!domain_matches("notexample.com", "example.com"));
         assert!(!domain_matches("example.com", "www.example.com"));
+    }
+
+    #[test]
+    fn test_is_public_suffix() {
+        assert!(is_public_suffix("com"));
+        assert!(is_public_suffix("co.uk"));
+        assert!(!is_public_suffix("example.com"));
+        assert!(!is_public_suffix("example.co.uk"));
+    }
+
+    #[test]
+    fn test_reject_cross_site_cookie_domain() {
+        // A response from evil.com must not set a cookie for an unrelated host.
+        let mut jar = CookieJar::new();
+        let url: Uri = "https://evil.com/".parse().unwrap();
+        jar.store_from_response(
+            &url,
+            &[(
+                "set-cookie".to_string(),
+                "sid=x; Domain=bank.com".to_string(),
+            )],
+        );
+        assert!(jar.cookies().is_empty());
+        let bank: Uri = "https://bank.com/".parse().unwrap();
+        assert!(jar.cookie_header(&bank).is_none());
+    }
+
+    #[test]
+    fn test_reject_public_suffix_cookie_domain() {
+        // foo.co.uk must not scope a cookie to the whole co.uk eTLD.
+        let mut jar = CookieJar::new();
+        let url: Uri = "https://foo.co.uk/".parse().unwrap();
+        jar.store_from_response(
+            &url,
+            &[("set-cookie".to_string(), "sid=x; Domain=co.uk".to_string())],
+        );
+        assert!(jar.cookies().is_empty());
+    }
+
+    #[test]
+    fn test_accept_valid_parent_domain_cookie() {
+        // sub.example.com setting Domain=example.com is legitimate.
+        let mut jar = CookieJar::new();
+        let url: Uri = "https://sub.example.com/".parse().unwrap();
+        jar.store_from_response(
+            &url,
+            &[(
+                "set-cookie".to_string(),
+                "sid=x; Domain=example.com".to_string(),
+            )],
+        );
+        let target: Uri = "https://www.example.com/".parse().unwrap();
+        assert!(jar.cookie_header(&target).is_some());
     }
 
     #[test]

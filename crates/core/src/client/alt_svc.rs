@@ -69,7 +69,7 @@ fn parse_alt_svc_max_age(entry: &str) -> Option<u64> {
 impl super::Client {
     /// Check Alt-Svc cache for an H3 port for the given origin.
     pub(super) fn get_alt_svc_h3_port(&self, host: &str, port: u16) -> Option<u16> {
-        let cache = self.alt_svc_cache.lock().unwrap();
+        let cache = crate::util::lock_recover(&self.alt_svc_cache);
         if let Some(entry) = cache.get(&(host.to_string(), port)) {
             if entry.expires > Instant::now() {
                 return Some(entry.h3_port);
@@ -80,10 +80,7 @@ impl super::Client {
 
     /// Remove an Alt-Svc entry.
     pub(super) fn remove_alt_svc(&self, host: &str, port: u16) {
-        self.alt_svc_cache
-            .lock()
-            .unwrap()
-            .remove(&(host.to_string(), port));
+        crate::util::lock_recover(&self.alt_svc_cache).remove(&(host.to_string(), port));
     }
 
     /// Parse Alt-Svc header from H1/H2 response and cache H3 port.
@@ -106,13 +103,14 @@ impl super::Client {
                     if let Some(end) = rest.find('"') {
                         if let Ok(h3_port) = rest[..end].parse::<u16>() {
                             let max_age = parse_alt_svc_max_age(part).unwrap_or(86400);
-                            let entry = AltSvcEntry {
-                                h3_port,
-                                expires: Instant::now() + Duration::from_secs(max_age),
-                            };
-                            self.alt_svc_cache
-                                .lock()
-                                .unwrap()
+                            // Guard against overflow: a malicious `ma=` value near
+                            // u64::MAX would panic on `Instant + Duration`. Cap the
+                            // expiry at a sane fallback instead of crashing the task.
+                            let expires = Instant::now()
+                                .checked_add(Duration::from_secs(max_age))
+                                .unwrap_or_else(|| Instant::now() + Duration::from_secs(86400));
+                            let entry = AltSvcEntry { h3_port, expires };
+                            crate::util::lock_recover(&self.alt_svc_cache)
                                 .insert((host.to_string(), port), entry);
                             // Evict existing H2/H1 pool entry so next request tries H3
                             // Alt-Svc is only used without proxy, so proxy_index is None

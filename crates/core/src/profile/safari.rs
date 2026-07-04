@@ -7,14 +7,19 @@ use super::BrowserProfile;
 
 /// Safari browser profile factory.
 ///
-/// Supports Safari 15.6, 16.0, 17.0, 18.0, and 18.3.
+/// Supports Safari 15.6, 16.0, 17.0, 18.0, 18.3, and 26.0–26.5.
 /// Safari is macOS-only. Profile data verified against real Safari 18.2 captures
 /// (curl_cffi#460) and tls-client (bogdanfinn) for older versions.
+///
+/// Apple switched to a year-based version scheme in 2025: after Safari 18.3 comes
+/// Safari 26.x (26.0 = Sept 2025, 26.5 = current as of July 2026). Safari 26.x uses
+/// the SAME TLS+H2 fingerprint and header set as Safari 18.x.
 ///
 /// Key evolution:
 /// - Safari 15.x–16.x: H2 initial_window=4MB
 /// - Safari 17.x: H2 initial_window drops to 2MB
 /// - Safari 18.0+: H2 initial_window back to 4MB (verified via real capture)
+/// - Safari 26.x: identical fingerprint to 18.x (year-versioning, no protocol change)
 /// - All versions share the same TLS sigalgs (verified against real Safari 18.2)
 pub struct Safari;
 
@@ -69,6 +74,66 @@ impl Safari {
         }
     }
 
+    // ========== Safari 26.0 (macOS Tahoe 26.0, Sept 2025) ==========
+    pub fn v26_0_macos() -> BrowserProfile {
+        BrowserProfile {
+            tls: safari_tls(),
+            http2: safari_http2_4mb(),
+            quic: None,
+            headers: safari_headers_v18("26.0"),
+        }
+    }
+
+    // ========== Safari 26.1 (macOS Tahoe 26.1) ==========
+    pub fn v26_1_macos() -> BrowserProfile {
+        BrowserProfile {
+            tls: safari_tls(),
+            http2: safari_http2_4mb(),
+            quic: None,
+            headers: safari_headers_v18("26.1"),
+        }
+    }
+
+    // ========== Safari 26.2 (macOS Tahoe 26.2) ==========
+    pub fn v26_2_macos() -> BrowserProfile {
+        BrowserProfile {
+            tls: safari_tls(),
+            http2: safari_http2_4mb(),
+            quic: None,
+            headers: safari_headers_v18("26.2"),
+        }
+    }
+
+    // ========== Safari 26.3 (macOS Tahoe 26.3) ==========
+    pub fn v26_3_macos() -> BrowserProfile {
+        BrowserProfile {
+            tls: safari_tls(),
+            http2: safari_http2_4mb(),
+            quic: None,
+            headers: safari_headers_v18("26.3"),
+        }
+    }
+
+    // ========== Safari 26.4 (macOS Tahoe 26.4) ==========
+    pub fn v26_4_macos() -> BrowserProfile {
+        BrowserProfile {
+            tls: safari_tls(),
+            http2: safari_http2_4mb(),
+            quic: None,
+            headers: safari_headers_v18("26.4"),
+        }
+    }
+
+    // ========== Safari 26.5 (macOS Tahoe 26.5) ==========
+    pub fn v26_5_macos() -> BrowserProfile {
+        BrowserProfile {
+            tls: safari_tls(),
+            http2: safari_http2_4mb(),
+            quic: None,
+            headers: safari_headers_v18("26.5"),
+        }
+    }
+
     // ========== Safari iOS ==========
     pub fn v16_0_ios() -> BrowserProfile {
         BrowserProfile {
@@ -106,14 +171,68 @@ impl Safari {
         }
     }
 
-    /// Latest Safari profile (currently v18.3 on macOS).
-    pub fn latest() -> BrowserProfile {
-        Self::v18_3_macos()
+    pub fn v26_0_ios() -> BrowserProfile {
+        BrowserProfile {
+            tls: safari_tls(),
+            http2: safari_http2_ios(),
+            quic: None,
+            headers: safari_headers_ios_v18("26.0", "26_0"),
+        }
     }
 
-    /// Latest Safari Mobile profile (currently v18.3 on iOS).
+    pub fn v26_1_ios() -> BrowserProfile {
+        BrowserProfile {
+            tls: safari_tls(),
+            http2: safari_http2_ios(),
+            quic: None,
+            headers: safari_headers_ios_v18("26.1", "26_1"),
+        }
+    }
+
+    pub fn v26_2_ios() -> BrowserProfile {
+        BrowserProfile {
+            tls: safari_tls(),
+            http2: safari_http2_ios(),
+            quic: None,
+            headers: safari_headers_ios_v18("26.2", "26_2"),
+        }
+    }
+
+    pub fn v26_3_ios() -> BrowserProfile {
+        BrowserProfile {
+            tls: safari_tls(),
+            http2: safari_http2_ios(),
+            quic: None,
+            headers: safari_headers_ios_v18("26.3", "26_3"),
+        }
+    }
+
+    pub fn v26_4_ios() -> BrowserProfile {
+        BrowserProfile {
+            tls: safari_tls(),
+            http2: safari_http2_ios(),
+            quic: None,
+            headers: safari_headers_ios_v18("26.4", "26_4"),
+        }
+    }
+
+    pub fn v26_5_ios() -> BrowserProfile {
+        BrowserProfile {
+            tls: safari_tls(),
+            http2: safari_http2_ios(),
+            quic: None,
+            headers: safari_headers_ios_v18("26.5", "26_5"),
+        }
+    }
+
+    /// Latest Safari profile (currently v26.5 on macOS).
+    pub fn latest() -> BrowserProfile {
+        Self::v26_5_macos()
+    }
+
+    /// Latest Safari Mobile profile (currently v26.5 on iOS).
     pub fn latest_ios() -> BrowserProfile {
-        Self::v18_3_ios()
+        Self::v26_5_ios()
     }
 
     /// Resolve a Safari profile by version string and optional OS.
@@ -135,12 +254,24 @@ impl Safari {
             ("180" | "18.0", true) => Ok(Self::v18_0_ios()),
             ("183" | "18.3", false) => Ok(Self::v18_3_macos()),
             ("183" | "18.3", true) => Ok(Self::v18_3_ios()),
+            ("260" | "26.0", false) => Ok(Self::v26_0_macos()),
+            ("260" | "26.0", true) => Ok(Self::v26_0_ios()),
+            ("261" | "26.1", false) => Ok(Self::v26_1_macos()),
+            ("261" | "26.1", true) => Ok(Self::v26_1_ios()),
+            ("262" | "26.2", false) => Ok(Self::v26_2_macos()),
+            ("262" | "26.2", true) => Ok(Self::v26_2_ios()),
+            ("263" | "26.3", false) => Ok(Self::v26_3_macos()),
+            ("263" | "26.3", true) => Ok(Self::v26_3_ios()),
+            ("264" | "26.4", false) => Ok(Self::v26_4_macos()),
+            ("264" | "26.4", true) => Ok(Self::v26_4_ios()),
+            ("265" | "26.5", false) => Ok(Self::v26_5_macos()),
+            ("265" | "26.5", true) => Ok(Self::v26_5_ios()),
             ("156" | "15.6", true) => Err(
                 "Safari 15.6 iOS is not available. Supported iOS: 16.0, 17.0, 18.0, 18.3"
                     .to_string(),
             ),
             _ => Err(format!(
-                "Unsupported Safari version: '{version}'. Supported: 15.6, 16.0, 17.0, 18.0, 18.3"
+                "Unsupported Safari version: '{version}'. Supported: 15.6, 16.0, 17.0, 18.0, 18.3, 26.0, 26.1, 26.2, 26.3, 26.4, 26.5"
             )),
         }
     }

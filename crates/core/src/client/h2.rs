@@ -140,6 +140,7 @@ impl super::Client {
     }
 
     /// Send an HTTP/2 request on an existing SendRequest handle.
+    #[allow(clippy::too_many_arguments)]
     pub(super) async fn send_on_h2(
         &self,
         sender: &mut http2::client::SendRequest<bytes::Bytes>,
@@ -147,6 +148,7 @@ impl super::Client {
         uri: &Uri,
         body: Option<Vec<u8>>,
         cookie_header: Option<&str>,
+        custom_headers: &[(String, String)],
         extra_headers: &[(String, String)],
     ) -> Result<HttpResponse, Error> {
         sender.clone().ready().await.map_err(Error::Http2)?;
@@ -167,7 +169,7 @@ impl super::Client {
 
         *req.headers_mut() = headers::build_request_headers(
             &self.profile.headers,
-            &self.custom_headers,
+            custom_headers,
             extra_headers,
             cookie_header,
             &["host", "cookie"],
@@ -210,14 +212,21 @@ impl super::Client {
             .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
             .collect();
 
-        // Read body
+        // Read body (bounded by the timeout to avoid Slowloris-style stalls
+        // where a server sends headers then trickles or halts the body)
         let mut body_data = Vec::new();
         let mut recv_stream = response.into_body();
-        while let Some(chunk) = recv_stream.data().await {
-            let chunk = chunk.map_err(Error::Http2)?;
-            body_data.extend_from_slice(&chunk);
-            let _ = recv_stream.flow_control().release_capacity(chunk.len());
-        }
+        let read_body = async {
+            while let Some(chunk) = recv_stream.data().await {
+                let chunk = chunk.map_err(Error::Http2)?;
+                body_data.extend_from_slice(&chunk);
+                let _ = recv_stream.flow_control().release_capacity(chunk.len());
+            }
+            Ok::<(), Error>(())
+        };
+        tokio::time::timeout(self.timeout, read_body)
+            .await
+            .map_err(|_| Error::Timeout)??;
 
         // bytes_received = raw body (pre-decompression) + header estimate
         let raw_body_len = body_data.len() as u64;
@@ -420,11 +429,17 @@ impl super::Client {
 
         let mut body_data = Vec::new();
         let mut recv_stream = response.into_body();
-        while let Some(chunk) = recv_stream.data().await {
-            let chunk = chunk.map_err(Error::Http2)?;
-            body_data.extend_from_slice(&chunk);
-            let _ = recv_stream.flow_control().release_capacity(chunk.len());
-        }
+        let read_body = async {
+            while let Some(chunk) = recv_stream.data().await {
+                let chunk = chunk.map_err(Error::Http2)?;
+                body_data.extend_from_slice(&chunk);
+                let _ = recv_stream.flow_control().release_capacity(chunk.len());
+            }
+            Ok::<(), Error>(())
+        };
+        tokio::time::timeout(self.timeout, read_body)
+            .await
+            .map_err(|_| Error::Timeout)??;
 
         let raw_body_len = body_data.len() as u64;
         let resp_header_size = estimate_headers_size(&resp_headers);

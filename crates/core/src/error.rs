@@ -111,6 +111,20 @@ impl Error {
         }
     }
 
+    /// Check if this error provably occurred before any request body was sent.
+    ///
+    /// These failures happen during connection setup (DNS/TCP, TLS handshake,
+    /// proxy CONNECT), so the server cannot have received or processed the
+    /// request yet. Such errors are safe to retry even for non-idempotent
+    /// methods like POST. Timeouts and I/O errors are excluded because they may
+    /// occur after the body was sent (risking a duplicate submission).
+    pub fn is_pre_send(&self) -> bool {
+        matches!(
+            self,
+            Error::ConnectionFailed(_) | Error::Tls(_) | Error::TlsStack(_) | Error::Proxy(_)
+        )
+    }
+
     /// Check if this error is retryable (transport-level failures).
     ///
     /// Retryable: connection failures, TLS errors, I/O errors, timeouts,

@@ -5,6 +5,83 @@ All notable changes to koon will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] - 2026-07-04
+
+### Security
+
+- **Cookie domain validation** — `Set-Cookie` with an explicit `Domain` is now
+  validated per RFC 6265: it must domain-match the request host and must not be
+  scoped to a public suffix (via the embedded Public Suffix List). Prevents a
+  response from one host injecting cookies for an unrelated host (`evil.com`
+  setting `Domain=bank.com`) or sharing a cookie across an entire eTLD
+  (`foo.co.uk` setting `Domain=co.uk`).
+- **Sensitive headers stripped on cross-origin redirects** — caller-supplied
+  `Authorization`, `Cookie`, and `Proxy-Authorization` headers are now removed
+  when a redirect crosses origin (scheme, host, or port), matching browser and
+  reqwest behavior. Previously they leaked to the redirect target.
+
+### Fixed
+
+- **Alt-Svc `ma=` overflow panic** — a malicious `alt-svc: h3=":443"; ma=<huge>`
+  header no longer panics the request task via `Instant + Duration` overflow
+  (now uses `checked_add` with a fallback, like the cookie path).
+- **HTTP CONNECT tunnel** — the proxy response is now parsed properly (status
+  line `HTTP/1.x 200`) instead of substring-matching `"200"` anywhere in the
+  response, reads until the end of headers, and is bounded by the client
+  timeout so a silent proxy can't hang the connection.
+- **Retry safety** — automatic retries no longer replay non-idempotent methods
+  (POST/PATCH) after the body was sent, avoiding duplicate submissions. Such
+  methods are retried only on errors that provably occur before the body is
+  sent (connection/TLS/proxy setup).
+- **HTTP/2 and HTTP/3 body-read timeout** — response body reads are now bounded
+  by the timeout, closing a Slowloris-style hang where a server sent headers
+  then stalled the body. HTTP/3 previously had no timeout at all.
+- **HTTP/3 connection reuse** — pooled H3 connections are now keyed by the
+  origin port instead of the advertised Alt-Svc port, restoring connection
+  reuse when a server advertises H3 on a non-443 port.
+- **Poison-resistant locks** — the cookie jar, Alt-Svc cache, TLS session
+  cache, DNS/DoH caches, MITM leaf-cert cache, and QUIC endpoint now recover
+  from a poisoned mutex instead of cascading panics that permanently break the
+  client (matching the connection pool's existing strategy).
+- **`timeout = 0` now means "no timeout"** across all bindings, instead of
+  silently failing every request instantly (`Duration::ZERO` applied to
+  `tokio::time::timeout`).
+- **Node.js: byte counters no longer truncate** — per-response `bytesSent` /
+  `bytesReceived` are returned as `BigInt` (u64) instead of being cast to u32,
+  fixing silent overflow above 4 GB.
+- **Node.js / Python: no more `blocking_lock()`** in synchronous getters —
+  `bytesReceived` uses `try_lock()`, and the MITM proxy's CA PEM is cached at
+  startup, removing a panic risk and event-loop stall.
+- **Node.js: streaming requests honor a per-request proxy** — `requestStreaming`
+  no longer silently ignores `opts.proxy`.
+- **Node.js: default-profile resolution errors** now throw an exception instead
+  of aborting the Node process via the panic hook.
+- **R: negative `timeout` / `max_redirects`** no longer wrap into huge values
+  (a negative `timeout` silently became an effectively infinite one).
+- **R package now builds end-to-end** via `R CMD INSTALL` (previously only
+  `cargo check` had been run, which builds the staticlib but never links or
+  loads it, so several build breakages went unnoticed). Fixed: auto-detected
+  clang/Rtools/gcc include paths (no hard-coded toolchain versions), a relative
+  `koon-core` path instead of an absolute one, gnu compiler selection for
+  BoringSSL (CMake was picking MSVC `cl`), `-lstdc++` linkage for BoringSSL's
+  C++ code, and R wrappers (`zzz.R`, `extendr-wrappers.R`) synced with the new
+  constructor/method signatures.
+
+### Added
+
+- **New browser profiles** — Chrome 146–150, Firefox 149–152, Edge 146–149,
+  Opera 128–133, and Safari 26.0–26.5 (macOS + iOS). Safari adopts Apple's 2025
+  year-based version scheme; 26.x reuses the verified 18.x TLS/H2 fingerprint.
+- **Core: `request_streaming_with_headers_and_proxy`** — per-request proxy
+  override for streaming requests.
+- **Python: streaming and multipart parity** — `request_streaming` now accepts
+  `headers`, `timeout`, and `proxy`; `post_multipart` accepts `headers`,
+  `timeout`, and `proxy`; added a `close()` method.
+- **R: parity improvements** — `profile_json` constructor argument (load custom
+  JSON profiles), a generic `request(method, ...)` for arbitrary HTTP methods,
+  a per-request `timeout`, and structured error messages with a `[CODE]` prefix
+  (e.g. `[TIMEOUT]`, `[TLS_ERROR]`).
+
 ## [0.7.0] - 2026-03-24
 
 ### Changed
@@ -23,6 +100,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **quinn-btls fork** — Created [scrape-hub/btls](https://github.com/scrape-hub/btls) fork adding `Config::from_builder(SslContextBuilder)` to quinn-btls, enabling custom TLS configuration for QUIC. `Config::new()` delegates to `from_builder()` internally — no breaking change to the upstream API.
 
+[0.8.0]: https://github.com/scrape-hub/koon/releases/tag/v0.8.0
 [0.7.0]: https://github.com/scrape-hub/koon/releases/tag/v0.7.0
 
 ## [0.6.3] - 2026-03-23

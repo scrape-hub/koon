@@ -8,7 +8,7 @@ use super::BrowserProfile;
 
 /// Chrome browser profile factory.
 ///
-/// Supports Chrome 131–145. TLS/H2/QUIC fingerprint is identical across all
+/// Supports Chrome 131–150. TLS/H2/QUIC fingerprint is identical across all
 /// versions except for the ALPS codepoint (old for ≤134, new for ≥135).
 /// Only User-Agent and sec-ch-ua headers differ per version.
 pub struct Chrome;
@@ -179,26 +179,81 @@ impl Chrome {
         chrome_profile(145, Os::Linux)
     }
 
+    // ========== Chrome 146 ==========
+    pub fn v146_windows() -> BrowserProfile {
+        chrome_profile(146, Os::Windows)
+    }
+    pub fn v146_macos() -> BrowserProfile {
+        chrome_profile(146, Os::MacOS)
+    }
+    pub fn v146_linux() -> BrowserProfile {
+        chrome_profile(146, Os::Linux)
+    }
+
+    // ========== Chrome 147 ==========
+    pub fn v147_windows() -> BrowserProfile {
+        chrome_profile(147, Os::Windows)
+    }
+    pub fn v147_macos() -> BrowserProfile {
+        chrome_profile(147, Os::MacOS)
+    }
+    pub fn v147_linux() -> BrowserProfile {
+        chrome_profile(147, Os::Linux)
+    }
+
+    // ========== Chrome 148 ==========
+    pub fn v148_windows() -> BrowserProfile {
+        chrome_profile(148, Os::Windows)
+    }
+    pub fn v148_macos() -> BrowserProfile {
+        chrome_profile(148, Os::MacOS)
+    }
+    pub fn v148_linux() -> BrowserProfile {
+        chrome_profile(148, Os::Linux)
+    }
+
+    // ========== Chrome 149 ==========
+    pub fn v149_windows() -> BrowserProfile {
+        chrome_profile(149, Os::Windows)
+    }
+    pub fn v149_macos() -> BrowserProfile {
+        chrome_profile(149, Os::MacOS)
+    }
+    pub fn v149_linux() -> BrowserProfile {
+        chrome_profile(149, Os::Linux)
+    }
+
+    // ========== Chrome 150 ==========
+    pub fn v150_windows() -> BrowserProfile {
+        chrome_profile(150, Os::Windows)
+    }
+    pub fn v150_macos() -> BrowserProfile {
+        chrome_profile(150, Os::MacOS)
+    }
+    pub fn v150_linux() -> BrowserProfile {
+        chrome_profile(150, Os::Linux)
+    }
+
     // ========== Chrome Mobile (Android) — latest ==========
-    pub fn v145_android() -> BrowserProfile {
-        chrome_profile(145, Os::Android)
+    pub fn v150_android() -> BrowserProfile {
+        chrome_profile(150, Os::Android)
     }
 
-    /// Latest Chrome profile (currently v145 on Windows).
+    /// Latest Chrome profile (currently v150 on Windows).
     pub fn latest() -> BrowserProfile {
-        Self::v145_windows()
+        Self::v150_windows()
     }
 
-    /// Latest Chrome Mobile profile (currently v145 on Android).
+    /// Latest Chrome Mobile profile (currently v150 on Android).
     pub fn latest_android() -> BrowserProfile {
-        Self::v145_android()
+        Self::v150_android()
     }
 
     /// Resolve a Chrome profile by version number and optional OS.
     pub(super) fn resolve(major: u32, os: Option<&str>) -> Result<BrowserProfile, String> {
-        if !(131..=145).contains(&major) {
+        if !(131..=150).contains(&major) {
             return Err(format!(
-                "Unsupported Chrome version: {major}. Supported: 131-145"
+                "Unsupported Chrome version: {major}. Supported: 131-150"
             ));
         }
         let os = match os {
@@ -210,7 +265,7 @@ impl Chrome {
         Ok(chrome_profile(major, os))
     }
 
-    pub(super) const LATEST_VERSION: u32 = 145;
+    pub(super) const LATEST_VERSION: u32 = 150;
 }
 
 // ========== Internal: OS enum ==========

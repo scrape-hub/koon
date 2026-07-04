@@ -75,6 +75,8 @@ encoding_rs = "0.8"
 
 # Utilities
 url = "2"
+# Public Suffix List (embedded) for RFC 6265 cookie domain validation
+psl = "2"
 thiserror = "2"
 smallvec = "1"
 pin-project-lite = "0.2"

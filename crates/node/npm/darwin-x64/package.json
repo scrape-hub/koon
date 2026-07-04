@@ -1,6 +1,6 @@
 {
   "name": "@koonjs/darwin-x64",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "os": ["darwin"],
   "cpu": ["x64"],
   "main": "koon.darwin-x64.node",

@@ -7,6 +7,41 @@ use crate::streaming::StreamingResponse;
 use super::alt_svc::{is_redirect, resolve_redirect};
 use super::response::HttpResponse;
 
+/// Whether a method is idempotent per RFC 7231 — safe to retry automatically
+/// because repeating it has the same effect as a single call. POST and PATCH
+/// are excluded: retrying them after the body was sent risks a duplicate
+/// submission (double order/payment).
+fn is_idempotent(method: &Method) -> bool {
+    matches!(
+        *method,
+        Method::GET | Method::HEAD | Method::PUT | Method::DELETE | Method::OPTIONS | Method::TRACE
+    )
+}
+
+/// Two URLs are cross-origin if their scheme, host, or port differ.
+fn is_cross_origin(a: &Uri, b: &Uri) -> bool {
+    fn origin(u: &Uri) -> (Option<&str>, Option<&str>, u16) {
+        let scheme = u.scheme_str();
+        let port = u
+            .port_u16()
+            .unwrap_or(if scheme == Some("https") { 443 } else { 80 });
+        (scheme, u.host(), port)
+    }
+    origin(a) != origin(b)
+}
+
+/// Remove headers that must not be forwarded to a different origin after a
+/// redirect. Browsers and reqwest strip these on cross-origin hops so a
+/// caller's `Authorization` (or a manual `Cookie`) can't leak to a foreign host.
+fn strip_sensitive_headers(headers: &mut Vec<(String, String)>) {
+    headers.retain(|(name, _)| {
+        !matches!(
+            name.to_ascii_lowercase().as_str(),
+            "authorization" | "cookie" | "proxy-authorization"
+        )
+    });
+}
+
 impl super::Client {
     /// Perform an HTTP request with extra headers (e.g. multipart content-type).
     /// These headers are injected after custom_headers and override them.
@@ -54,7 +89,11 @@ impl super::Client {
                 .await
             {
                 Ok(resp) => return Ok(resp),
-                Err(e) if e.is_retryable() && attempt < self.max_retries => {
+                Err(e)
+                    if e.is_retryable()
+                        && attempt < self.max_retries
+                        && (is_idempotent(&method) || e.is_pre_send()) =>
+                {
                     last_error = Some(e);
                 }
                 Err(e) => return Err(e),
@@ -80,6 +119,12 @@ impl super::Client {
         let mut current_body = body;
         let mut redirect_count: u32 = 0;
 
+        // Caller-supplied headers may carry secrets (Authorization, a manual
+        // Cookie). Keep mutable copies so we can strip them once a redirect
+        // crosses origin, preventing the secret from leaking to a foreign host.
+        let mut custom_headers = self.custom_headers.clone();
+        let mut extra_headers = extra_headers;
+
         loop {
             // Fire on_request hook
             self.fire_on_request(current_method.as_str(), &current_url.to_string());
@@ -88,7 +133,7 @@ impl super::Client {
             let cookie_header = self
                 .cookie_jar
                 .as_ref()
-                .and_then(|jar| jar.lock().unwrap().cookie_header(&current_url));
+                .and_then(|jar| crate::util::lock_recover(jar).cookie_header(&current_url));
 
             let response = self
                 .execute_single_request(
@@ -96,6 +141,7 @@ impl super::Client {
                     &current_url,
                     current_body.clone(),
                     cookie_header.as_deref(),
+                    &custom_headers,
                     &extra_headers,
                     proxy_override,
                 )
@@ -109,9 +155,7 @@ impl super::Client {
 
             // Store cookies from response
             if let Some(jar) = &self.cookie_jar {
-                jar.lock()
-                    .unwrap()
-                    .store_from_response(&current_url, &response.headers);
+                crate::util::lock_recover(jar).store_from_response(&current_url, &response.headers);
             }
 
             // Check for redirect
@@ -152,6 +196,12 @@ impl super::Client {
                 return Err(Error::TooManyRedirects);
             }
 
+            // Strip caller secrets before following a cross-origin redirect.
+            if is_cross_origin(&current_url, &resolved_url) {
+                strip_sensitive_headers(&mut custom_headers);
+                strip_sensitive_headers(&mut extra_headers);
+            }
+
             current_url = resolved_url;
 
             // 307/308: preserve method and body. Otherwise: POST -> GET, drop body.
@@ -177,12 +227,14 @@ impl super::Client {
     /// 3. Existing pooled H1.1 connection
     /// 4. New connection: if Alt-Svc cache says H3 is available and no proxy → try H3
     /// 5. Fallback: TCP → TLS → H2/H1 via ALPN
+    #[allow(clippy::too_many_arguments)]
     async fn execute_single_request(
         &self,
         method: Method,
         uri: &Uri,
         body: Option<Vec<u8>>,
         cookie_header: Option<&str>,
+        custom_headers: &[(String, String)],
         extra_headers: &[(String, String)],
         proxy_override: Option<&crate::proxy::ProxyConfig>,
     ) -> Result<HttpResponse, Error> {
@@ -225,9 +277,10 @@ impl super::Client {
                 method.clone(),
                 uri,
                 &self.profile,
-                &self.custom_headers,
+                custom_headers,
                 body.clone(),
                 cookie_header,
+                self.timeout,
             )
             .await
             {
@@ -252,6 +305,7 @@ impl super::Client {
                     uri,
                     body.clone(),
                     cookie_header,
+                    custom_headers,
                     extra_headers,
                 )
                 .await
@@ -273,6 +327,7 @@ impl super::Client {
                                 cookie_header,
                                 host,
                                 port,
+                                custom_headers,
                                 extra_headers,
                                 proxy_idx,
                                 proxy_ref,
@@ -292,6 +347,7 @@ impl super::Client {
                     uri,
                     body.clone(),
                     cookie_header,
+                    custom_headers,
                     extra_headers,
                 )
                 .await
@@ -313,6 +369,7 @@ impl super::Client {
             cookie_header,
             host,
             port,
+            custom_headers,
             extra_headers,
             proxy_idx,
             proxy_ref,
@@ -331,6 +388,7 @@ impl super::Client {
         cookie_header: Option<&str>,
         host: &str,
         port: u16,
+        custom_headers: &[(String, String)],
         extra_headers: &[(String, String)],
         proxy_idx: Option<usize>,
         proxy: Option<&crate::proxy::ProxyConfig>,
@@ -348,11 +406,13 @@ impl super::Client {
             match self
                 .try_h3_connection(
                     host,
+                    port,
                     h3_port,
                     method.clone(),
                     uri,
                     body.clone(),
                     cookie_header,
+                    custom_headers,
                 )
                 .await
             {
@@ -379,7 +439,15 @@ impl super::Client {
         let mut response = if is_h2 {
             let mut sender = self.h2_handshake(tls_stream).await?;
             let response = self
-                .send_on_h2(&mut sender, method, uri, body, cookie_header, extra_headers)
+                .send_on_h2(
+                    &mut sender,
+                    method,
+                    uri,
+                    body,
+                    cookie_header,
+                    custom_headers,
+                    extra_headers,
+                )
                 .await?;
             self.pool
                 .insert_h2(host, port, proxy_idx, sender, peer_addr.clone());
@@ -387,7 +455,15 @@ impl super::Client {
         } else {
             let mut stream = tls_stream;
             let (response, keep_alive) = self
-                .send_on_h1(&mut stream, method, uri, body, cookie_header, extra_headers)
+                .send_on_h1(
+                    &mut stream,
+                    method,
+                    uri,
+                    body,
+                    cookie_header,
+                    custom_headers,
+                    extra_headers,
+                )
                 .await?;
             if keep_alive {
                 self.pool
@@ -438,14 +514,42 @@ impl super::Client {
         body: Option<Vec<u8>>,
         extra_headers: Vec<(String, String)>,
     ) -> Result<StreamingResponse, Error> {
+        self.request_streaming_with_headers_and_proxy(method, url, body, extra_headers, None)
+            .await
+    }
+
+    /// Like `request_streaming_with_headers`, but overrides the proxy for this
+    /// single streaming request (e.g. "http://user:pass@host:port").
+    pub async fn request_streaming_with_headers_and_proxy(
+        &self,
+        method: Method,
+        url: &str,
+        body: Option<Vec<u8>>,
+        extra_headers: Vec<(String, String)>,
+        proxy_url: Option<&str>,
+    ) -> Result<StreamingResponse, Error> {
+        let proxy_override = match proxy_url {
+            Some(url) => Some(crate::proxy::ProxyConfig::parse(url)?),
+            None => None,
+        };
         let mut last_error = None;
         for attempt in 0..=self.max_retries {
             match self
-                .do_request_streaming(method.clone(), url, body.clone(), extra_headers.clone())
+                .do_request_streaming(
+                    method.clone(),
+                    url,
+                    body.clone(),
+                    extra_headers.clone(),
+                    proxy_override.as_ref(),
+                )
                 .await
             {
                 Ok(resp) => return Ok(resp),
-                Err(e) if e.is_retryable() && attempt < self.max_retries => {
+                Err(e)
+                    if e.is_retryable()
+                        && attempt < self.max_retries
+                        && (is_idempotent(&method) || e.is_pre_send()) =>
+                {
                     last_error = Some(e);
                 }
                 Err(e) => return Err(e),
@@ -461,6 +565,7 @@ impl super::Client {
         url: &str,
         body: Option<Vec<u8>>,
         extra_headers: Vec<(String, String)>,
+        proxy_override: Option<&crate::proxy::ProxyConfig>,
     ) -> Result<StreamingResponse, Error> {
         let uri: Uri = url
             .parse()
@@ -490,9 +595,18 @@ impl super::Client {
         let cookie_header = self
             .cookie_jar
             .as_ref()
-            .and_then(|jar| jar.lock().unwrap().cookie_header(&uri));
+            .and_then(|jar| crate::util::lock_recover(jar).cookie_header(&uri));
 
-        let (proxy_idx, proxy_ref) = self.select_proxy();
+        // Per-request proxy override, else fall back to the client's rotation.
+        let (proxy_idx, proxy_ref) = if let Some(override_proxy) = proxy_override {
+            use std::hash::{Hash, Hasher};
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            override_proxy.url.as_str().hash(&mut hasher);
+            let idx = (hasher.finish() as usize) | (1 << 48);
+            (Some(idx), Some(override_proxy))
+        } else {
+            self.select_proxy()
+        };
 
         // Try pooled H2 connection first
         if let Some((mut sender, pool_addr)) = self.pool.try_get_h2(host, port, proxy_idx) {
@@ -678,5 +792,46 @@ impl super::Client {
         self.fire_on_response(response.status, url, &response.headers);
 
         Ok(response)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_idempotent() {
+        assert!(is_idempotent(&Method::GET));
+        assert!(is_idempotent(&Method::HEAD));
+        assert!(is_idempotent(&Method::PUT));
+        assert!(is_idempotent(&Method::DELETE));
+        assert!(!is_idempotent(&Method::POST));
+        assert!(!is_idempotent(&Method::PATCH));
+    }
+
+    #[test]
+    fn test_is_cross_origin() {
+        let a: Uri = "https://example.com/a".parse().unwrap();
+        let same: Uri = "https://example.com/b".parse().unwrap();
+        let other_host: Uri = "https://evil.com/a".parse().unwrap();
+        let other_scheme: Uri = "http://example.com/a".parse().unwrap();
+        let other_port: Uri = "https://example.com:8443/a".parse().unwrap();
+        assert!(!is_cross_origin(&a, &same));
+        assert!(is_cross_origin(&a, &other_host));
+        assert!(is_cross_origin(&a, &other_scheme));
+        assert!(is_cross_origin(&a, &other_port));
+    }
+
+    #[test]
+    fn test_strip_sensitive_headers() {
+        let mut headers = vec![
+            ("Authorization".to_string(), "Bearer secret".to_string()),
+            ("X-Custom".to_string(), "keep".to_string()),
+            ("cookie".to_string(), "sid=1".to_string()),
+            ("Proxy-Authorization".to_string(), "Basic z".to_string()),
+        ];
+        strip_sensitive_headers(&mut headers);
+        assert_eq!(headers.len(), 1);
+        assert_eq!(headers[0].0, "X-Custom");
     }
 }

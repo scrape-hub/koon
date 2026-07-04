@@ -1,4 +1,9 @@
-from koon._native import Koon, KoonResponse, KoonStreamingResponse, KoonWebSocket, KoonProxy, KoonError
+from koon._native import Koon, KoonResponse, KoonStreamingResponse, KoonWebSocket, KoonProxy
+
+try:
+    from koon._native import KoonError
+except ImportError:
+    KoonError = Exception
 
 import asyncio
 

@@ -1083,16 +1083,14 @@ async fn test_doh_cloudflare_httpbin() {
     // httpbin.org uses CNAMEs — Cloudflare DoH may not resolve CNAME chains.
     // This test documents the limitation.
     let resolver = koon_core::dns::DohResolver::with_cloudflare().unwrap();
-    let result = resolver.resolve("httpbin.org").await;
-    if result.is_err() {
+    match resolver.resolve("httpbin.org").await {
         // Known limitation: Cloudflare returns CNAME without following to A record
-        eprintln!(
-            "NOTE: Cloudflare DoH cannot resolve httpbin.org (CNAME chain): {:?}",
-            result.err()
-        );
-    } else {
-        let addrs = result.unwrap();
-        assert!(!addrs.is_empty(), "Should have addresses");
+        Err(e) => {
+            eprintln!("NOTE: Cloudflare DoH cannot resolve httpbin.org (CNAME chain): {e:?}");
+        }
+        Ok(addrs) => {
+            assert!(!addrs.is_empty(), "Should have addresses");
+        }
     }
 }
 

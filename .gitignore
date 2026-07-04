@@ -23,6 +23,10 @@ build.log
 # OS
 .DS_Store
 Thumbs.db
+*.stackdump
+
+# Local test/benchmark results
+results/
 
 # Node
 node_modules/
@@ -43,6 +47,9 @@ dist/
 crates/r/src/entrypoint.o
 crates/r/src/rust/target/
 crates/r/src/rust/Cargo.lock
+# R: optional machine-specific bindgen config for direct `cargo` builds.
+# R CMD INSTALL doesn't need it — Makevars.win auto-detects clang/Rtools paths.
+crates/r/src/rust/.cargo/config.toml
 
 # Playwright MCP
 .playwright-mcp/

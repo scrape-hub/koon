@@ -81,7 +81,7 @@ impl CertAuthority {
 
     /// Get or create a leaf certificate for the given domain.
     pub fn get_or_create_leaf(&self, domain: &str) -> Result<(X509, PKey<Private>), Error> {
-        let mut cache = self.leaf_cache.lock().unwrap();
+        let mut cache = crate::util::lock_recover(&self.leaf_cache);
         if let Some(entry) = cache.get(domain) {
             return Ok(entry.clone());
         }

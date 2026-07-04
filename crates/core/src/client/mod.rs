@@ -43,6 +43,11 @@ use crate::proxy::{ProxyConfig, ProxyRotation};
 use crate::tls::{SessionCache, TlsConnector};
 use crate::websocket::{self, WebSocket};
 
+/// A zero timeout is treated as "no timeout": mapped to ~10 years, which is
+/// effectively unbounded but safe against overflow in tokio's internal
+/// `Instant + Duration` deadline computation.
+const NO_TIMEOUT: Duration = Duration::from_secs(315_360_000);
+
 /// Builder for constructing a [`Client`] with custom settings.
 pub struct ClientBuilder {
     profile: BrowserProfile,
@@ -115,9 +120,17 @@ impl ClientBuilder {
         Ok(self)
     }
 
-    /// Set the request timeout.
+    /// Set the request timeout. A zero duration means "no timeout".
     pub fn timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = timeout;
+        // Duration::ZERO would make tokio::time::timeout fail every request
+        // instantly. Treat zero as "no timeout" (effectively unbounded) so the
+        // common `timeout(0)` idiom does the intuitive thing instead of
+        // silently breaking every request.
+        self.timeout = if timeout.is_zero() {
+            NO_TIMEOUT
+        } else {
+            timeout
+        };
         self
     }
 
@@ -369,12 +382,8 @@ impl Client {
     /// The client can still be used after this — new connections will be opened as needed.
     pub fn close(&self) {
         self.pool.clear();
-        if let Ok(mut ep) = self.quic_endpoint.lock() {
-            *ep = None;
-        }
-        if let Ok(mut cache) = self.alt_svc_cache.lock() {
-            cache.clear();
-        }
+        *crate::util::lock_recover(&self.quic_endpoint) = None;
+        crate::util::lock_recover(&self.alt_svc_cache).clear();
     }
 
     /// Fire the on_request hook if registered.
@@ -410,7 +419,7 @@ impl Client {
     /// Keeps TLS sessions, connection pool, and all other client state intact.
     pub fn clear_cookies(&self) {
         if let Some(jar) = &self.cookie_jar {
-            jar.lock().unwrap().clear();
+            crate::util::lock_recover(jar).clear();
         }
     }
 
@@ -526,7 +535,7 @@ impl Client {
     /// Save the current session (cookies + TLS sessions) as a JSON string.
     pub fn save_session(&self) -> Result<String, Error> {
         let cookies = self.cookie_jar.as_ref().map(|jar| {
-            let jar = jar.lock().unwrap();
+            let jar = crate::util::lock_recover(jar);
             serde_json::to_value(jar.cookies()).unwrap_or(serde_json::Value::Array(Vec::new()))
         });
 
@@ -551,7 +560,7 @@ impl Client {
             if let Some(jar_mutex) = &self.cookie_jar {
                 let cookies_json = serde_json::to_string(&cookies_val).map_err(Error::Json)?;
                 let loaded_jar = CookieJar::from_json(&cookies_json).map_err(Error::Json)?;
-                let mut jar = jar_mutex.lock().unwrap();
+                let mut jar = crate::util::lock_recover(jar_mutex);
                 *jar = loaded_jar;
             }
         }

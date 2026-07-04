@@ -117,7 +117,7 @@ impl DohResolver {
     pub async fn resolve(&self, hostname: &str) -> Result<Vec<IpAddr>, Error> {
         // Check cache first
         {
-            let cache = self.ip_cache.lock().unwrap();
+            let cache = crate::util::lock_recover(&self.ip_cache);
             if let Some(entry) = cache.get(hostname) {
                 if entry.expires > Instant::now() {
                     return Ok(entry.addrs.clone());
@@ -157,7 +157,7 @@ impl DohResolver {
 
         // Cache results
         {
-            let mut cache = self.ip_cache.lock().unwrap();
+            let mut cache = crate::util::lock_recover(&self.ip_cache);
             cache.insert(
                 hostname.to_string(),
                 DnsCacheEntry {
@@ -174,7 +174,7 @@ impl DohResolver {
     pub async fn query_https_record(&self, hostname: &str) -> Result<Option<HttpsRecord>, Error> {
         // Check cache first
         {
-            let cache = self.https_cache.lock().unwrap();
+            let cache = crate::util::lock_recover(&self.https_cache);
             if let Some(entry) = cache.get(hostname) {
                 if entry.expires > Instant::now() {
                     return Ok(entry.record.clone());
@@ -222,7 +222,7 @@ impl DohResolver {
 
         // Cache results
         {
-            let mut cache = self.https_cache.lock().unwrap();
+            let mut cache = crate::util::lock_recover(&self.https_cache);
             cache.insert(
                 hostname.to_string(),
                 HttpsCacheEntry {
