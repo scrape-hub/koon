@@ -1,11 +1,12 @@
 use btls::ssl::{
-    NameType, Ssl, SslConnector, SslMethod, SslOptions, SslSessionCacheMode, SslVerifyMode,
-    SslVersion,
+    ExtensionType, NameType, Ssl, SslConnector, SslMethod, SslOptions, SslSessionCacheMode,
+    SslVerifyMode, SslVersion,
 };
 
 use super::cert_compression::{BrotliCertCompressor, ZlibCertCompressor, ZstdCertCompressor};
 use super::config::{AlpnProtocol, CertCompression, TlsConfig, TlsVersion};
 use super::session_cache::SessionCache;
+use super::sigalgs;
 use crate::Error;
 
 // BoringSSL FFI: boring2's safe `add_application_settings()` wrapper hardcodes
@@ -57,7 +58,14 @@ impl TlsConnector {
         builder.set_curves_list(&config.curves)?;
 
         // === Signature algorithms ===
-        builder.set_sigalgs_list(&config.sigalgs)?;
+        // Signing prefs only cover what BoringSSL can actually produce for a
+        // client certificate; the advertised list may contain more (ML-DSA on
+        // Chromium 150+), so it is set separately from raw code points.
+        let signable = sigalgs::signable_subset(&config.sigalgs);
+        if !signable.is_empty() {
+            builder.set_sigalgs_list(&signable)?;
+        }
+        builder.set_verify_algorithm_prefs(&sigalgs::parse(&config.sigalgs)?)?;
 
         // === TLS version bounds ===
         builder.set_min_proto_version(Some(to_ssl_version(config.min_version)))?;
@@ -70,8 +78,17 @@ impl TlsConnector {
         // === GREASE (Chrome-like random extensions) ===
         builder.set_grease_enabled(config.grease);
 
-        // === Extension permutation (Chrome 110+) ===
+        // === Extension order ===
+        // Chrome shuffles its extensions on every handshake; Firefox and Safari
+        // emit a fixed order that differs from BoringSSL's internal one.
         builder.set_permute_extensions(config.permute_extensions);
+        if !config.permute_extensions {
+            if let Some(order) = &config.extension_order {
+                let ids: Vec<ExtensionType> =
+                    order.iter().copied().map(ExtensionType::from).collect();
+                builder.set_extension_permutation(&ids)?;
+            }
+        }
 
         // === OCSP stapling ===
         if config.ocsp_stapling {

@@ -38,7 +38,7 @@ cargo install koon-cli
 ```javascript
 import { Koon } from 'koonjs';
 
-const client = new Koon({ browser: 'chrome145' });
+const client = new Koon({ browser: 'chrome152' });
 const resp = await client.get('https://httpbin.org/json');
 console.log(resp.ok);      // true
 console.log(resp.text());  // body as string
@@ -49,7 +49,7 @@ console.log(resp.json());  // parsed JSON
 ```python
 from koon import KoonSync
 
-client = KoonSync("chrome145")
+client = KoonSync("chrome152")
 resp = client.get("https://httpbin.org/json")
 print(resp.ok)      # True
 print(resp.json())  # parsed JSON
@@ -59,7 +59,7 @@ print(resp.json())  # parsed JSON
 ```r
 library(koon)
 
-client <- Koon$new("chrome145")
+client <- Koon$new("chrome152")
 resp <- client$get("https://httpbin.org/json")
 resp$ok      # TRUE
 resp$text    # body as string
@@ -67,14 +67,14 @@ resp$text    # body as string
 
 **CLI**
 ```bash
-koon -b chrome145 https://example.com
+koon -b chrome152 https://example.com
 ```
 
 **Rust**
 ```rust
 use koon_core::{Client, Chrome};
 
-let client = Client::new(Chrome::v145_windows())?;
+let client = Client::new(Chrome::v152_windows())?;
 let r = client.get("https://example.com").await?;
 ```
 
@@ -88,42 +88,42 @@ koon reproduces three fingerprint layers that bot detection systems check:
 | **HTTP/2** | SETTINGS order, pseudo-header order, WINDOW_UPDATE, PRIORITY frames | Forked h2 crate with header ordering API (Akamai hash verified) |
 | **HTTP/3** | QUIC transport params, H3 settings | Quinn + h3 with browser-matching config |
 
-All fingerprints are tested against hashes captured from real browsers. 10 integration tests verify JA3N, JA4, and Akamai hashes for Chrome, Firefox, Safari, Edge, and Opera.
+All fingerprints are tested against hashes captured from real browsers. 19 integration tests verify JA3N, JA4, and Akamai hashes for Chrome, Firefox, Safari, Edge, and Opera.
 
 ## Supported browsers
 
 | Browser | Versions | Platforms | Profiles |
 |---------|----------|-----------|----------|
-| Chrome | 131 – 145 | Windows, macOS, Linux, Android | 60 |
-| Firefox | 135 – 148 | Windows, macOS, Linux, Android | 56 |
-| Safari | 15.6 – 18.3 | macOS, iOS | 15 |
-| Edge | 131 – 145 | Windows, macOS | 30 |
-| Opera | 124 – 127 | Windows, macOS, Linux | 12 |
+| Chrome | 131 – 152 | Windows, macOS, Linux, Android | 88 |
+| Firefox | 135 – 154 | Windows, macOS, Linux, Android | 80 |
+| Safari | 15.6 – 26.6 | macOS, iOS | 23 |
+| Edge | 131 – 151 | Windows, macOS | 42 |
+| Opera | 124 – 134 | Windows, macOS, Linux | 33 |
 | OkHttp | 4, 5 | Android | 2 |
 
-**175 profiles** total. Use `koon --list-browsers` (CLI) to see all profiles.
+**268 profiles** total. Use `koon --list-browsers` (CLI) to see all profiles.
 
 ### Profile naming
 
-Format: `{browser}{version}{-os}` — all parts except the browser name are optional. Both `chrome145-macos` and `chrome145macos` work (dash is optional).
+Format: `{browser}{version}{-os}` — all parts except the browser name are optional. Both `chrome152-macos` and `chrome152macos` work (dash is optional).
 
 **Desktop browsers with OS variants:**
 
 | Browser | Default (macOS) | Windows | macOS | Linux |
 |---------|----------------|---------|-------|-------|
-| Chrome 145 | `chrome145` | `chrome145-windows` | `chrome145-macos` | `chrome145-linux` |
-| Firefox 148 | `firefox148` | `firefox148-windows` | `firefox148-macos` | `firefox148-linux` |
-| Edge 145 | `edge145` | `edge145-windows` | `edge145-macos` | — |
-| Opera 127 | `opera127` | `opera127-windows` | `opera127-macos` | `opera127-linux` |
-| Safari 18.3 | `safari183` | — | `safari183-macos` | — |
+| Chrome 152 | `chrome152` | `chrome152-windows` | `chrome152-macos` | `chrome152-linux` |
+| Firefox 154 | `firefox154` | `firefox154-windows` | `firefox154-macos` | `firefox154-linux` |
+| Edge 151 | `edge151` | `edge151-windows` | `edge151-macos` | — |
+| Opera 134 | `opera134` | `opera134-windows` | `opera134-macos` | `opera134-linux` |
+| Safari 26.6 | `safari266` | — | `safari266-macos` | — |
 
 **Mobile browsers:**
 
 | Browser | Example |
 |---------|---------|
-| Chrome Mobile (Android) | `chrome-mobile145` |
-| Firefox Mobile (Android) | `firefox-mobile148` |
-| Safari Mobile (iOS) | `safari-mobile183` |
+| Chrome Mobile (Android) | `chrome-mobile152` |
+| Firefox Mobile (Android) | `firefox-mobile154` |
+| Safari Mobile (iOS) | `safari-mobile266` |
 
 **OkHttp (Android apps):**
 
@@ -136,14 +136,14 @@ Format: `{browser}{version}{-os}` — all parts except the browser name are opti
 
 | Shorthand | Resolves to |
 |-----------|-------------|
-| `chrome` | Chrome 145 macOS |
-| `firefox` | Firefox 148 macOS |
-| `safari` | Safari 18.3 macOS |
-| `edge` | Edge 145 macOS |
-| `opera` | Opera 127 macOS |
-| `chrome-mobile` | Chrome Mobile 145 Android |
-| `firefox-mobile` | Firefox Mobile 148 Android |
-| `safari-mobile` | Safari Mobile 18.3 iOS |
+| `chrome` | Chrome 152 macOS |
+| `firefox` | Firefox 154 macOS |
+| `safari` | Safari 26.6 macOS |
+| `edge` | Edge 151 macOS |
+| `opera` | Opera 134 macOS |
+| `chrome-mobile` | Chrome Mobile 152 Android |
+| `firefox-mobile` | Firefox Mobile 154 Android |
+| `safari-mobile` | Safari Mobile 26.6 iOS |
 | `okhttp` | OkHttp 5 |
 
 ## Features
@@ -193,7 +193,7 @@ import { Koon } from 'koonjs';
 
 // Browser profile + options
 const client = new Koon({
-  browser: 'chrome145',
+  browser: 'chrome152',
   headers: { 'X-Custom': 'value' },
   proxy: 'socks5://127.0.0.1:1080',  // optional
   localAddress: '192.168.1.100',      // optional: bind to specific IP
@@ -249,7 +249,7 @@ client.clearCookies();
 
 // Session save/load
 const session = client.saveSession();           // JSON string
-const client2 = new Koon({ browser: 'chrome145' });
+const client2 = new Koon({ browser: 'chrome152' });
 client2.loadSession(session);
 
 // File: save/load to disk
@@ -275,7 +275,7 @@ await client.postMultipart('https://httpbin.org/post', [
 
 // MITM proxy
 import { KoonProxy } from 'koonjs';
-const proxy = await KoonProxy.start({ browser: 'chrome145', listenAddr: '127.0.0.1:8080' });
+const proxy = await KoonProxy.start({ browser: 'chrome152', listenAddr: '127.0.0.1:8080' });
 console.log(proxy.url);         // http://127.0.0.1:8080
 console.log(proxy.caCertPath);  // path to CA cert for trust
 await proxy.shutdown();
@@ -289,7 +289,7 @@ await proxy.shutdown();
 from koon import KoonSync
 
 # Browser profile + options
-client = KoonSync("chrome145",
+client = KoonSync("chrome152",
     headers={"X-Custom": "value"},
     retries=3,                                   # retry on transport errors
     locale="fr-FR",                              # Accept-Language for proxy geo
@@ -333,7 +333,7 @@ client.clear_cookies()
 
 # Session save/load
 session = client.save_session()
-client2 = KoonSync("chrome145")
+client2 = KoonSync("chrome152")
 client2.load_session(session)
 
 # User-Agent (useful for Puppeteer/Playwright sync)
@@ -345,7 +345,7 @@ For async code, use `Koon` instead — same API, but all request methods are cor
 ```python
 from koon import Koon
 
-client = Koon("chrome145")
+client = Koon("chrome152")
 resp = await client.get("https://httpbin.org/get")
 
 # WebSocket (async only)
@@ -365,7 +365,7 @@ body = await stream.collect()
 library(koon)
 
 # Browser profile + options
-client <- Koon$new("chrome145", proxy = "socks5://127.0.0.1:1080", randomize = TRUE,
+client <- Koon$new("chrome152", proxy = "socks5://127.0.0.1:1080", randomize = TRUE,
                     local_address = "192.168.1.100", retries = 3L,
                     locale = "fr-FR", ip_version = 4L,
                     proxy_headers = c(`X-Session-Id` = "abc123"),
@@ -405,7 +405,7 @@ client$clear_cookies()
 
 # Session save/load
 json <- client$save_session()
-client2 <- Koon$new("chrome145")
+client2 <- Koon$new("chrome152")
 client2$load_session(json)
 
 # Export profile as JSON
@@ -419,47 +419,47 @@ koon_browsers()
 
 ```bash
 # GET with browser profile
-koon -b chrome145 https://example.com
+koon -b chrome152 https://example.com
 
 # POST with body
-koon -b firefox147 -X POST -d '{"key":"value"}' https://httpbin.org/post
+koon -b firefox154 -X POST -d '{"key":"value"}' https://httpbin.org/post
 
 # Custom headers
-koon -b safari183 -H "Authorization: Bearer token" https://api.example.com
+koon -b safari266 -H "Authorization: Bearer token" https://api.example.com
 
 # Verbose output (request/response headers)
-koon -b chrome145 -v https://httpbin.org/get
+koon -b chrome152 -v https://httpbin.org/get
 
 # JSON output
-koon -b chrome145 --json https://httpbin.org/get
+koon -b chrome152 --json https://httpbin.org/get
 
 # Save response to file
-koon -b chrome145 -o page.html https://example.com
+koon -b chrome152 -o page.html https://example.com
 
 # Proxy
-koon -b chrome145 --proxy socks5://127.0.0.1:1080 https://example.com
+koon -b chrome152 --proxy socks5://127.0.0.1:1080 https://example.com
 
 # Session persistence
-koon -b chrome145 --save-session session.json https://example.com/login
-koon -b chrome145 --load-session session.json https://example.com/dashboard
+koon -b chrome152 --save-session session.json https://example.com/login
+koon -b chrome152 --load-session session.json https://example.com/dashboard
 
 # DNS-over-HTTPS
-koon -b chrome145 --doh cloudflare https://example.com
+koon -b chrome152 --doh cloudflare https://example.com
 
 # OS-specific user-agent
-koon -b chrome145-macos https://example.com
+koon -b chrome152-macos https://example.com
 
 # Fingerprint randomization
-koon -b chrome145 --randomize https://example.com
+koon -b chrome152 --randomize https://example.com
 
 # List all browser profiles
 koon --list-browsers
 
 # Export profile as JSON
-koon --export-profile chrome145
+koon --export-profile chrome152
 
 # Start MITM proxy
-koon proxy --browser chrome145 --listen 127.0.0.1:8080
+koon proxy --browser chrome152 --listen 127.0.0.1:8080
 ```
 
 ### Rust
@@ -476,10 +476,10 @@ use koon_core::profile::Chrome;
 #[tokio::main]
 async fn main() -> Result<(), koon_core::Error> {
     // From a specific profile constructor
-    let client = Client::new(Chrome::v145_windows())?;
+    let client = Client::new(Chrome::v152_windows())?;
 
     // Or with builder for full control
-    let profile = BrowserProfile::resolve("chrome145")?;
+    let profile = BrowserProfile::resolve("chrome152")?;
     let client = Client::builder(profile)
         .max_retries(3)
         .locale("fr-FR")

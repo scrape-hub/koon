@@ -42,6 +42,15 @@ pub struct TlsConfig {
     /// Permute TLS extensions (Chrome 110+ behavior).
     pub permute_extensions: bool,
 
+    /// Fixed ClientHello extension order, as extension type code points.
+    ///
+    /// Browsers that do not permute (Firefox, Safari) emit their extensions in
+    /// a stable order that differs from BoringSSL's internal one, which shows
+    /// up in JA3. Extensions missing from this list keep their default relative
+    /// position after the listed ones. Ignored when `permute_extensions` is set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extension_order: Option<Vec<u16>>,
+
     /// Enable OCSP stapling.
     pub ocsp_stapling: bool,
 
@@ -137,6 +146,7 @@ impl Default for TlsConfig {
             grease: false,
             ech_grease: false,
             permute_extensions: false,
+            extension_order: None,
             ocsp_stapling: false,
             signed_cert_timestamps: false,
             cert_compression: Vec::new(),

@@ -30,7 +30,7 @@ The response is an R list with components:
 library(koon)
 
 # Create client with Chrome 145 profile
-client <- Koon$new("chrome145")
+client <- Koon$new("chrome152")
 
 # GET request
 resp <- client$get("https://httpbin.org/get")
@@ -54,17 +54,17 @@ resp <- client$get("https://httpbin.org/cookies")
 
 # Session save/load
 json <- client$save_session()
-client2 <- Koon$new("chrome145")
+client2 <- Koon$new("chrome152")
 client2$load_session(json)
 
 # Custom redirect handling
-client <- Koon$new("chrome145",
+client <- Koon$new("chrome152",
   on_redirect = function(status, url, headers) {
     !grepl("captcha", url)  # stop if redirect goes to captcha
   })
 
 # Automatic retries with proxy rotation
-client <- Koon$new("chrome145",
+client <- Koon$new("chrome152",
   proxies = c("socks5://a:1080", "socks5://b:1080"),
   retries = 3L)
 
@@ -72,15 +72,15 @@ client <- Koon$new("chrome145",
 client$user_agent()
 
 # Locale matching (Accept-Language for proxy geography)
-client <- Koon$new("chrome145", locale = "fr-FR")
+client <- Koon$new("chrome152", locale = "fr-FR")
 
 # CONNECT proxy headers (session IDs, geo-targeting)
-client <- Koon$new("chrome145",
+client <- Koon$new("chrome152",
   proxy = "http://proxy.example.com:8080",
   proxy_headers = c(`X-Session-ID` = "abc123"))
 
 # Force IPv4 only (useful with residential proxies)
-client <- Koon$new("chrome145", ip_version = 4L)
+client <- Koon$new("chrome152", ip_version = 4L)
 
 # Mobile browser profiles
 client <- Koon$new("chromemobile145")    # Chrome on Android
@@ -91,13 +91,13 @@ client <- Koon$new("safarimobile183")    # Safari on iOS
 client <- Koon$new("okhttp4")
 
 # DNS-over-HTTPS with encrypted DNS
-client <- Koon$new("chrome145", doh = "cloudflare")
+client <- Koon$new("chrome152", doh = "cloudflare")
 
 # Disable TLS verification (dangerous, for testing only)
-client <- Koon$new("chrome145", ignore_tls_errors = TRUE)
+client <- Koon$new("chrome152", ignore_tls_errors = TRUE)
 
 # Fine-grained control
-client <- Koon$new("chrome145",
+client <- Koon$new("chrome152",
   follow_redirects = FALSE,
   cookie_jar = FALSE,
   session_resumption = FALSE)

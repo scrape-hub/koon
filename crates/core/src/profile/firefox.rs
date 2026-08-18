@@ -8,7 +8,7 @@ use super::BrowserProfile;
 
 /// Firefox browser profile factory.
 ///
-/// Supports Firefox 135–152. TLS/H2/QUIC fingerprint is identical across all
+/// Supports Firefox 135–154. TLS/H2/QUIC fingerprint is identical across all
 /// versions (verified via capture tool). Only User-Agent differs per version.
 pub struct Firefox;
 
@@ -211,26 +211,61 @@ impl Firefox {
         firefox_profile(152, Os::Linux)
     }
 
-    // ========== Firefox Mobile (Android) — latest ==========
+    // ========== Firefox 153 ==========
+    pub fn v153_windows() -> BrowserProfile {
+        firefox_profile(153, Os::Windows)
+    }
+    pub fn v153_macos() -> BrowserProfile {
+        firefox_profile(153, Os::MacOS)
+    }
+    pub fn v153_linux() -> BrowserProfile {
+        firefox_profile(153, Os::Linux)
+    }
+
+    // ========== Firefox 154 ==========
+    pub fn v154_windows() -> BrowserProfile {
+        firefox_profile(154, Os::Windows)
+    }
+    pub fn v154_macos() -> BrowserProfile {
+        firefox_profile(154, Os::MacOS)
+    }
+    pub fn v154_linux() -> BrowserProfile {
+        firefox_profile(154, Os::Linux)
+    }
+
+    // ========== Firefox Mobile (Android) ==========
     pub fn v152_android() -> BrowserProfile {
         firefox_profile(152, Os::Android)
     }
+    pub fn v153_android() -> BrowserProfile {
+        firefox_profile(153, Os::Android)
+    }
+    pub fn v154_android() -> BrowserProfile {
+        firefox_profile(154, Os::Android)
+    }
 
-    /// Latest Firefox profile (currently v152 on Windows).
+    /// Latest Firefox profile (currently v154 on Windows).
     pub fn latest() -> BrowserProfile {
-        Self::v152_windows()
+        Self::v154_windows()
     }
 
-    /// Latest Firefox Mobile profile (currently v152 on Android).
+    /// Latest Firefox Mobile profile (currently v154 on Android).
     pub fn latest_android() -> BrowserProfile {
-        Self::v152_android()
+        Self::v154_android()
     }
+
+    /// Oldest supported Firefox major version.
+    pub const MIN_VERSION: u32 = 135;
+
+    /// Newest supported Firefox major version.
+    pub const LATEST_VERSION: u32 = 154;
 
     /// Resolve a Firefox profile by version number and optional OS.
     pub(super) fn resolve(major: u32, os: Option<&str>) -> Result<BrowserProfile, String> {
-        if !(135..=152).contains(&major) {
+        if !(Self::MIN_VERSION..=Self::LATEST_VERSION).contains(&major) {
+            let (min, max) = (Self::MIN_VERSION, Self::LATEST_VERSION);
             return Err(format!(
-                "Unsupported Firefox version: {major}. Supported: 135-152"
+                "Unsupported Firefox version: {major}. Supported: {min}-{max}"
             ));
         }
         let os = match os {
@@ -241,8 +276,6 @@ impl Firefox {
         };
         Ok(firefox_profile(major, os))
     }
-
-    pub(super) const LATEST_VERSION: u32 = 152;
 }
 
 // ========== Internal: OS enum ==========
@@ -260,14 +293,14 @@ enum Os {
 fn firefox_profile(major: u32, os: Os) -> BrowserProfile {
     if matches!(os, Os::Android) {
         return BrowserProfile {
-            tls: firefox_tls_android(),
+            tls: firefox_tls_android(major),
             http2: firefox_http2_android(),
             quic: Some(firefox_quic()),
             headers: firefox_headers(major, os),
         };
     }
     BrowserProfile {
-        tls: firefox_tls(),
+        tls: firefox_tls(major),
         http2: firefox_http2(),
         quic: Some(firefox_quic()),
         headers: firefox_headers(major, os),
@@ -275,7 +308,7 @@ fn firefox_profile(major: u32, os: Os) -> BrowserProfile {
 }
 
 // ========== TLS ==========
-// Identical across Firefox 135–147 (verified via capture tool).
+// Identical across Firefox 135–150 (verified via capture tool).
 
 // TLS 1.3 order: AES_128(4865) → CHACHA20(4867) → AES_256(4866)
 // Matches real Firefox/NSS. Requires preserve_tls13_cipher_order = true.
@@ -298,6 +331,30 @@ TLS_RSA_WITH_AES_256_GCM_SHA384:\
 TLS_RSA_WITH_AES_128_CBC_SHA:\
 TLS_RSA_WITH_AES_256_CBC_SHA";
 
+// Firefox 151 dropped TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA (0xc009) from the
+// cipher list. Verified via ClientHello capture: present in 147 and 150,
+// absent in 151, 152 and 153.
+const FIREFOX_CIPHER_LIST_151: &str = "\
+TLS_AES_128_GCM_SHA256:\
+TLS_CHACHA20_POLY1305_SHA256:\
+TLS_AES_256_GCM_SHA384:\
+TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:\
+TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:\
+TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256:\
+TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256:\
+TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:\
+TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384:\
+TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA:\
+TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA:\
+TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA:\
+TLS_RSA_WITH_AES_128_GCM_SHA256:\
+TLS_RSA_WITH_AES_256_GCM_SHA384:\
+TLS_RSA_WITH_AES_128_CBC_SHA:\
+TLS_RSA_WITH_AES_256_CBC_SHA";
+
+/// First Firefox version without the ECDSA AES-128-CBC cipher.
+const FIREFOX_SLIM_CIPHERS_VERSION: u32 = 151;
+
 const FIREFOX_SIGALGS: &str = "\
 ecdsa_secp256r1_sha256:\
 ecdsa_secp384r1_sha384:\
@@ -313,12 +370,39 @@ rsa_pkcs1_sha1";
 
 const FIREFOX_CURVES: &str = "X25519MLKEM768:X25519:P-256:P-384:P-521:ffdhe2048:ffdhe3072";
 
+// Firefox does not permute extensions — it emits this fixed order, which differs
+// from BoringSSL's internal one and is visible in JA3 (but not JA4, which sorts).
+// Captured from Firefox 147, 150, 151, 152 and 153; identical across all of them.
+const FIREFOX_EXTENSION_ORDER: &[u16] = &[
+    0x0017, // extended_master_secret
+    0xff01, // renegotiation_info
+    0x000a, // supported_groups
+    0x000b, // ec_point_formats
+    0x0023, // session_ticket
+    0x0010, // application_layer_protocol_negotiation
+    0x0005, // status_request
+    0x0022, // delegated_credentials
+    0x0012, // signed_certificate_timestamp
+    0x0033, // key_share
+    0x002b, // supported_versions
+    0x000d, // signature_algorithms
+    0x002d, // psk_key_exchange_modes
+    0x001c, // record_size_limit
+    0x001b, // compress_certificate
+    0xfe0d, // encrypted_client_hello
+];
+
 const FIREFOX_DC_SIGALGS: &str =
     "ecdsa_secp256r1_sha256:ecdsa_secp384r1_sha384:ecdsa_secp521r1_sha512:ecdsa_sha1";
 
-fn firefox_tls() -> TlsConfig {
+fn firefox_tls(major: u32) -> TlsConfig {
+    let cipher_list = if major >= FIREFOX_SLIM_CIPHERS_VERSION {
+        FIREFOX_CIPHER_LIST_151
+    } else {
+        FIREFOX_CIPHER_LIST
+    };
     TlsConfig {
-        cipher_list: Cow::Borrowed(FIREFOX_CIPHER_LIST),
+        cipher_list: Cow::Borrowed(cipher_list),
         curves: Cow::Borrowed(FIREFOX_CURVES),
         sigalgs: Cow::Borrowed(FIREFOX_SIGALGS),
         alpn: vec![AlpnProtocol::Http2, AlpnProtocol::Http11],
@@ -329,6 +413,7 @@ fn firefox_tls() -> TlsConfig {
         grease: false,
         ech_grease: true,
         permute_extensions: false,
+        extension_order: Some(FIREFOX_EXTENSION_ORDER.to_vec()),
         ocsp_stapling: true,
         signed_cert_timestamps: true,
         cert_compression: vec![
@@ -352,10 +437,10 @@ fn firefox_tls() -> TlsConfig {
 // - Curves include X25519MLKEM768 (JA3 group 4588 present)
 // - Extension count: 16 (no 0x0012/SCT vs desktop's 17)
 // - H2 Akamai hash matches: 1:4096;2:0;4:32768;5:16384|12517377|0|m,p,a,s
-fn firefox_tls_android() -> TlsConfig {
+fn firefox_tls_android(major: u32) -> TlsConfig {
     TlsConfig {
         signed_cert_timestamps: false,
-        ..firefox_tls()
+        ..firefox_tls(major)
     }
 }
 

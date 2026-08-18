@@ -5,6 +5,45 @@ All notable changes to koon will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.8.1] - 2026-08-18
+
+### Added
+
+- **Chrome 151 and 152, Firefox 153 and 154, Edge 150 and 151, Opera 134,
+  Safari 26.6** — profiles for the current stable releases, on every platform
+  the browser ships on (268 profiles in total). Chrome Mobile and Firefox Mobile
+  track their desktop versions.
+- **ML-DSA signature algorithms for Chromium 150+** — Chrome, Edge and Opera
+  builds on Chromium 150 or newer advertise `mldsa44`, `mldsa65` and `mldsa87`
+  (FIPS 204, draft-ietf-tls-mldsa) at the front of `signature_algorithms`, as
+  real Chrome does. Without them the JA4 suffix differed from the real browser.
+  Verified against Chrome 148/149 (absent) and Chrome 150/151 plus Edge 151
+  (present).
+- **Fixed ClientHello extension order** — new `TlsConfig::extension_order` field
+  lets a profile pin the exact extension sequence. Set for Firefox, whose order
+  is stable but differs from BoringSSL's internal one; koon's Firefox
+  ClientHello now matches the real browser byte for byte, so JA3 (not just the
+  order-insensitive JA3N) is correct.
+- `Chrome::MIN_VERSION` / `LATEST_VERSION` and the equivalents for Firefox, Edge
+  and Opera, plus the `SAFARI_VERSIONS` table, are now public. The CLI profile
+  listing, the resolver's error messages and the profile roundtrip test are
+  generated from them and can no longer fall behind the profiles that exist.
+
+### Fixed
+
+- **Firefox 151+ cipher list** — Firefox 151 dropped
+  `TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA` (`0xc009`); profiles for 151 and later
+  carried it, which changed both JA3 and JA4. Verified against real Firefox 147,
+  150, 151, 152 and 153 captures.
+- **`koon --list-browsers` and the README profile tables** — both still described
+  the v0.7 range (Chrome 131–145, Firefox 135–148, Safari up to 18.3) although
+  the profiles existed. Now derived from the version constants.
+
+### Changed
+
+- `Error` has a new `Config` variant (code `CONFIG_ERROR`) for invalid profile
+  configuration, such as an unknown signature algorithm name.
+
 ## [0.8.0] - 2026-07-04
 
 ### Security

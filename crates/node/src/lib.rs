@@ -43,7 +43,7 @@ fn init_module() {
 #[napi(object)]
 #[derive(Default)]
 pub struct KoonOptions {
-    /// Browser to impersonate (e.g. "chrome", "firefox148-macos", "safari-mobile183").
+    /// Browser to impersonate (e.g. "chrome", "firefox154-macos", "safari-mobile266").
     /// Accepts any format supported by BrowserProfile::resolve().
     /// @default 'chrome' (latest Chrome on Windows)
     pub browser: Option<String>,
@@ -1147,7 +1147,7 @@ impl KoonWebSocket {
 #[napi(object)]
 #[derive(Default)]
 pub struct KoonProxyOptions {
-    /// Browser to impersonate for outgoing connections (e.g. "chrome", "firefox148-macos").
+    /// Browser to impersonate for outgoing connections (e.g. "chrome", "firefox154-macos").
     /// @default 'chrome'
     pub browser: Option<String>,
 

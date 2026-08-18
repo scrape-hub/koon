@@ -6,8 +6,8 @@
  * - version: optional number (e.g. 145, 148)
  * - os: optional suffix with dash (e.g. -windows, -macos, -linux, -android, -ios)
  *
- * Examples: "chrome", "chrome145", "chrome145-macos", "firefox148-linux",
- *           "chrome-mobile145", "firefox-mobile148", "safari-mobile183", "okhttp5"
+ * Examples: "chrome", "chrome152", "chrome152-macos", "firefox154-linux",
+ *           "chrome-mobile152", "firefox-mobile154", "safari-mobile266", "okhttp5"
  */
 export type Browser =
   // Desktop browsers (common values for autocomplete)

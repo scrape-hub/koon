@@ -73,7 +73,7 @@ impl Koon {
     /// Create a new Koon HTTP client with browser fingerprint impersonation.
     ///
     /// Args:
-    ///     browser: Browser to impersonate (e.g. "chrome", "firefox148", "safari18.3",
+    ///     browser: Browser to impersonate (e.g. "chrome", "firefox154", "safari18.3",
     ///         "chromemobile145", "firefoxmobile148", "safarimobile183", "okhttp4").
     ///     profile_json: Custom browser profile as JSON string (overrides `browser`).
     ///     proxy: Proxy URL (http://, https://, socks5://).

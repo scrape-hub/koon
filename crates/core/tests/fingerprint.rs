@@ -5,7 +5,7 @@
 //!
 //! Run with: `cargo test --test fingerprint -- --ignored`
 
-use koon_core::{Chrome, Client, Edge, Firefox, Safari};
+use koon_core::{Chrome, Client, Edge, Firefox, Opera, Safari};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -42,12 +42,30 @@ const CHROME_NEW_ALPS: Expected = Expected {
     ja3n_hash: Some("8e19337e7524d2573be54efb2b0784c9"),
 };
 
-// Firefox 135–147 (identical fingerprint across all versions)
+// Chromium 150+ (ML-DSA signature algorithms prepended)
+// Verified against real Chrome 151 and Edge 151 stable captures.
+const CHROME_MLDSA: Expected = Expected {
+    ja4: "t13d1516h2_8daaf6152771_806a8c22fdea",
+    akamai_hash: "52d84b11737d980aef856699f885ca86",
+    akamai_text: "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p",
+    ja3n_hash: Some("8e19337e7524d2573be54efb2b0784c9"),
+};
+
+// Firefox 135–150 (identical fingerprint across all versions)
 const FIREFOX: Expected = Expected {
     ja4: "t13d1717h2_5b57614c22b0_3cbfd9057e0d",
     akamai_hash: "6ea73faa8fc5aac76bded7bd238f6433",
     akamai_text: "1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s",
     ja3n_hash: Some("e4147a4860c1f347354f0a84d8787c02"),
+};
+
+// Firefox 151+ (ECDSA AES-128-CBC dropped, so one cipher fewer)
+// Verified against real Firefox 151, 152 and 153 captures.
+const FIREFOX_151: Expected = Expected {
+    ja4: "t13d1617h2_86a278354501_3cbfd9057e0d",
+    akamai_hash: "6ea73faa8fc5aac76bded7bd238f6433",
+    akamai_text: "1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s",
+    ja3n_hash: Some("8099457c290ccfe8c6d958826c26b023"),
 };
 
 async fn fetch_fingerprint(client: &Client) -> FingerprintResponse {
@@ -130,6 +148,32 @@ async fn test_chrome_145_fingerprint() {
     assert_fingerprint(&fp, &CHROME_NEW_ALPS, "Chrome 145");
 }
 
+#[tokio::test]
+#[ignore]
+async fn test_chrome_149_fingerprint() {
+    // Last version before ML-DSA.
+    let client = Client::new(Chrome::v149_windows()).expect("client creation failed");
+    let fp = fetch_fingerprint(&client).await;
+    assert_fingerprint(&fp, &CHROME_NEW_ALPS, "Chrome 149");
+}
+
+#[tokio::test]
+#[ignore]
+async fn test_chrome_150_fingerprint() {
+    // First version with ML-DSA signature algorithms.
+    let client = Client::new(Chrome::v150_windows()).expect("client creation failed");
+    let fp = fetch_fingerprint(&client).await;
+    assert_fingerprint(&fp, &CHROME_MLDSA, "Chrome 150");
+}
+
+#[tokio::test]
+#[ignore]
+async fn test_chrome_152_fingerprint() {
+    let client = Client::new(Chrome::v152_windows()).expect("client creation failed");
+    let fp = fetch_fingerprint(&client).await;
+    assert_fingerprint(&fp, &CHROME_MLDSA, "Chrome 152");
+}
+
 // ========== Firefox Tests ==========
 
 #[tokio::test]
@@ -146,6 +190,32 @@ async fn test_firefox_147_fingerprint() {
     let client = Client::new(Firefox::v147_windows()).expect("client creation failed");
     let fp = fetch_fingerprint(&client).await;
     assert_fingerprint(&fp, &FIREFOX, "Firefox 147");
+}
+
+#[tokio::test]
+#[ignore]
+async fn test_firefox_150_fingerprint() {
+    // Last version with the ECDSA AES-128-CBC cipher.
+    let client = Client::new(Firefox::v150_windows()).expect("client creation failed");
+    let fp = fetch_fingerprint(&client).await;
+    assert_fingerprint(&fp, &FIREFOX, "Firefox 150");
+}
+
+#[tokio::test]
+#[ignore]
+async fn test_firefox_151_fingerprint() {
+    // First version without it.
+    let client = Client::new(Firefox::v151_windows()).expect("client creation failed");
+    let fp = fetch_fingerprint(&client).await;
+    assert_fingerprint(&fp, &FIREFOX_151, "Firefox 151");
+}
+
+#[tokio::test]
+#[ignore]
+async fn test_firefox_154_fingerprint() {
+    let client = Client::new(Firefox::v154_windows()).expect("client creation failed");
+    let fp = fetch_fingerprint(&client).await;
+    assert_fingerprint(&fp, &FIREFOX_151, "Firefox 154");
 }
 
 // ========== Safari Tests ==========
@@ -177,6 +247,35 @@ async fn test_edge_145_fingerprint() {
     let client = Client::new(Edge::v145_windows()).expect("client creation failed");
     let fp = fetch_fingerprint(&client).await;
     assert_fingerprint(&fp, &CHROME_NEW_ALPS, "Edge 145");
+}
+
+#[tokio::test]
+#[ignore]
+async fn test_edge_151_fingerprint() {
+    // Edge 151 is Chromium 151, so it carries the ML-DSA signature algorithms.
+    let client = Client::new(Edge::v151_windows()).expect("client creation failed");
+    let fp = fetch_fingerprint(&client).await;
+    assert_fingerprint(&fp, &CHROME_MLDSA, "Edge 151");
+}
+
+// ========== Opera Tests ==========
+
+#[tokio::test]
+#[ignore]
+async fn test_opera_133_fingerprint() {
+    // Opera 133 is Chromium 149 — before ML-DSA.
+    let client = Client::new(Opera::v133_windows()).expect("client creation failed");
+    let fp = fetch_fingerprint(&client).await;
+    assert_fingerprint(&fp, &CHROME_NEW_ALPS, "Opera 133");
+}
+
+#[tokio::test]
+#[ignore]
+async fn test_opera_134_fingerprint() {
+    // Opera 134 is Chromium 150 — with ML-DSA.
+    let client = Client::new(Opera::v134_windows()).expect("client creation failed");
+    let fp = fetch_fingerprint(&client).await;
+    assert_fingerprint(&fp, &CHROME_MLDSA, "Opera 134");
 }
 
 // ========== Safari Tests ==========

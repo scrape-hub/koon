@@ -17,9 +17,9 @@ doh = ["dep:hickory-proto"]
 
 [dependencies]
 # TLS via BoringSSL (fork with quinn-btls from_builder() for per-browser H3 TLS fingerprint)
-btls = { git = "https://github.com/scrape-hub/btls.git", rev = "3ff178d2" }
-tokio-btls = { git = "https://github.com/scrape-hub/btls.git", rev = "3ff178d2" }
-quinn-btls = { git = "https://github.com/scrape-hub/btls.git", rev = "3ff178d2" }
+btls = { git = "https://github.com/scrape-hub/btls.git", rev = "0a38229" }
+tokio-btls = { git = "https://github.com/scrape-hub/btls.git", rev = "0a38229" }
+quinn-btls = { git = "https://github.com/scrape-hub/btls.git", rev = "0a38229" }
 quinn = { version = "0.11", default-features = false, features = ["runtime-tokio"] }
 h3 = "0.0.8"
 h3-quinn = "0.0.10"

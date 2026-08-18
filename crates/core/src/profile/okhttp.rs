@@ -108,6 +108,9 @@ fn okhttp_tls() -> TlsConfig {
         grease: false,
         ech_grease: false,
         permute_extensions: false,
+        // No captured extension order for Conscrypt yet — BoringSSL's default
+        // order applies.
+        extension_order: None,
         ocsp_stapling: true,
         signed_cert_timestamps: false,
         cert_compression: vec![],

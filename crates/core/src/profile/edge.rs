@@ -7,7 +7,7 @@ use super::chrome::{
 ///
 /// Edge uses the same Chromium engine as Chrome, so TLS and H2 are identical.
 /// Only headers differ (brand string + user-agent suffix).
-/// Supports Edge 131–149 (same Chromium versions).
+/// Supports Edge 131–151 (same Chromium versions).
 pub struct Edge;
 
 impl Edge {
@@ -163,17 +163,40 @@ impl Edge {
         edge_profile(149, Os::MacOS)
     }
 
-    /// Latest Edge profile (currently v149 on Windows).
-    pub fn latest() -> BrowserProfile {
-        Self::v149_windows()
+    // ========== Edge 150 ==========
+    pub fn v150_windows() -> BrowserProfile {
+        edge_profile(150, Os::Windows)
     }
+    pub fn v150_macos() -> BrowserProfile {
+        edge_profile(150, Os::MacOS)
+    }
+
+    // ========== Edge 151 ==========
+    pub fn v151_windows() -> BrowserProfile {
+        edge_profile(151, Os::Windows)
+    }
+    pub fn v151_macos() -> BrowserProfile {
+        edge_profile(151, Os::MacOS)
+    }
+
+    /// Latest Edge profile (currently v151 on Windows).
+    pub fn latest() -> BrowserProfile {
+        Self::v151_windows()
+    }
+
+    /// Oldest supported Edge major version.
+    pub const MIN_VERSION: u32 = 131;
+
+    /// Newest supported Edge major version.
+    pub const LATEST_VERSION: u32 = 151;
 
     /// Resolve an Edge profile by version number and optional OS.
     /// Edge is available on Windows and macOS only.
     pub(super) fn resolve(major: u32, os: Option<&str>) -> Result<BrowserProfile, String> {
-        if !(131..=149).contains(&major) {
+        if !(Self::MIN_VERSION..=Self::LATEST_VERSION).contains(&major) {
+            let (min, max) = (Self::MIN_VERSION, Self::LATEST_VERSION);
             return Err(format!(
-                "Unsupported Edge version: {major}. Supported: 131-149"
+                "Unsupported Edge version: {major}. Supported: {min}-{max}"
             ));
         }
         if os == Some("linux") {
@@ -185,8 +208,6 @@ impl Edge {
         };
         Ok(edge_profile(major, os))
     }
-
-    pub(super) const LATEST_VERSION: u32 = 149;
 }
 
 #[derive(Clone, Copy)]

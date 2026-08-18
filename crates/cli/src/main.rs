@@ -1,7 +1,8 @@
 use clap::{Parser, Subcommand};
 use http::Method;
 use koon_core::{
-    BrowserProfile, Client, HeaderMode, IpVersion, ProxyServer, ProxyServerConfig, dns::DohResolver,
+    BrowserProfile, Chrome, Client, Edge, Firefox, HeaderMode, IpVersion, Opera, ProxyServer,
+    ProxyServerConfig, SAFARI_VERSIONS, dns::DohResolver,
 };
 use serde_json::json;
 use std::collections::HashMap;
@@ -16,8 +17,8 @@ use std::time::Duration;
     version,
     after_help = "\x1b[1mExamples:\x1b[0m
   koon https://example.com
-  koon -b firefox147 https://example.com
-  koon -b chrome145-macos -v https://httpbin.org/get
+  koon -b firefox154 https://example.com
+  koon -b chrome152-macos -v https://httpbin.org/get
   koon -X POST -d '{\"key\":\"val\"}' https://httpbin.org/post
   koon -d @body.json -H \"Content-Type: application/json\" https://api.example.com
   koon --proxy socks5://127.0.0.1:1080 https://example.com
@@ -25,9 +26,9 @@ use std::time::Duration;
   koon --save-session s.json https://example.com/login
   koon --load-session s.json https://example.com/dashboard
   koon --json https://httpbin.org/get
-  koon --export-profile chrome145
+  koon --export-profile chrome152
   koon --list-browsers
-  koon proxy -b chrome145 --listen 127.0.0.1:8080"
+  koon proxy -b chrome152 --listen 127.0.0.1:8080"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -40,7 +41,7 @@ struct Cli {
     #[arg(short = 'X', long = "request")]
     method: Option<String>,
 
-    /// Browser profile (chrome, chrome145, firefox147-linux, safari, edge, opera, ...)
+    /// Browser profile (chrome, chrome152, firefox154-linux, safari, edge, opera, ...)
     #[arg(short = 'b', long = "browser", default_value = "chrome")]
     browser: String,
 
@@ -186,65 +187,69 @@ fn resolve_profile(name: &str) -> Result<BrowserProfile, String> {
 }
 
 fn list_browsers() {
+    // Ranges come from the profile factories, so this listing cannot drift
+    // behind the profiles that actually exist.
+    let (chrome_min, chrome_max) = (Chrome::MIN_VERSION, Chrome::LATEST_VERSION);
+    let (firefox_min, firefox_max) = (Firefox::MIN_VERSION, Firefox::LATEST_VERSION);
+    let (edge_min, edge_max) = (Edge::MIN_VERSION, Edge::LATEST_VERSION);
+    let (opera_min, opera_max) = (Opera::MIN_VERSION, Opera::LATEST_VERSION);
+    let safari_oldest = SAFARI_VERSIONS.first().expect("Safari versions").version;
+    let safari_latest = SAFARI_VERSIONS.last().expect("Safari versions").version;
+    let ios_oldest = SAFARI_VERSIONS
+        .iter()
+        .find(|v| v.ios)
+        .expect("an iOS Safari version")
+        .version;
+
     println!("Available browser profiles:\n");
 
-    println!("  Chrome (131-145):");
-    println!("    chrome              Chrome latest (145, Windows)");
-    for v in 131..=145 {
+    println!("  Chrome ({chrome_min}-{chrome_max}):");
+    println!("    chrome              Chrome latest ({chrome_max}, Windows)");
+    for v in chrome_min..=chrome_max {
         println!("    chrome{v}           Chrome {v} (Windows/macOS/Linux)");
     }
 
-    println!("\n  Chrome Mobile (131-145, Android):");
-    println!("    chrome-mobile       Chrome Mobile latest (145, Android)");
-    for v in 131..=145 {
+    println!("\n  Chrome Mobile ({chrome_min}-{chrome_max}, Android):");
+    println!("    chrome-mobile       Chrome Mobile latest ({chrome_max}, Android)");
+    for v in chrome_min..=chrome_max {
         println!("    chrome-mobile{v}    Chrome Mobile {v} (Android)");
     }
 
-    println!("\n  Firefox (135-148):");
-    println!("    firefox             Firefox latest (148, Windows)");
-    for v in 135..=148 {
+    println!("\n  Firefox ({firefox_min}-{firefox_max}):");
+    println!("    firefox             Firefox latest ({firefox_max}, Windows)");
+    for v in firefox_min..=firefox_max {
         println!("    firefox{v}          Firefox {v} (Windows/macOS/Linux)");
     }
 
-    println!("\n  Firefox Mobile (135-148, Android):");
-    println!("    firefox-mobile      Firefox Mobile latest (148, Android)");
-    for v in 135..=148 {
+    println!("\n  Firefox Mobile ({firefox_min}-{firefox_max}, Android):");
+    println!("    firefox-mobile      Firefox Mobile latest ({firefox_max}, Android)");
+    for v in firefox_min..=firefox_max {
         println!("    firefox-mobile{v}   Firefox Mobile {v} (Android)");
     }
 
-    println!("\n  Safari (15.6-18.3, macOS):");
-    println!("    safari              Safari latest (18.3)");
-    for (tag, ver) in [
-        ("156", "15.6"),
-        ("160", "16.0"),
-        ("170", "17.0"),
-        ("180", "18.0"),
-        ("183", "18.3"),
-    ] {
+    println!("\n  Safari ({safari_oldest}-{safari_latest}, macOS):");
+    println!("    safari              Safari latest ({safari_latest})");
+    for entry in SAFARI_VERSIONS {
+        let (tag, ver) = (entry.tag, entry.version);
         println!("    safari{tag}           Safari {ver} (macOS)");
     }
 
-    println!("\n  Safari Mobile (15.6-18.3, iOS):");
-    println!("    safari-mobile       Safari Mobile latest (18.3, iOS)");
-    for (tag, ver) in [
-        ("156", "15.6"),
-        ("160", "16.0"),
-        ("170", "17.0"),
-        ("180", "18.0"),
-        ("183", "18.3"),
-    ] {
+    println!("\n  Safari Mobile ({ios_oldest}-{safari_latest}, iOS):");
+    println!("    safari-mobile       Safari Mobile latest ({safari_latest}, iOS)");
+    for entry in SAFARI_VERSIONS.iter().filter(|v| v.ios) {
+        let (tag, ver) = (entry.tag, entry.version);
         println!("    safari-mobile{tag}    Safari Mobile {ver} (iOS)");
     }
 
-    println!("\n  Edge (131-145, Windows/macOS):");
-    println!("    edge                Edge latest (145, Windows)");
-    for v in 131..=145 {
+    println!("\n  Edge ({edge_min}-{edge_max}, Windows/macOS):");
+    println!("    edge                Edge latest ({edge_max}, Windows)");
+    for v in edge_min..=edge_max {
         println!("    edge{v}             Edge {v} (Windows/macOS)");
     }
 
-    println!("\n  Opera (124-127):");
-    println!("    opera               Opera latest (127, Windows)");
-    for v in 124..=127 {
+    println!("\n  Opera ({opera_min}-{opera_max}):");
+    println!("    opera               Opera latest ({opera_max}, Windows)");
+    for v in opera_min..=opera_max {
         println!("    opera{v}            Opera {v} (Windows/macOS/Linux)");
     }
 
@@ -253,7 +258,9 @@ fn list_browsers() {
     println!("    okhttp4             OkHttp 4.12.0");
     println!("    okhttp5             OkHttp 5.0-alpha2");
 
-    println!("\n  OS suffix: -windows, -macos, -linux, -android, -ios (e.g. chrome145-macos)");
+    println!(
+        "\n  OS suffix: -windows, -macos, -linux, -android, -ios (e.g. chrome{chrome_max}-macos)"
+    );
 }
 
 fn parse_headers(raw: &[String]) -> Vec<(String, String)> {

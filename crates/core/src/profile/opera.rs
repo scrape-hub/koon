@@ -7,7 +7,7 @@ use super::chrome::{
 ///
 /// Opera uses the same Chromium engine as Chrome, so TLS/H2/QUIC are identical.
 /// Only headers differ (brand string + `OPR/` user-agent suffix).
-/// Supports Opera 124–133 (Chromium 140–149).
+/// Supports Opera 124–134 (Chromium 140–150).
 pub struct Opera;
 
 impl Opera {
@@ -121,10 +121,27 @@ impl Opera {
         opera_profile(133, 149, Os::Linux)
     }
 
-    /// Latest Opera profile (currently v133 on Windows).
-    pub fn latest() -> BrowserProfile {
-        Self::v133_windows()
+    // ========== Opera 134 (Chromium 150) ==========
+    pub fn v134_windows() -> BrowserProfile {
+        opera_profile(134, 150, Os::Windows)
     }
+    pub fn v134_macos() -> BrowserProfile {
+        opera_profile(134, 150, Os::MacOS)
+    }
+    pub fn v134_linux() -> BrowserProfile {
+        opera_profile(134, 150, Os::Linux)
+    }
+
+    /// Latest Opera profile (currently v134 on Windows).
+    pub fn latest() -> BrowserProfile {
+        Self::v134_windows()
+    }
+
+    /// Oldest supported Opera major version.
+    pub const MIN_VERSION: u32 = 124;
+
+    /// Newest supported Opera major version.
+    pub const LATEST_VERSION: u32 = 134;
 
     /// Resolve an Opera profile by version number and optional OS.
     pub(super) fn resolve(major: u32, os: Option<&str>) -> Result<BrowserProfile, String> {
@@ -139,9 +156,11 @@ impl Opera {
             131 => 147,
             132 => 148,
             133 => 149,
+            134 => 150,
             _ => {
+                let (min, max) = (Self::MIN_VERSION, Self::LATEST_VERSION);
                 return Err(format!(
-                    "Unsupported Opera version: {major}. Supported: 124-133"
+                    "Unsupported Opera version: {major}. Supported: {min}-{max}"
                 ));
             }
         };
@@ -152,8 +171,6 @@ impl Opera {
         };
         Ok(opera_profile(major, chromium, os))
     }
-
-    pub(super) const LATEST_VERSION: u32 = 133;
 }
 
 #[derive(Clone, Copy)]

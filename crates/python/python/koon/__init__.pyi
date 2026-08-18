@@ -31,8 +31,8 @@ class Koon:
         """Create a new Koon HTTP client with browser fingerprint impersonation.
 
         Args:
-            browser: Browser to impersonate (e.g. "chrome", "firefox148", "safari183",
-                "chrome-mobile145", "safari-mobile183", "firefox-mobile148", "okhttp5").
+            browser: Browser to impersonate (e.g. "chrome", "firefox154", "safari266",
+                "chrome-mobile152", "safari-mobile266", "firefox-mobile154", "okhttp5").
             profile_json: Custom browser profile as JSON string (overrides ``browser``).
             proxy: Proxy URL (``http://``, ``https://``, ``socks5://``).
             proxies: List of proxy URLs for round-robin rotation. Takes priority over ``proxy``.
@@ -307,7 +307,7 @@ class KoonProxy:
         """Start a new MITM proxy server.
 
         Args:
-            browser: Browser to impersonate (e.g. "chrome", "firefox148").
+            browser: Browser to impersonate (e.g. "chrome", "firefox154").
             profile_json: Custom browser profile as JSON string (overrides ``browser``).
             listen_addr: Address to listen on (default: "127.0.0.1:0" for random port).
             header_mode: Header mode — "impersonate" (default) or "passthrough".
@@ -343,7 +343,7 @@ class KoonSync:
     Usage::
 
         from koon import KoonSync
-        client = KoonSync("chrome145")
+        client = KoonSync("chrome152")
         resp = client.get("https://httpbin.org/get")
         print(resp.status)
     """

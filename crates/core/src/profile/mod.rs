@@ -10,7 +10,7 @@ pub use edge::Edge;
 pub use firefox::Firefox;
 pub use okhttp::OkHttp;
 pub use opera::Opera;
-pub use safari::Safari;
+pub use safari::{SAFARI_VERSIONS, Safari, SafariVersion};
 
 use std::path::Path;
 
@@ -53,16 +53,16 @@ impl BrowserProfile {
     ///
     /// Accepts formats like:
     /// - `"chrome"`, `"firefox"`, `"safari"`, `"edge"`, `"opera"` — latest version, default OS
-    /// - `"chrome145"`, `"firefox147"` — specific version, default OS (macOS for all browsers)
-    /// - `"chrome145-windows"`, `"chrome145-macos"`, `"chrome145-linux"` — specific version + OS (dash-separated)
-    /// - `"chrome145windows"`, `"chrome145macos"` — specific version + OS (no dash, for Node.js/Python compat)
-    /// - `"safari183"`, `"safari18.3"` — Safari version formats
+    /// - `"chrome152"`, `"firefox154"` — specific version, default OS (macOS for all browsers)
+    /// - `"chrome152-windows"`, `"chrome152-macos"`, `"chrome152-linux"` — specific version + OS (dash-separated)
+    /// - `"chrome152windows"`, `"chrome152macos"` — specific version + OS (no dash, for Node.js/Python compat)
+    /// - `"safari266"`, `"safari18.3"` — Safari version formats
     ///
     /// Case-insensitive.
     pub fn resolve(name: &str) -> Result<Self, String> {
         let name_lower = name.to_lowercase();
 
-        // Handle "chrome-mobile145" / "chromemobile145" → Chrome on Android
+        // Handle "chrome-mobile152" / "chromemobile152" → Chrome on Android
         // Must come BEFORE the generic "chrome" prefix check.
         for prefix in &["chrome-mobile", "chromemobile"] {
             if let Some(rest) = name_lower.strip_prefix(prefix) {
@@ -71,7 +71,7 @@ impl BrowserProfile {
                 } else {
                     let major: u32 = rest.parse().map_err(|_| {
                         format!(
-                            "Invalid Chrome Mobile version: '{rest}'. Expected a number (131-150)"
+                            "Invalid Chrome Mobile version: '{rest}'. Expected a number (131-152)"
                         )
                     })?;
                     Chrome::resolve(major, Some("android"))
@@ -79,14 +79,14 @@ impl BrowserProfile {
             }
         }
 
-        // Handle "safari-mobile183" / "safarimobile183" → Safari on iOS
+        // Handle "safari-mobile266" / "safarimobile266" → Safari on iOS
         for prefix in &["safari-mobile", "safarimobile"] {
             if let Some(rest) = name_lower.strip_prefix(prefix) {
                 return Safari::resolve(rest, Some("ios"));
             }
         }
 
-        // Handle "firefox-mobile147" / "firefoxmobile147" → Firefox on Android
+        // Handle "firefox-mobile154" / "firefoxmobile154" → Firefox on Android
         for prefix in &["firefox-mobile", "firefoxmobile"] {
             if let Some(rest) = name_lower.strip_prefix(prefix) {
                 return if rest.is_empty() {
@@ -94,7 +94,7 @@ impl BrowserProfile {
                 } else {
                     let major: u32 = rest.parse().map_err(|_| {
                         format!(
-                            "Invalid Firefox Mobile version: '{rest}'. Expected a number (135-152)"
+                            "Invalid Firefox Mobile version: '{rest}'. Expected a number (135-154)"
                         )
                     })?;
                     Firefox::resolve(major, Some("android"))
@@ -114,7 +114,7 @@ impl BrowserProfile {
                 Chrome::resolve(Chrome::LATEST_VERSION, os)
             } else {
                 let major: u32 = rest.parse().map_err(|_| {
-                    format!("Invalid Chrome version: '{rest}'. Expected a number (131-150)")
+                    format!("Invalid Chrome version: '{rest}'. Expected a number (131-152)")
                 })?;
                 Chrome::resolve(major, os)
             };
@@ -125,7 +125,7 @@ impl BrowserProfile {
                 Firefox::resolve(Firefox::LATEST_VERSION, os)
             } else {
                 let major: u32 = rest.parse().map_err(|_| {
-                    format!("Invalid Firefox version: '{rest}'. Expected a number (135-152)")
+                    format!("Invalid Firefox version: '{rest}'. Expected a number (135-154)")
                 })?;
                 Firefox::resolve(major, os)
             };
@@ -140,7 +140,7 @@ impl BrowserProfile {
                 Edge::resolve(Edge::LATEST_VERSION, os)
             } else {
                 let major: u32 = rest.parse().map_err(|_| {
-                    format!("Invalid Edge version: '{rest}'. Expected a number (131-149)")
+                    format!("Invalid Edge version: '{rest}'. Expected a number (131-151)")
                 })?;
                 Edge::resolve(major, os)
             };
@@ -151,7 +151,7 @@ impl BrowserProfile {
                 Opera::resolve(Opera::LATEST_VERSION, os)
             } else {
                 let major: u32 = rest.parse().map_err(|_| {
-                    format!("Invalid Opera version: '{rest}'. Expected a number (124-133)")
+                    format!("Invalid Opera version: '{rest}'. Expected a number (124-134)")
                 })?;
                 Opera::resolve(major, os)
             };
@@ -164,17 +164,17 @@ impl BrowserProfile {
 
     /// Parse a browser name into (browser_with_version, optional_os).
     ///
-    /// Handles both dash-separated ("chrome145-windows") and
-    /// concatenated ("chrome145windows") OS suffixes.
+    /// Handles both dash-separated ("chrome152-windows") and
+    /// concatenated ("chrome152windows") OS suffixes.
     fn parse_browser_os(input: &str) -> (&str, Option<&str>) {
-        // Try dash-separated first (CLI format: "chrome145-windows", "safari183-ios")
+        // Try dash-separated first (CLI format: "chrome152-windows", "safari266-ios")
         if let Some(pos) = input.rfind('-') {
             let suffix = &input[pos + 1..];
             if matches!(suffix, "windows" | "macos" | "linux" | "android" | "ios") {
                 return (&input[..pos], Some(suffix));
             }
         }
-        // Try suffix without dash (Node/Python format: "chrome145windows", "chrome145android")
+        // Try suffix without dash (Node/Python format: "chrome152windows", "chrome152android")
         for os in &["windows", "macos", "linux", "android", "ios"] {
             if let Some(prefix) = input.strip_suffix(os) {
                 if !prefix.is_empty() {

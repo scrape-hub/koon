@@ -1,7 +1,16 @@
 name: Build macOS arm64
 
+# Manual rebuild of the darwin-arm64 binary for an existing release. The regular
+# release workflow builds and publishes this artifact itself; this one only
+# uploads to a release, since npm trusted publishing binds each package to a
+# single workflow (release.yml).
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to upload the binary to (e.g. v0.8.1)
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -39,14 +48,7 @@ jobs:
           cp "target/aarch64-apple-darwin/release/libkoon_node.dylib" \
              koon.darwin-arm64.node
 
-      - name: Upload to v0.6.0 release
+      - name: Upload to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload v0.6.1 koon.darwin-arm64.node --clobber
-
-      - name: Publish platform package
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          cp koon.darwin-arm64.node crates/node/npm/darwin-arm64/
-          npm publish crates/node/npm/darwin-arm64/ --access public
+        run: gh release upload "${{ inputs.tag }}" koon.darwin-arm64.node --clobber

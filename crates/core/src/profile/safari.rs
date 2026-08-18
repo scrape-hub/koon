@@ -7,12 +7,12 @@ use super::BrowserProfile;
 
 /// Safari browser profile factory.
 ///
-/// Supports Safari 15.6, 16.0, 17.0, 18.0, 18.3, and 26.0–26.5.
+/// Supports Safari 15.6, 16.0, 17.0, 18.0, 18.3, and 26.0–26.6.
 /// Safari is macOS-only. Profile data verified against real Safari 18.2 captures
 /// (curl_cffi#460) and tls-client (bogdanfinn) for older versions.
 ///
 /// Apple switched to a year-based version scheme in 2025: after Safari 18.3 comes
-/// Safari 26.x (26.0 = Sept 2025, 26.5 = current as of July 2026). Safari 26.x uses
+/// Safari 26.x (26.0 = Sept 2025, 26.6 = current as of August 2026). Safari 26.x uses
 /// the SAME TLS+H2 fingerprint and header set as Safari 18.x.
 ///
 /// Key evolution:
@@ -22,6 +22,87 @@ use super::BrowserProfile;
 /// - Safari 26.x: identical fingerprint to 18.x (year-versioning, no protocol change)
 /// - All versions share the same TLS sigalgs (verified against real Safari 18.2)
 pub struct Safari;
+
+/// A Safari version supported by [`Safari`].
+///
+/// Both `tag` and `version` are accepted by the resolver, so `safari266` and
+/// `safari26.6` name the same profile.
+pub struct SafariVersion {
+    /// Compact form without the dot, e.g. `"266"`.
+    pub tag: &'static str,
+    /// Dotted form, also used in the `Version/…` User-Agent token, e.g. `"26.6"`.
+    pub version: &'static str,
+    /// Whether an iOS profile exists for this version.
+    pub ios: bool,
+}
+
+/// Every supported Safari version, oldest first.
+///
+/// Single source of truth for the resolver's error messages and the CLI's
+/// profile listing — adding a version here and in [`Safari::resolve`] keeps both
+/// in sync (enforced by `versions_table_matches_resolver`).
+pub const SAFARI_VERSIONS: &[SafariVersion] = &[
+    SafariVersion {
+        tag: "156",
+        version: "15.6",
+        ios: false,
+    },
+    SafariVersion {
+        tag: "160",
+        version: "16.0",
+        ios: true,
+    },
+    SafariVersion {
+        tag: "170",
+        version: "17.0",
+        ios: true,
+    },
+    SafariVersion {
+        tag: "180",
+        version: "18.0",
+        ios: true,
+    },
+    SafariVersion {
+        tag: "183",
+        version: "18.3",
+        ios: true,
+    },
+    SafariVersion {
+        tag: "260",
+        version: "26.0",
+        ios: true,
+    },
+    SafariVersion {
+        tag: "261",
+        version: "26.1",
+        ios: true,
+    },
+    SafariVersion {
+        tag: "262",
+        version: "26.2",
+        ios: true,
+    },
+    SafariVersion {
+        tag: "263",
+        version: "26.3",
+        ios: true,
+    },
+    SafariVersion {
+        tag: "264",
+        version: "26.4",
+        ios: true,
+    },
+    SafariVersion {
+        tag: "265",
+        version: "26.5",
+        ios: true,
+    },
+    SafariVersion {
+        tag: "266",
+        version: "26.6",
+        ios: true,
+    },
+];
 
 impl Safari {
     // ========== Safari 15.6 (macOS Monterey 12.5) ==========
@@ -134,6 +215,16 @@ impl Safari {
         }
     }
 
+    // ========== Safari 26.6 (macOS Tahoe 26.6) ==========
+    pub fn v26_6_macos() -> BrowserProfile {
+        BrowserProfile {
+            tls: safari_tls(),
+            http2: safari_http2_4mb(),
+            quic: None,
+            headers: safari_headers_v18("26.6"),
+        }
+    }
+
     // ========== Safari iOS ==========
     pub fn v16_0_ios() -> BrowserProfile {
         BrowserProfile {
@@ -225,14 +316,34 @@ impl Safari {
         }
     }
 
-    /// Latest Safari profile (currently v26.5 on macOS).
-    pub fn latest() -> BrowserProfile {
-        Self::v26_5_macos()
+    pub fn v26_6_ios() -> BrowserProfile {
+        BrowserProfile {
+            tls: safari_tls(),
+            http2: safari_http2_ios(),
+            quic: None,
+            headers: safari_headers_ios_v18("26.6", "26_6"),
+        }
     }
 
-    /// Latest Safari Mobile profile (currently v26.5 on iOS).
+    /// Latest Safari profile (currently v26.6 on macOS).
+    pub fn latest() -> BrowserProfile {
+        Self::v26_6_macos()
+    }
+
+    /// Latest Safari Mobile profile (currently v26.6 on iOS).
     pub fn latest_ios() -> BrowserProfile {
-        Self::v26_5_ios()
+        Self::v26_6_ios()
+    }
+
+    /// Comma-separated list of supported versions, for error messages.
+    /// With `ios_only`, lists just the versions that have an iOS profile.
+    fn supported_list(ios_only: bool) -> String {
+        SAFARI_VERSIONS
+            .iter()
+            .filter(|v| !ios_only || v.ios)
+            .map(|v| v.version)
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 
     /// Resolve a Safari profile by version string and optional OS.
@@ -266,12 +377,15 @@ impl Safari {
             ("264" | "26.4", true) => Ok(Self::v26_4_ios()),
             ("265" | "26.5", false) => Ok(Self::v26_5_macos()),
             ("265" | "26.5", true) => Ok(Self::v26_5_ios()),
-            ("156" | "15.6", true) => Err(
-                "Safari 15.6 iOS is not available. Supported iOS: 16.0, 17.0, 18.0, 18.3"
-                    .to_string(),
-            ),
+            ("266" | "26.6", false) => Ok(Self::v26_6_macos()),
+            ("266" | "26.6", true) => Ok(Self::v26_6_ios()),
+            ("156" | "15.6", true) => Err(format!(
+                "Safari 15.6 iOS is not available. Supported iOS: {}",
+                Self::supported_list(true)
+            )),
             _ => Err(format!(
-                "Unsupported Safari version: '{version}'. Supported: 15.6, 16.0, 17.0, 18.0, 18.3, 26.0, 26.1, 26.2, 26.3, 26.4, 26.5"
+                "Unsupported Safari version: '{version}'. Supported: {}",
+                Self::supported_list(false)
             )),
         }
     }
@@ -337,6 +451,9 @@ fn safari_tls() -> TlsConfig {
         grease: true,
         ech_grease: false,
         permute_extensions: false,
+        // No captured extension order for Safari yet (needs a real macOS/iOS
+        // device) — BoringSSL's default order applies.
+        extension_order: None,
         ocsp_stapling: true,
         signed_cert_timestamps: true,
         cert_compression: vec![CertCompression::Zlib],
@@ -514,4 +631,67 @@ fn safari_headers_ios_v18(version: &str, os_version: &str) -> Vec<(String, Strin
         ("priority".into(), "u=0, i".into()),
         ("accept-encoding".into(), "gzip, deflate, br".into()),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every version in the table must resolve — under both spellings, and on
+    /// iOS where the table says an iOS profile exists. Guards against the table
+    /// and the resolver's match arms drifting apart when a version is added.
+    #[test]
+    fn versions_table_matches_resolver() {
+        for entry in SAFARI_VERSIONS {
+            for spelling in [entry.tag, entry.version] {
+                let profile = Safari::resolve(spelling, None)
+                    .unwrap_or_else(|e| panic!("macOS {spelling}: {e}"));
+                let ua = profile
+                    .headers
+                    .iter()
+                    .find(|(k, _)| k == "user-agent")
+                    .map(|(_, v)| v.clone())
+                    .expect("profile has a user-agent");
+                assert!(
+                    ua.contains(&format!("Version/{}", entry.version)),
+                    "macOS {spelling} carries the wrong version: {ua}"
+                );
+
+                if entry.ios {
+                    let profile = Safari::resolve(spelling, Some("ios"))
+                        .unwrap_or_else(|e| panic!("iOS {spelling}: {e}"));
+                    let ua = profile
+                        .headers
+                        .iter()
+                        .find(|(k, _)| k == "user-agent")
+                        .map(|(_, v)| v.clone())
+                        .expect("profile has a user-agent");
+                    assert!(
+                        ua.contains("iPhone") && ua.contains(&format!("Version/{}", entry.version)),
+                        "iOS {spelling} carries the wrong version: {ua}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The unversioned `safari` / `safari-mobile` names must track the newest
+    /// entry in the table.
+    #[test]
+    fn latest_is_the_last_table_entry() {
+        let newest = SAFARI_VERSIONS.last().expect("table is not empty");
+        for (profile, label) in [(Safari::latest(), "macOS"), (Safari::latest_ios(), "iOS")] {
+            let ua = profile
+                .headers
+                .iter()
+                .find(|(k, _)| k == "user-agent")
+                .map(|(_, v)| v.clone())
+                .expect("profile has a user-agent");
+            assert!(
+                ua.contains(&format!("Version/{}", newest.version)),
+                "latest {label} is not {}: {ua}",
+                newest.version
+            );
+        }
+    }
 }

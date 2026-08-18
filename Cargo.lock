@@ -174,7 +174,7 @@ dependencies = [
 [[package]]
 name = "btls"
 version = "0.5.5"
-source = "git+https://github.com/scrape-hub/btls.git?rev=3ff178d2#3ff178d212f79070112c704c24624d41e6c80fc9"
+source = "git+https://github.com/scrape-hub/btls.git?rev=0a38229#0a382291b56a70a52103e4fc0f84076b1f27614e"
 dependencies = [
  "bitflags",
  "btls-sys",
@@ -186,7 +186,7 @@ dependencies = [
 [[package]]
 name = "btls-sys"
 version = "0.5.5"
-source = "git+https://github.com/scrape-hub/btls.git?rev=3ff178d2#3ff178d212f79070112c704c24624d41e6c80fc9"
+source = "git+https://github.com/scrape-hub/btls.git?rev=0a38229#0a382291b56a70a52103e4fc0f84076b1f27614e"
 dependencies = [
  "bindgen",
  "cmake",
@@ -996,7 +996,7 @@ dependencies = [
 
 [[package]]
 name = "koon-cli"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "clap",
  "http",
@@ -1007,7 +1007,7 @@ dependencies = [
 
 [[package]]
 name = "koon-core"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "base64",
  "brotli",
@@ -1045,7 +1045,7 @@ dependencies = [
 
 [[package]]
 name = "koon-node"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "koon-core",
  "napi",
@@ -1058,7 +1058,7 @@ dependencies = [
 
 [[package]]
 name = "koon-python"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "http",
  "koon-core",
@@ -1449,7 +1449,7 @@ dependencies = [
 [[package]]
 name = "quinn-btls"
 version = "0.1.0"
-source = "git+https://github.com/scrape-hub/btls.git?rev=3ff178d2#3ff178d212f79070112c704c24624d41e6c80fc9"
+source = "git+https://github.com/scrape-hub/btls.git?rev=0a38229#0a382291b56a70a52103e4fc0f84076b1f27614e"
 dependencies = [
  "btls",
  "btls-sys",
@@ -1902,7 +1902,7 @@ dependencies = [
 [[package]]
 name = "tokio-btls"
 version = "0.5.5"
-source = "git+https://github.com/scrape-hub/btls.git?rev=3ff178d2#3ff178d212f79070112c704c24624d41e6c80fc9"
+source = "git+https://github.com/scrape-hub/btls.git?rev=0a38229#0a382291b56a70a52103e4fc0f84076b1f27614e"
 dependencies = [
  "btls",
  "tokio",

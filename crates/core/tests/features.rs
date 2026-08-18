@@ -73,50 +73,65 @@ fn assert_profile_roundtrips(name: &str, profile: &BrowserProfile) {
 
 #[test]
 fn test_profile_json_roundtrip_per_browser() {
-    assert_profile_roundtrips("chrome145", &Chrome::v145_windows());
-    assert_profile_roundtrips("firefox147", &Firefox::v147_windows());
-    assert_profile_roundtrips("safari18.3", &Safari::v18_3_macos());
-    assert_profile_roundtrips("edge145", &Edge::v145_windows());
-    assert_profile_roundtrips("opera127", &Opera::v127_windows());
+    assert_profile_roundtrips("chrome152", &Chrome::v152_windows());
+    assert_profile_roundtrips("firefox154", &Firefox::v154_windows());
+    assert_profile_roundtrips("safari26.6", &Safari::v26_6_macos());
+    assert_profile_roundtrips("edge151", &Edge::v151_windows());
+    assert_profile_roundtrips("opera134", &Opera::v134_windows());
+}
+
+/// Every profile name the resolver accepts, generated from the supported
+/// version ranges. Adding a browser version automatically extends the set
+/// instead of needing a hand-maintained list here.
+fn all_profile_names() -> Vec<String> {
+    let mut names = Vec::new();
+
+    for version in Chrome::MIN_VERSION..=Chrome::LATEST_VERSION {
+        for os in ["windows", "macos", "linux", "android"] {
+            names.push(format!("chrome{version}-{os}"));
+        }
+    }
+    for version in Firefox::MIN_VERSION..=Firefox::LATEST_VERSION {
+        for os in ["windows", "macos", "linux", "android"] {
+            names.push(format!("firefox{version}-{os}"));
+        }
+    }
+    for version in Edge::MIN_VERSION..=Edge::LATEST_VERSION {
+        for os in ["windows", "macos"] {
+            names.push(format!("edge{version}-{os}"));
+        }
+    }
+    for version in Opera::MIN_VERSION..=Opera::LATEST_VERSION {
+        for os in ["windows", "macos", "linux"] {
+            names.push(format!("opera{version}-{os}"));
+        }
+    }
+    for entry in SAFARI_VERSIONS {
+        names.push(format!("safari{}-macos", entry.tag));
+        if entry.ios {
+            names.push(format!("safari{}-ios", entry.tag));
+        }
+    }
+    names.push("okhttp4".to_string());
+    names.push("okhttp5".to_string());
+
+    names
 }
 
 #[test]
 fn test_profile_json_roundtrip_all_browsers() {
-    // Verify ALL 134 profiles can roundtrip without error
-    let profiles: Vec<(&str, BrowserProfile)> = vec![
-        // Chrome 131-145 × 3 OS
-        ("chrome131w", Chrome::v131_windows()),
-        ("chrome131m", Chrome::v131_macos()),
-        ("chrome131l", Chrome::v131_linux()),
-        ("chrome135w", Chrome::v135_windows()),
-        ("chrome140w", Chrome::v140_windows()),
-        ("chrome145w", Chrome::v145_windows()),
-        ("chrome145m", Chrome::v145_macos()),
-        ("chrome145l", Chrome::v145_linux()),
-        // Firefox
-        ("firefox135w", Firefox::v135_windows()),
-        ("firefox147w", Firefox::v147_windows()),
-        ("firefox147m", Firefox::v147_macos()),
-        ("firefox147l", Firefox::v147_linux()),
-        // Safari
-        ("safari156", Safari::v15_6_macos()),
-        ("safari160", Safari::v16_0_macos()),
-        ("safari170", Safari::v17_0_macos()),
-        ("safari180", Safari::v18_0_macos()),
-        ("safari183", Safari::v18_3_macos()),
-        // Edge
-        ("edge131w", Edge::v131_windows()),
-        ("edge145w", Edge::v145_windows()),
-        ("edge145m", Edge::v145_macos()),
-        // Opera
-        ("opera124w", Opera::v124_windows()),
-        ("opera127w", Opera::v127_windows()),
-        ("opera127m", Opera::v127_macos()),
-        ("opera127l", Opera::v127_linux()),
-    ];
+    let names = all_profile_names();
+    println!("profile matrix: {} names", names.len());
+    assert!(
+        names.len() > 200,
+        "expected the full profile matrix, got {}",
+        names.len()
+    );
 
-    for (name, profile) in &profiles {
-        assert_profile_roundtrips(name, profile);
+    for name in &names {
+        let profile =
+            BrowserProfile::resolve(name).unwrap_or_else(|e| panic!("resolve {name}: {e}"));
+        assert_profile_roundtrips(name, &profile);
     }
 }
 

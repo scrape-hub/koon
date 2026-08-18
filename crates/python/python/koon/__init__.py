@@ -18,7 +18,7 @@ class KoonSync:
 
         from koon import KoonSync
 
-        client = KoonSync("chrome145", proxy="http://user:pass@proxy:8080")
+        client = KoonSync("chrome152", proxy="http://user:pass@proxy:8080")
         resp = client.get("https://httpbin.org/get")
         print(resp.status)
         print(resp.text)

@@ -30,6 +30,9 @@ pub enum Error {
     /// DNS-over-HTTPS resolution error.
     #[cfg(feature = "doh")]
     Dns(String),
+    /// Invalid browser profile configuration (unknown cipher, curve, or
+    /// signature algorithm name).
+    Config(String),
     /// Request timed out.
     Timeout,
     /// Redirect limit exceeded.
@@ -53,6 +56,7 @@ impl fmt::Display for Error {
             Error::WebSocket(e) => write!(f, "WebSocket error: {e}"),
             #[cfg(feature = "doh")]
             Error::Dns(e) => write!(f, "DNS error: {e}"),
+            Error::Config(e) => write!(f, "Invalid profile configuration: {e}"),
             Error::Timeout => write!(f, "Request timed out"),
             Error::TooManyRedirects => write!(f, "Too many redirects"),
         }
@@ -78,6 +82,7 @@ impl Error {
             Error::WebSocket(_) => "WEBSOCKET_ERROR",
             #[cfg(feature = "doh")]
             Error::Dns(_) => "DNS_ERROR",
+            Error::Config(_) => "CONFIG_ERROR",
             Error::Timeout => "TIMEOUT",
             Error::TooManyRedirects => "TOO_MANY_REDIRECTS",
         }

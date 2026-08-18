@@ -8,7 +8,7 @@ use super::BrowserProfile;
 
 /// Chrome browser profile factory.
 ///
-/// Supports Chrome 131–150. TLS/H2/QUIC fingerprint is identical across all
+/// Supports Chrome 131–152. TLS/H2/QUIC fingerprint is identical across all
 /// versions except for the ALPS codepoint (old for ≤134, new for ≥135).
 /// Only User-Agent and sec-ch-ua headers differ per version.
 pub struct Chrome;
@@ -234,26 +234,61 @@ impl Chrome {
         chrome_profile(150, Os::Linux)
     }
 
-    // ========== Chrome Mobile (Android) — latest ==========
+    // ========== Chrome 151 ==========
+    pub fn v151_windows() -> BrowserProfile {
+        chrome_profile(151, Os::Windows)
+    }
+    pub fn v151_macos() -> BrowserProfile {
+        chrome_profile(151, Os::MacOS)
+    }
+    pub fn v151_linux() -> BrowserProfile {
+        chrome_profile(151, Os::Linux)
+    }
+
+    // ========== Chrome 152 ==========
+    pub fn v152_windows() -> BrowserProfile {
+        chrome_profile(152, Os::Windows)
+    }
+    pub fn v152_macos() -> BrowserProfile {
+        chrome_profile(152, Os::MacOS)
+    }
+    pub fn v152_linux() -> BrowserProfile {
+        chrome_profile(152, Os::Linux)
+    }
+
+    // ========== Chrome Mobile (Android) ==========
     pub fn v150_android() -> BrowserProfile {
         chrome_profile(150, Os::Android)
     }
+    pub fn v151_android() -> BrowserProfile {
+        chrome_profile(151, Os::Android)
+    }
+    pub fn v152_android() -> BrowserProfile {
+        chrome_profile(152, Os::Android)
+    }
 
-    /// Latest Chrome profile (currently v150 on Windows).
+    /// Latest Chrome profile (currently v152 on Windows).
     pub fn latest() -> BrowserProfile {
-        Self::v150_windows()
+        Self::v152_windows()
     }
 
-    /// Latest Chrome Mobile profile (currently v150 on Android).
+    /// Latest Chrome Mobile profile (currently v152 on Android).
     pub fn latest_android() -> BrowserProfile {
-        Self::v150_android()
+        Self::v152_android()
     }
+
+    /// Oldest supported Chrome major version.
+    pub const MIN_VERSION: u32 = 131;
+
+    /// Newest supported Chrome major version.
+    pub const LATEST_VERSION: u32 = 152;
 
     /// Resolve a Chrome profile by version number and optional OS.
     pub(super) fn resolve(major: u32, os: Option<&str>) -> Result<BrowserProfile, String> {
-        if !(131..=150).contains(&major) {
+        if !(Self::MIN_VERSION..=Self::LATEST_VERSION).contains(&major) {
+            let (min, max) = (Self::MIN_VERSION, Self::LATEST_VERSION);
             return Err(format!(
-                "Unsupported Chrome version: {major}. Supported: 131-150"
+                "Unsupported Chrome version: {major}. Supported: {min}-{max}"
             ));
         }
         let os = match os {
@@ -264,8 +299,6 @@ impl Chrome {
         };
         Ok(chrome_profile(major, os))
     }
-
-    pub(super) const LATEST_VERSION: u32 = 150;
 }
 
 // ========== Internal: OS enum ==========
@@ -321,14 +354,39 @@ rsa_pkcs1_sha384:\
 rsa_pss_rsae_sha512:\
 rsa_pkcs1_sha512";
 
+// Chromium 150 added the post-quantum ML-DSA schemes (FIPS 204) to the front of
+// signature_algorithms. Verified against Chrome 148/149 (absent) and Chrome 150
+// Chrome 151 stable, Edge 151 stable (present) via ClientHello capture.
+const CHROME_SIGALGS_MLDSA: &str = "\
+mldsa44:\
+mldsa65:\
+mldsa87:\
+ecdsa_secp256r1_sha256:\
+rsa_pss_rsae_sha256:\
+rsa_pkcs1_sha256:\
+ecdsa_secp384r1_sha384:\
+rsa_pss_rsae_sha384:\
+rsa_pkcs1_sha384:\
+rsa_pss_rsae_sha512:\
+rsa_pkcs1_sha512";
+
+/// First Chromium version that advertises ML-DSA signature algorithms.
+pub(super) const CHROMIUM_MLDSA_VERSION: u32 = 150;
+
 const CHROME_CURVES: &str = "X25519MLKEM768:X25519:P-256:P-384";
 
-// Shared TLS config — only ALPS codepoint differs between Chrome ≤134 and ≥135.
+// Shared TLS config — two version-dependent fields: the ALPS codepoint (old for
+// Chrome ≤134, new for ≥135) and the ML-DSA signature algorithms (Chromium ≥150).
 fn chrome_tls(major: u32) -> TlsConfig {
+    let sigalgs = if major >= CHROMIUM_MLDSA_VERSION {
+        CHROME_SIGALGS_MLDSA
+    } else {
+        CHROME_SIGALGS
+    };
     TlsConfig {
         cipher_list: Cow::Borrowed(CHROME_CIPHER_LIST),
         curves: Cow::Borrowed(CHROME_CURVES),
-        sigalgs: Cow::Borrowed(CHROME_SIGALGS),
+        sigalgs: Cow::Borrowed(sigalgs),
         alpn: vec![AlpnProtocol::Http2, AlpnProtocol::Http11],
         alps: Some(AlpsProtocol::Http2),
         alps_use_new_codepoint: major >= 135, // Old 0x4469 for ≤134, new 0x44CD for ≥135
@@ -336,7 +394,10 @@ fn chrome_tls(major: u32) -> TlsConfig {
         max_version: TlsVersion::Tls13,
         grease: true,
         ech_grease: true,
+        // Chrome shuffles its extension order on every handshake, so there is
+        // no fixed order to reproduce.
         permute_extensions: true,
+        extension_order: None,
         ocsp_stapling: true,
         signed_cert_timestamps: true,
         cert_compression: vec![CertCompression::Brotli],

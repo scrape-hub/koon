@@ -167,7 +167,7 @@ impl Koon {
     /// Create a new Koon client.
     ///
     /// @param browser Character string specifying the browser profile
-    ///   (e.g. "chrome145", "firefox148", "safari183", "chromemobile145",
+    ///   (e.g. "chrome152", "firefox154", "safari266", "chromemobile145",
     ///   "firefoxmobile148", "safarimobile183", "okhttp4").
     /// @param profile_json Optional custom browser profile as a JSON string
     ///   (e.g. from `export_profile()`). Overrides `browser` when supplied.
