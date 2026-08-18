@@ -430,14 +430,18 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Node 24: trusted publishing needs npm 11.5.1+, and current npm releases
+      # refuse to install on Node 20.
       - uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "24"
           registry-url: https://registry.npmjs.org
 
-      # Trusted publishing needs npm 11.5.1+; Node 20 ships an older npm.
       - name: Update npm
         run: npm install -g npm@latest
+
+      - name: Show npm version
+        run: npm --version
 
       - name: Download node artifacts
         uses: actions/download-artifact@v5
