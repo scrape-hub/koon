@@ -2,14 +2,14 @@
 
 [![npm](https://img.shields.io/npm/v/koonjs)](https://www.npmjs.com/package/koonjs)
 [![PyPI](https://img.shields.io/pypi/v/koon)](https://pypi.org/project/koon/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/scrape-hub/koon/blob/master/LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/scrape-hub/koon/ci.yml?label=CI)](https://github.com/scrape-hub/koon/actions)
 
 An HTTP client that impersonates real browsers at the TLS, HTTP/2, and HTTP/3 fingerprint level.
 
 Built in Rust on top of BoringSSL with native bindings for **Node.js**, **Python**, **R**, and a **CLI**. Passes Akamai, Cloudflare, and other bot detection systems by reproducing exact browser fingerprints that are verified against real browser captures.
 
-It covers the same ground as curl-impersonate, curl_cffi and tls-client, with one fingerprint engine shared by every binding.
+Every binding uses the same fingerprint engine, so a profile behaves the same from Rust, Node.js, Python, R and the CLI.
 
 ## Install
 
@@ -221,7 +221,7 @@ const r5 = await client.patch('https://httpbin.org/patch', 'data');
 const r6 = await client.head('https://httpbin.org/get');
 
 // User-Agent (useful for Puppeteer/Playwright sync)
-console.log(client.userAgent);  // "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ... Chrome/154..."
+console.log(client.userAgent);  // "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ... Chrome/155..."
 
 // Response
 console.log(r1.ok);                             // true (status 2xx)
@@ -395,7 +395,7 @@ with KoonSync("chrome",                          # latest Chrome on Windows
     client2.load_session(session)
 
     # User-Agent (useful for Puppeteer/Playwright sync)
-    print(client.user_agent)  # "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ... Chrome/154..."
+    print(client.user_agent)  # "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ... Chrome/155..."
 
     # Streaming: the body is read as it arrives, decoded (decode=False for the
     # bytes as sent); leaving the with block (or close()) drops the rest of it
@@ -727,8 +727,8 @@ firefox -> firefox157-windows: match
 ```
 
 - Without `-b` it checks the latest `chrome`, `firefox`, `safari`, `edge`,
-  `opera` and `okhttp`; `-b` takes any profile names (`-b chrome154-linux
-  edge-macos`).
+  `opera`, `brave`, `samsung`, `opera-mobile` and `okhttp`; `-b` takes any
+  profile names (`-b chrome154-linux edge-macos`).
 - A field is `match`, `MISMATCH` (with the expected value), or `not checked`
   with the reason: no reference value (JA3 of browsers that shuffle their
   extensions), not reported by the service (tls.peet.ws has no JA3N), or
@@ -860,4 +860,4 @@ cargo build --release -p koon-cli
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/scrape-hub/koon/blob/master/LICENSE)
