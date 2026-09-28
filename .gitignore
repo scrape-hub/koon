@@ -1,0 +1,74 @@
+/target
+
+# Native binaries
+*.exe
+*.dll
+*.so
+*.dylib
+*.node
+
+# Build artifacts
+*.pdb
+build.log
+# License notices, generated at release time from about.toml and about.hbs
+THIRD-PARTY-LICENSES.md
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+*.stackdump
+
+# Local test/benchmark results
+results/
+
+# Node
+node_modules/
+*.tgz
+
+# Capture tool: downloaded browser binaries (large)
+tools/capture/browsers/
+
+# Python
+__pycache__/
+*.pyc
+*.pyd
+*.egg-info/
+dist/
+.venv/
+
+# R build artifacts
+crates/r/src/entrypoint.o
+crates/r/src/rust/target/
+# R: optional machine-specific bindgen config for direct `cargo` builds.
+# R CMD INSTALL doesn't need it — Makevars.win auto-detects clang/Rtools paths.
+crates/r/src/rust/.cargo/config.toml
+
+# Playwright MCP
+.playwright-mcp/
+
+# Local investigation notes and test scripts (not for repo)
+investigation/
+AKAMAI_INVESTIGATION.md
+FEATURE_REQUESTS.md
+captured-browser-request.json
+/test-*.cjs
+/test_*.cjs
+/test_*.py
+/test_*.sh
+/compare-*.cjs
+todo/
+
+# Capture tool: raw/processed profiles (internal reference data)
+tools/capture/raw/
+tools/capture/profiles/
+tools/
+scripts/
+
+# Machine-specific cargo settings, such as a local linker path
+/.cargo/config.toml

@@ -1,0 +1,56 @@
+{
+  "name": "koonjs",
+  "version": "1.0.0",
+  "description": "Browser-impersonating HTTP client: TLS, HTTP/2 and HTTP/3 fingerprints of Chrome, Firefox, Safari, Edge, Opera, Brave, Samsung Internet and OkHttp. Passes Akamai and Cloudflare fingerprint checks.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "license": "MIT",
+  "author": "scrape-hub",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/scrape-hub/koon.git",
+    "directory": "crates/node"
+  },
+  "homepage": "https://github.com/scrape-hub/koon",
+  "bugs": "https://github.com/scrape-hub/koon/issues",
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "fetch.js",
+    "README.md"
+  ],
+  "optionalDependencies": {
+    "@koonjs/win32-x64-msvc": "1.0.0",
+    "@koonjs/linux-x64-gnu": "1.0.0",
+    "@koonjs/darwin-arm64": "1.0.0",
+    "@koonjs/darwin-x64": "1.0.0"
+  },
+  "scripts": {
+    "build": "node build.js",
+    "test": "node test.cjs",
+    "test:offline": "node test.cjs --offline"
+  },
+  "keywords": [
+    "tls-fingerprint",
+    "browser-impersonation",
+    "http2-fingerprint",
+    "anti-bot",
+    "web-scraping",
+    "akamai",
+    "cloudflare",
+    "ja3",
+    "ja4",
+    "http-client",
+    "proxy",
+    "scraping",
+    "stealth",
+    "curl-impersonate",
+    "boringssl",
+    "http3",
+    "quic",
+    "websocket"
+  ]
+}

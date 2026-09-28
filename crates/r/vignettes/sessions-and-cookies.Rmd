@@ -1,0 +1,163 @@
+---
+title: "Sessions and Cookies"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Sessions and Cookies}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+## Cookie Persistence
+
+Cookies are automatically stored and sent with subsequent requests:
+
+```{r}
+library(koon)
+
+client <- Koon$new("chrome")
+
+# Set a cookie
+client$get("https://httpbin.org/cookies/set/session_id/abc123")
+
+# Cookie is included in the next request
+resp <- client$get("https://httpbin.org/cookies")
+cat(resp$text)
+#> {"cookies": {"session_id": "abc123"}}
+```
+
+Multiple cookies work the same way:
+
+```{r}
+client$get("https://httpbin.org/cookies/set/user/alice")
+client$get("https://httpbin.org/cookies/set/lang/en")
+
+resp <- client$get("https://httpbin.org/cookies")
+jsonlite::fromJSON(resp$text)$cookies
+#> $lang
+#> [1] "en"
+#> $session_id
+#> [1] "abc123"
+#> $user
+#> [1] "alice"
+```
+
+## Inspecting, Importing and Exporting Cookies
+
+`$cookies()` returns the stored cookies as a data frame with the field names
+Playwright and the Chrome DevTools Protocol use:
+
+```{r}
+client$cookies()
+#>         name  value      domain path expires httpOnly secure sameSite hostOnly
+#> 1 session_id abc123 httpbin.org    /      -1    FALSE  FALSE      Lax     TRUE
+#> ...
+```
+
+`$set_cookies()` takes the same shape, so cookies move between koon clients
+and browsers in both directions. For example, to continue a session logged
+in with Playwright, save its cookies with `context.cookies()` to a JSON file
+and import them:
+
+```{r}
+client <- Koon$new("chrome")
+client$set_cookies(jsonlite::fromJSON("playwright-cookies.json"))
+```
+
+A list of named lists works as well. Each cookie needs `name`, `value` and
+either `domain` (a leading dot makes a domain cookie, sent to subdomains
+too) or `url`:
+
+```{r}
+client$set_cookies(list(
+  list(name = "token", value = "xyz", domain = ".example.com", secure = TRUE),
+  list(name = "lang", value = "de", url = "https://www.example.com/")
+))
+```
+
+Every valid cookie is imported. An invalid one (say, a value with a `;`)
+and a partitioned cookie (one with a `partitionKey`, also as the nested
+data frame column `jsonlite::fromJSON()` makes of CDP's key objects, or with
+`partitionKeyOpaque = TRUE`) are skipped; `$set_cookies()` returns those
+invisibly, as a data frame with their `index` in the input, `name` and
+`reason`:
+
+```{r}
+skipped <- client$set_cookies(jsonlite::fromJSON("playwright-cookies.json"))
+skipped
+#> [1] index  name   reason
+#> <0 rows> (or 0-length row.names)
+```
+
+To hand koon's cookies back to a browser,
+write them out with `jsonlite::toJSON(client$cookies())` and pass them to
+Playwright's `context.addCookies()`.
+
+## Saving and Loading Sessions
+
+Save the entire session state (cookies + TLS session tickets) to a JSON string, then restore it later:
+
+```{r}
+# Save session to a variable
+session_json <- client$save_session()
+
+# Save to file for persistence across R sessions
+writeLines(session_json, "my_session.json")
+
+# Later: create a new client and restore the session
+client2 <- Koon$new("chrome")
+client2$load_session(readLines("my_session.json"))
+
+# Cookies are restored
+resp <- client2$get("https://httpbin.org/cookies")
+cat(resp$text)
+```
+
+## Use Case: Login Session
+
+A typical workflow for sites that require authentication:
+
+```{r}
+client <- Koon$new("chrome")
+
+# Step 1: POST login credentials
+login_body <- '{"username": "user", "password": "pass"}'
+resp <- client$post("https://example.com/api/login", login_body,
+  headers = c("Content-Type" = "application/json"))
+
+# Step 2: Session cookies are now stored — subsequent requests are authenticated
+resp <- client$get("https://example.com/api/profile")
+profile <- jsonlite::fromJSON(resp$text)
+
+# Step 3: Save session so you don't have to login again
+writeLines(client$save_session(), "session.json")
+```
+
+Restore the session in a later script:
+
+```{r}
+client <- Koon$new("chrome")
+client$load_session(readLines("session.json"))
+
+# Authenticated request without re-login
+resp <- client$get("https://example.com/api/profile")
+```
+
+## Exporting the Browser Profile
+
+Export the full browser profile (TLS config, HTTP/2 settings, headers) as JSON:
+
+```{r}
+client <- Koon$new("safari")
+profile_json <- client$export_profile()
+cat(substr(profile_json, 1, 200))  # preview first 200 chars
+writeLines(profile_json, "safari_profile.json")
+
+# Use it (or an edited copy) for a new client
+custom <- Koon$new(profile_json = paste(readLines("safari_profile.json"), collapse = "\n"))
+```
+
+This is useful for debugging fingerprint issues or sharing configurations.

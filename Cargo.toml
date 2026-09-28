@@ -1,0 +1,45 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/cli",
+    "crates/node",
+    "crates/python",
+]
+exclude = [
+    "crates/r/src/rust",
+]
+
+# Exclude koon-node from `cargo test` — it's a cdylib that requires Node.js
+# runtime for napi symbol resolution. Running it without Node produces hundreds
+# of "Load Node-API [...] failed" warnings. It has no Rust unit tests anyway.
+default-members = ["crates/core"]
+
+[workspace.package]
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+
+[workspace.lints.clippy]
+type_complexity = "allow"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+
+# BoringSSL is built by CMake with the build type cmake-rs derives from this
+# package's opt-level; 0 gives Debug, which makes every handshake several
+# times slower. Keep it optimised in development builds too.
+[profile.dev.package.btls-sys]
+opt-level = 3
+
+# quinn-btls and h3-quinn build on the crates.io releases of quinn and h3;
+# koon's forks of both replace them in the whole dependency graph.
+[patch.crates-io]
+quinn = { git = "https://github.com/scrape-hub/quinn.git", tag = "koon-1.0.0" }
+quinn-proto = { git = "https://github.com/scrape-hub/quinn.git", tag = "koon-1.0.0" }
+quinn-udp = { git = "https://github.com/scrape-hub/quinn.git", tag = "koon-1.0.0" }
+h3 = { git = "https://github.com/scrape-hub/h3.git", tag = "koon-1.0.0" }
+h3-quinn = { git = "https://github.com/scrape-hub/h3.git", tag = "koon-1.0.0" }

@@ -1,0 +1,111 @@
+[package]
+name = "koon-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Browser-impersonating HTTP client: TLS, HTTP/2 and HTTP/3 fingerprints of Chrome, Firefox, Safari, Edge, Opera, Brave, Samsung Internet and OkHttp. Passes Akamai and Cloudflare fingerprint checks."
+repository = "https://github.com/scrape-hub/koon"
+homepage = "https://github.com/scrape-hub/koon"
+keywords = ["tls-fingerprint", "browser-impersonation", "anti-bot", "web-scraping", "http-client"]
+categories = ["web-programming::http-client", "network-programming"]
+
+[features]
+default = ["socks"]
+socks = ["dep:tokio-socks"]
+# HTTPS/SVCB DNS record support: DNS-over-HTTPS plus ECH, and the plain
+# (non-DoH) query a profile's default configuration uses instead.
+doh = ["dep:hickory-proto", "dep:hickory-resolver"]
+# Exposes crate-internal test-fixture types (currently CertAuthority) as pub, so the
+# integration tests under tests/ can use them as certificate-minting fixtures for local TLS
+# servers. Not for external use; enabled for this crate's own dev-dependency on itself.
+test-util = []
+
+[dependencies]
+# TLS via BoringSSL: koon's btls fork patches BoringSSL for browser
+# ClientHellos, and its quinn-btls is the TLS layer of QUIC.
+btls = { git = "https://github.com/scrape-hub/btls.git", tag = "koon-1.0.0" }
+tokio-btls = { git = "https://github.com/scrape-hub/btls.git", tag = "koon-1.0.0" }
+quinn-btls = { git = "https://github.com/scrape-hub/btls.git", tag = "koon-1.0.0" }
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio"] }
+h3 = "0.0.8"
+h3-quinn = "0.0.10"
+
+# HTTP/2 with frame-level control (koon's http2 fork)
+http2 = { git = "https://github.com/scrape-hub/http2.git", tag = "koon-1.0.0", features = ["unstable"] }
+
+# HTTP types
+http = "1"
+bytes = "1"
+
+# Async runtime
+tokio = { version = "1", features = ["net", "time", "rt", "rt-multi-thread", "macros"] }
+
+# Proxy support
+tokio-socks = { version = "0.5", optional = true }
+
+# Compression/decompression (cert compression + response body)
+brotli = "8"
+flate2 = "1"
+zstd = "0.13"
+
+# Root CA certificates (Mozilla bundle, same as wreq)
+webpki-root-certs = "1"
+
+# Serialization (JSON profile system)
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# HTTP/1.1 response parsing
+httparse = "1"
+
+# WebSocket frame codec (no TLS features — we use our own BoringSSL)
+tungstenite = "0.24"
+tokio-tungstenite = { version = "0.24", default-features = false }
+
+# Async stream utilities (SinkExt, StreamExt for WebSocket)
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+
+# DNS-over-HTTPS (optional) and system nameserver discovery for the plain
+# HTTPS-record query (no DoH client: just the wire format and, on each OS,
+# the way to find the configured nameserver).
+hickory-proto = { version = "0.25", optional = true }
+hickory-resolver = { version = "0.25", optional = true, default-features = false, features = [
+    "system-config",
+    "tokio",
+] }
+
+# Randomness the browsers use too (trust anchor order, ECH GREASE, multipart
+# boundaries, client hint GREASE, DNS and QUIC IDs)
+rand = "0.9"
+
+# Base64 encoding (session export/import)
+base64 = "0.22"
+
+# Character encoding (charset-aware text decoding)
+encoding_rs = "0.8"
+
+# Utilities
+url = "2"
+# Public Suffix List (embedded) for RFC 6265 cookie domain validation
+psl = "2"
+thiserror = "2"
+# LRU cache for the MITM proxy's per-host leaf certificates
+lru = "0.16"
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+# "full" does not include "test-util" (tokio deliberately keeps it out): paused/advanced time
+# (`#[tokio::test(start_paused = true)]`, `tokio::time::advance`) needs it added explicitly.
+tokio = { version = "1", features = ["full", "test-util"] }
+# Temporary directories the tests remove again, also when they fail
+tempfile = "3"
+# Builds the DNS HTTPS-record answers of tests/https_rr.rs's fake nameserver
+# (the crate's own copy is behind the optional "doh" feature).
+hickory-proto = "0.25"
+# Self-dependency with the "test-util" feature enabled: lets the integration tests under
+# tests/ use CertAuthority (crate-internal otherwise) as a certificate-minting fixture, the
+# same way the crate's own unit tests can.
+koon-core = { path = ".", features = ["test-util"] }

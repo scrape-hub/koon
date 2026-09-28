@@ -1,0 +1,66 @@
+TARGET = $(subst 64,x86_64,$(subst 32,i686,$(WIN)))-pc-windows-gnu
+TARGET_DIR = ./rust/target
+LIBDIR = $(TARGET_DIR)/$(TARGET)/release
+STATLIB = $(LIBDIR)/libkoon_r.a
+# -lstdc++ is required because BoringSSL (pulled in via koon_r) contains C++ code
+# whose SEH exception personality (__gxx_personality_seh0) lives in libstdc++.
+PKG_LIBS = -L$(LIBDIR) -lkoon_r -lstdc++ -lws2_32 -lbcrypt -luserenv -lntdll -lcrypt32 -lsecur32 -liphlpapi
+
+# Tools paths (forward slashes for MSYS2 shell)
+CARGO_BIN = $(subst \,/,$(USERPROFILE))/.cargo/bin
+
+# bindgen include paths — auto-detected from the installed LLVM and Rtools so
+# the build survives toolchain upgrades instead of pinning clang/gcc/rtools
+# versions. Picks the highest installed version of each. 8.3 short names avoid
+# spaces in paths.
+# Note: make's $(wildcard) can't glob a `*` in the first path segment at the
+# drive root (C:/rtools* returns nothing), so Rtools is located via $(shell ls);
+# clang and gcc use $(wildcard) since their `*` sits in a deep segment.
+CLANG_INC = $(lastword $(sort $(wildcard C:/PROGRA~1/LLVM/lib/clang/*/include)))
+RTOOLS_MINGW = $(shell ls -d C:/rtools*/x86_64-w64-mingw32.static.posix | sort | tail -1)
+MINGW_INC = $(RTOOLS_MINGW)/include
+GCC_INC = $(lastword $(sort $(wildcard $(RTOOLS_MINGW)/lib/gcc/x86_64-w64-mingw32.static.posix/*/include)))
+BINDGEN_ARGS = --target=x86_64-pc-windows-gnu -isystem $(CLANG_INC) -isystem $(GCC_INC) -isystem $(MINGW_INC)
+
+# rustc's own linker (not just the C compiler cc-rs picks via CC_*) defaults to the
+# cross-prefixed `x86_64-w64-mingw32-gcc`, which this toolchain does not have; only
+# needed to link an actual binary (document.rs below), not the staticlib itself.
+CARGO_TARGET_ENV = $(shell echo $(TARGET) | tr 'a-z-' 'A-Z_')
+
+# As in the rextendr template: cargo runs on every install and decides what
+# to rebuild, and the shared library is linked after it. Only prerequisites
+# order the steps, so a parallel make (MAKEFLAGS=-jN) builds the same.
+all: $(SHLIB)
+
+.PHONY: $(STATLIB)
+
+$(SHLIB): $(STATLIB)
+
+$(STATLIB):
+	mkdir -p $(TARGET_DIR)/libgcc_mock
+	cd $(TARGET_DIR)/libgcc_mock && \
+		touch gcc_mock.c && \
+		gcc -c gcc_mock.c -o gcc_mock.o && \
+		ar -r libgcc_eh.a gcc_mock.o
+	PATH="$(CARGO_BIN):$(RTOOLS_MINGW)/bin:/c/PROGRA~1/Git/cmd:$(PATH)" \
+	CC_$(subst -,_,$(TARGET))=gcc \
+	CXX_$(subst -,_,$(TARGET))=g++ \
+	AR_$(subst -,_,$(TARGET))=ar \
+	BINDGEN_EXTRA_CLANG_ARGS="$(BINDGEN_ARGS)" \
+		cargo build --lib --release --manifest-path=./rust/Cargo.toml --target $(TARGET) --target-dir $(TARGET_DIR)
+	# Regenerates R/extendr-wrappers.R from the just-built metadata (document.rs), so
+	# R CMD INSTALL, devtools::document() and rextendr::document() all keep it current.
+	# Unlike the staticlib above, an actual binary needs a full link: gcc as the
+	# linker (like CC_* above) and the libgcc_eh mock (BoringSSL's C++ exception
+	# personality needs -lstdc++, which needs -lgcc_eh, which this toolchain lacks).
+	PATH="$(CARGO_BIN):$(RTOOLS_MINGW)/bin:/c/PROGRA~1/Git/cmd:$(PATH)" \
+	CC_$(subst -,_,$(TARGET))=gcc \
+	CXX_$(subst -,_,$(TARGET))=g++ \
+	AR_$(subst -,_,$(TARGET))=ar \
+	BINDGEN_EXTRA_CLANG_ARGS="$(BINDGEN_ARGS)" \
+	CARGO_TARGET_$(CARGO_TARGET_ENV)_LINKER=gcc \
+	LIBRARY_PATH="$(CURDIR)/$(TARGET_DIR)/libgcc_mock" \
+		cargo run --release --manifest-path=./rust/Cargo.toml --target $(TARGET) --target-dir $(TARGET_DIR) --bin document
+
+clean:
+	rm -Rf $(SHLIB) $(STATLIB) $(OBJECTS) $(TARGET_DIR)

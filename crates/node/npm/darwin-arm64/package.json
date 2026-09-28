@@ -1,0 +1,12 @@
+{
+  "name": "@koonjs/darwin-arm64",
+  "version": "1.0.0",
+  "os": ["darwin"],
+  "cpu": ["arm64"],
+  "main": "koon.darwin-arm64.node",
+  "files": ["koon.darwin-arm64.node", "THIRD-PARTY-LICENSES.md"],
+  "license": "MIT",
+  "author": "scrape-hub",
+  "description": "koonjs native binding for macOS arm64 (Apple Silicon)",
+  "repository": { "type": "git", "url": "https://github.com/scrape-hub/koon.git" }
+}

@@ -1,0 +1,249 @@
+# cargo-about configuration for THIRD-PARTY-LICENSES.md, the license notices
+# shipped with the npm packages, the Python wheels and the CLI binaries:
+#
+#   cargo about generate --fail -m crates/node/Cargo.toml -o THIRD-PARTY-LICENSES.md about.hbs
+#
+# (cargo-about 0.9 installs with `cargo install cargo-about --locked --features cli`.)
+# The release workflow runs it for crates/node, crates/python and crates/cli.
+# Code and data that Cargo does not track (BoringSSL, the Chrome Root Store)
+# are fixed sections of about.hbs.
+
+# Licenses the dependency tree actually uses; anything else fails the run and
+# needs a review. Order is priority: for "MIT OR Apache-2.0" MIT is chosen.
+accepted = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "CDLA-Permissive-2.0",
+]
+# The release targets.
+targets = [
+    "x86_64-pc-windows-msvc",
+    "x86_64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+]
+# Build scripts, bindgen and cmake are not part of the binary.
+ignore-build-dependencies = true
+ignore-dev-dependencies = true
+# koon-r (publish = false) has no license field; the R package is MIT.
+private = { ignore = true }
+
+# Clarifications: crates whose license texts are not found by scanning the
+# crate directory. A clarification is only used while every checksum matches;
+# on a mismatch cargo-about warns ("failed to validate all files specified in
+# clarification") and falls back to the canonical text without copyright
+# lines, so review the changed file and update the checksum.
+#
+# Checksums are over the files as Git stores them (LF). A Windows checkout
+# with CRLF line endings does not match; generate on Linux, as the release
+# workflow does.
+
+# koon's own crates: the LICENSE sits at the repository root.
+[koon-core.clarify]
+license = "MIT"
+[[koon-core.clarify.files]]
+path = "../../LICENSE"
+checksum = "87f1cedcecadeba526a83385054db817d54d2fa580c78d5522f733fc54697b49"
+
+[koon-cli.clarify]
+license = "MIT"
+[[koon-cli.clarify.files]]
+path = "../../LICENSE"
+checksum = "87f1cedcecadeba526a83385054db817d54d2fa580c78d5522f733fc54697b49"
+
+[koon-node.clarify]
+license = "MIT"
+[[koon-node.clarify.files]]
+path = "../../LICENSE"
+checksum = "87f1cedcecadeba526a83385054db817d54d2fa580c78d5522f733fc54697b49"
+
+[koon-python.clarify]
+license = "MIT"
+[[koon-python.clarify.files]]
+path = "../../LICENSE"
+checksum = "87f1cedcecadeba526a83385054db817d54d2fa580c78d5522f733fc54697b49"
+
+# h3 fork: the client fingerprint ports code from Google's QUICHE (BSD-3-Clause)
+# and Mozilla's neqo (used under MIT). The fork keeps the notice and the
+# license texts at its repository root.
+[h3.clarify]
+license = "MIT AND BSD-3-Clause"
+[[h3.clarify.files]]
+path = "../LICENSE"
+license = "MIT"
+checksum = "a0d039cdafe68f363893abddb5e4d50dbe6f8b56611e2650aaab4237103285f1"
+[[h3.clarify.files]]
+path = "../licenses/neqo-LICENSE-MIT"
+license = "MIT"
+checksum = "4ad721b5b6a3d39ca3e2202f403d897c4a1d42896486dd58963a81f8e64ef61d"
+[[h3.clarify.files]]
+path = "../licenses/quiche-LICENSE"
+license = "BSD-3-Clause"
+checksum = "845022e0c1db1abb41a6ba4cd3c4b674ec290f3359d9d3c78ae558d4c0ed9308"
+[[h3.clarify.files]]
+path = "../THIRD-PARTY-NOTICES.md"
+license = "BSD-3-Clause"
+checksum = "a42ded452b3147ea25c36573c287a38bc82138b883d7ead4abd67476295e6a36"
+
+# quinn fork: quinn-proto translates parts of QUICHE and neqo, same layout.
+[quinn-proto.clarify]
+license = "(MIT OR Apache-2.0) AND BSD-3-Clause"
+[[quinn-proto.clarify.files]]
+path = "../LICENSE-MIT"
+license = "MIT"
+checksum = "4b2d0aca6789fa39e03d6738e869ea0988cceba210ca34ebb59c15c463e93a04"
+[[quinn-proto.clarify.files]]
+path = "../licenses/neqo-LICENSE-MIT"
+license = "MIT"
+checksum = "4ad721b5b6a3d39ca3e2202f403d897c4a1d42896486dd58963a81f8e64ef61d"
+[[quinn-proto.clarify.files]]
+path = "../licenses/quiche-LICENSE"
+license = "BSD-3-Clause"
+checksum = "845022e0c1db1abb41a6ba4cd3c4b674ec290f3359d9d3c78ae558d4c0ed9308"
+[[quinn-proto.clarify.files]]
+path = "../THIRD-PARTY-NOTICES"
+license = "BSD-3-Clause"
+checksum = "d8a5776ffe3df5536b59d74e7106f008814c699e91539d97bcf40a776dedadea"
+
+# psl compiles in the Public Suffix List (data/rules.txt, MPL-2.0), which its
+# declared license does not cover. MPL-2.0 is accepted for psl only; any other
+# MPL crate still fails the run. The crate has no MPL text, so cargo-about
+# falls back to its built-in one; about.hbs prints the text from mozilla.org
+# and the MPL 3.2 source notice in a fixed section instead.
+[psl]
+accepted = ["MPL-2.0"]
+
+[psl.clarify]
+license = "(MIT OR Apache-2.0) AND MPL-2.0"
+[[psl.clarify.files]]
+path = "LICENSE"
+license = "MIT"
+checksum = "f09adf500d35265ee63ef552f8e61487e09ee549da66eaf0ec7924e3ad7cf14b"
+
+# zstd-sys compiles the bundled zstd C library (BSD-3-Clause OR GPL-2.0-only,
+# used under BSD-3-Clause), which its declared license does not cover.
+[zstd-sys.clarify]
+license = "(MIT OR Apache-2.0) AND BSD-3-Clause"
+[[zstd-sys.clarify.files]]
+path = "LICENSE.Mit"
+license = "MIT"
+checksum = "129e8edef29e9abcd2ebabe252f4ef1b1289cdca356bf0040284a2fbccfb96c8"
+[[zstd-sys.clarify.files]]
+path = "zstd/LICENSE"
+license = "BSD-3-Clause"
+checksum = "7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8"
+[[zstd-sys.clarify.files]]
+path = "LICENSE.BSD-3-Clause"
+license = "BSD-3-Clause"
+checksum = "48341f685c87304089aa099b23c386f8bacc519ef555aa7a13e239908907b3fd"
+
+# brotli ships only its MIT text; the BSD-3-Clause text is in the repository.
+[brotli.clarify]
+license = "BSD-3-Clause AND MIT"
+[[brotli.clarify.files]]
+path = "LICENSE.MIT"
+license = "MIT"
+checksum = "3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94"
+[[brotli.clarify.git]]
+path = "LICENSE.BSD-3-Clause"
+license = "BSD-3-Clause"
+checksum = "c0c56f26d9c051cac4d200c34c84e7ae9aaa853e01a982a1df08b09931e518ae"
+
+[alloc-stdlib.clarify]
+license = "BSD-3-Clause"
+[[alloc-stdlib.clarify.git]]
+path = "LICENSE"
+checksum = "c0c56f26d9c051cac4d200c34c84e7ae9aaa853e01a982a1df08b09931e518ae"
+
+# "BSD-3-Clause/MIT": the package only contains the BSD-3-Clause text.
+[brotli-decompressor.clarify]
+license = "BSD-3-Clause"
+[[brotli-decompressor.clarify.files]]
+path = "LICENSE"
+checksum = "c0c56f26d9c051cac4d200c34c84e7ae9aaa853e01a982a1df08b09931e518ae"
+
+# napi-rs packages its crates without a license file.
+[napi.clarify]
+license = "MIT"
+[[napi.clarify.git]]
+path = "LICENSE"
+checksum = "3f1ce66533302df3a32edbfdfc0b78f0dd34659e4c1f5817162e5ea3c2297215"
+
+[napi-sys.clarify]
+license = "MIT"
+[[napi-sys.clarify.git]]
+path = "LICENSE"
+checksum = "3f1ce66533302df3a32edbfdfc0b78f0dd34659e4c1f5817162e5ea3c2297215"
+
+[napi-derive.clarify]
+license = "MIT"
+[[napi-derive.clarify.git]]
+path = "LICENSE"
+checksum = "3f1ce66533302df3a32edbfdfc0b78f0dd34659e4c1f5817162e5ea3c2297215"
+
+[napi-derive-backend.clarify]
+license = "MIT"
+[[napi-derive-backend.clarify.git]]
+path = "LICENSE"
+checksum = "3f1ce66533302df3a32edbfdfc0b78f0dd34659e4c1f5817162e5ea3c2297215"
+
+# extendr (R bindings) packages its crates without a license file.
+[extendr-api.clarify]
+license = "MIT"
+[[extendr-api.clarify.git]]
+path = "LICENSE"
+checksum = "fb9c2cccbdcb61ea51e0d553a6474297031544104985279c5c32d25c5c99977e"
+
+[extendr-ffi.clarify]
+license = "MIT"
+[[extendr-ffi.clarify.git]]
+path = "LICENSE"
+checksum = "fb9c2cccbdcb61ea51e0d553a6474297031544104985279c5c32d25c5c99977e"
+
+[extendr-macros.clarify]
+license = "MIT"
+[[extendr-macros.clarify.git]]
+path = "LICENSE"
+checksum = "fb9c2cccbdcb61ea51e0d553a6474297031544104985279c5c32d25c5c99977e"
+
+# The windows crates name their license files license-mit, which the scan
+# does not pick up.
+[windows-sys.clarify]
+license = "MIT OR Apache-2.0"
+[[windows-sys.clarify.files]]
+path = "license-mit"
+license = "MIT"
+checksum = "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+
+[windows-targets.clarify]
+license = "MIT OR Apache-2.0"
+[[windows-targets.clarify.files]]
+path = "license-mit"
+license = "MIT"
+checksum = "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+
+[windows_x86_64_msvc.clarify]
+license = "MIT OR Apache-2.0"
+[[windows_x86_64_msvc.clarify.files]]
+path = "license-mit"
+license = "MIT"
+checksum = "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+
+[windows_x86_64_gnu.clarify]
+license = "MIT OR Apache-2.0"
+[[windows_x86_64_gnu.clarify.files]]
+path = "license-mit"
+license = "MIT"
+checksum = "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+
+[windows-link.clarify]
+license = "MIT OR Apache-2.0"
+[[windows-link.clarify.files]]
+path = "license-mit"
+license = "MIT"
+checksum = "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"

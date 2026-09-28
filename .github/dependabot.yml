@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # Keeps the actions of the workflows and of the composite action current,
+  # in one weekly pull request.
+  - package-ecosystem: "github-actions"
+    directories:
+      - "/"
+      - "/.github/actions/setup-windows"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions:
+        patterns: ["*"]

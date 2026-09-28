@@ -1,0 +1,56 @@
+name: Build macOS arm64
+
+# Manual rebuild of the darwin-arm64 binary for an existing release. The regular
+# release workflow builds and publishes this artifact itself; this one only
+# uploads to a release, since npm trusted publishing binds each package to a
+# single workflow (release.yml).
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to upload the binary to (e.g. v0.8.1)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build-node-macos-arm64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          registry-url: https://registry.npmjs.org
+
+      - name: Build
+        run: cargo build --release -p koon-node --target aarch64-apple-darwin
+
+      - name: Rename node binary
+        run: |
+          cp "target/aarch64-apple-darwin/release/libkoon_node.dylib" \
+             koon.darwin-arm64.node
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ inputs.tag }}" koon.darwin-arm64.node --clobber

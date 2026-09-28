@@ -1,0 +1,40 @@
+# Linux and macOS (Makevars.win builds on Windows).
+TARGET_DIR = ./rust/target
+LIBDIR = $(TARGET_DIR)/release
+STATLIB = $(LIBDIR)/libkoon_r.a
+
+# The system libraries the Rust staticlib needs: the Rust standard
+# library's (libgcc_s, libpthread, ... on Linux; libSystem, libiconv on
+# macOS), BoringSSL's C++ runtime (libstdc++ on Linux, libc++ on macOS) and
+# on macOS the frameworks of its dependencies. BoringSSL itself is inside the
+# staticlib. rustc lists them when it links the staticlib
+# (--print native-static-libs); the list is read here when the shared
+# library is linked, after the staticlib is built. It lives in the target
+# directory because cargo relinks the staticlib only when it recompiles it.
+# The list's -lR (from libR-sys) is left out: R links packages against
+# itself, on macOS as a framework, where a plain -lR is not found.
+NATIVE_LIBS = $(LIBDIR)/native-static-libs.txt
+PKG_LIBS = -L$(LIBDIR) -lkoon_r $(filter-out -lR,$(shell cat $(NATIVE_LIBS) 2>/dev/null))
+
+CARGO_ARGS = --lib --release --manifest-path=./rust/Cargo.toml --target-dir $(TARGET_DIR)
+
+# As in the rextendr template: cargo runs on every install and decides what
+# to rebuild, and the shared library is linked after it. Only prerequisites
+# order the steps, so a parallel make (MAKEFLAGS=-jN) builds the same.
+all: $(SHLIB)
+
+.PHONY: $(STATLIB)
+
+$(SHLIB): $(STATLIB)
+
+# Without the list (a target directory from an older build), koon-r is
+# rebuilt so that rustc writes it again.
+$(STATLIB):
+	test -s $(NATIVE_LIBS) || cargo clean --release -p koon-r --manifest-path=./rust/Cargo.toml --target-dir $(TARGET_DIR)
+	cargo rustc $(CARGO_ARGS) -- --print native-static-libs=$(CURDIR)/$(NATIVE_LIBS)
+	# Regenerates R/extendr-wrappers.R from the just-built metadata (document.rs), so
+	# R CMD INSTALL, devtools::document() and rextendr::document() all keep it current.
+	cargo run --release --manifest-path=./rust/Cargo.toml --target-dir $(TARGET_DIR) --bin document
+
+clean:
+	rm -Rf $(SHLIB) $(STATLIB) $(OBJECTS) $(TARGET_DIR)
