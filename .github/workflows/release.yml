@@ -528,7 +528,9 @@ jobs:
         with:
           r-version: release
 
+      # bash: PowerShell, the default on Windows, reads R as its Invoke-History alias
       - name: Build the binary package
+        shell: bash
         run: R CMD INSTALL --build crates/r
 
       - name: Upload R package
