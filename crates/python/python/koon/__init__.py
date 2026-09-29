@@ -17,6 +17,7 @@ from koon._native import (
     _Client,
     _Mode,
     _verify,
+    __version__,
     browsers,
 )
 

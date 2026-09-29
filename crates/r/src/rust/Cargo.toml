@@ -21,7 +21,9 @@ path = "document.rs"
 # result_condition: a returned Err becomes an R condition object instead of a
 # panic, which R/koon.R raises as a classed koon error.
 extendr-api = { version = "0.8", features = ["result_condition"] }
-koon-core = { path = "../../../core", features = ["doh"] }
+# A copy of crates/core that bootstrap.R keeps in sync, so a source package
+# built from crates/r contains it (koon-core lives outside the package).
+koon-core = { path = "vendor/koon-core", features = ["doh"] }
 tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "macros"] }
 
 # koon's forks of quinn and h3 replace the crates.io releases, as in the

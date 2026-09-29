@@ -7,7 +7,7 @@
 
 An HTTP client that impersonates real browsers at the TLS, HTTP/2, and HTTP/3 fingerprint level.
 
-Built in Rust on top of BoringSSL with native bindings for **Node.js**, **Python**, **R**, and a **CLI**. Passes Akamai, Cloudflare, and other bot detection systems by reproducing exact browser fingerprints that are verified against real browser captures.
+Built in Rust on top of BoringSSL with native bindings for **Node.js**, **Python**, **R**, and a **CLI**. Bot detection from Akamai, Cloudflare and others judges a client first by how it connects; koon connects exactly like the browser it names, checked against captures from the real browsers.
 
 Every binding uses the same fingerprint engine, so a profile behaves the same from Rust, Node.js, Python, R and the CLI.
 
@@ -27,7 +27,12 @@ pip install "koon[requests]"   # with the requests adapter's dependency
 
 **R**
 ```r
-# Install from source (requires Rust toolchain)
+# Windows, or macOS on Apple silicon, with R 4.6: the prebuilt package of the release
+install.packages("https://github.com/scrape-hub/koon/releases/download/v1.0.1/koon_1.0.1.zip", repos = NULL)  # Windows
+install.packages("https://github.com/scrape-hub/koon/releases/download/v1.0.1/koon_1.0.1.tgz", repos = NULL)  # macOS
+
+# Other platforms and R versions build from source: Rust 1.85+ and CMake, on
+# Windows also Rtools, LLVM and `rustup target add x86_64-pc-windows-gnu`
 remotes::install_github("scrape-hub/koon", subdir = "crates/r")
 ```
 
@@ -35,6 +40,8 @@ remotes::install_github("scrape-hub/koon", subdir = "crates/r")
 ```bash
 cargo install --git https://github.com/scrape-hub/koon koon-cli
 ```
+
+**Claude Code**: [koon-mcp](https://github.com/scrape-hub/koon-mcp) fetches web pages and PDFs for Claude through koon.
 
 ## Quick start
 
@@ -92,11 +99,30 @@ koon reproduces three fingerprint layers that bot detection systems check:
 | **HTTP/2** | SETTINGS, WINDOW_UPDATE, pseudo-header order, stream IDs, HEADERS priorities, HPACK encoding, TLS record layout, PING and close | Forked h2 crate reproducing Chrome's, Firefox's, Safari's and OkHttp's frame layout (Akamai hash verified) |
 | **HTTP/3** | QUIC ClientHello, transport parameters and their order, packet layout (packet numbers, padding, CRYPTO framing, ACKs), HTTP/3 SETTINGS, QPACK, connection close | Forked quinn + h3 reproducing Chrome's (quiche), Firefox's (neqo) and Safari's (Apple) stacks; QUIC JA4 verified |
 
-All fingerprints are tested against real browsers: the fingerprint test connects with every version at the edge of a fingerprint change (Chrome, Firefox, Safari, Edge, Opera, Opera Mobile, Brave, Samsung Internet and OkHttp) and checks JA4, JA3N, the exact JA3 where the browser has a fixed extension order, and the Akamai HTTP/2 hash against captures from the real browser. Offline tests record koon's own ClientHello (full and resumed handshakes), decrypt its QUIC Initial packets and compare them with Chrome, Firefox and Safari captures, and check request headers byte for byte against browser captures.
+Every fingerprint change of every browser is checked against captures from the real browser: JA4, JA3N, JA3 and the Akamai HTTP/2 hash over the network, the raw ClientHello, the decrypted QUIC packets and the request headers byte for byte offline. `koon verify` runs the network check against your installed koon, also through your proxy (see [Fingerprint self-test](#fingerprint-self-test)).
 
-You can run that check yourself: `koon verify` compares what your installed koon sends with the real browsers' fingerprints, also through your proxy (see [Fingerprint self-test](#fingerprint-self-test)).
+## Why koon
 
-Pick profiles without a version (`chrome`, `firefox`) unless you need a specific one: a pinned version drifts away from what real users run.
+**Gets the page where plain HTTP clients are turned away.** Bot protection checks how a client connects before it looks at anything else. Python's `requests` and Node's `fetch` fail that check on many of the sites people scrape; koon passes it:
+
+| Site | Python `requests` | Node.js `fetch` | koon |
+|---|---|---|---|
+| indeed.com | 403 | 403 | 200 |
+| bloomberg.com | 403 | 403 | 200 |
+| reuters.com | 401 | 401 | 200 |
+| tripadvisor.com | 403 | 403 | 200 |
+| expedia.com | 429 | 429 | 200 |
+| stockx.com | 403 | 403 | 200 |
+| upwork.com | 403 | 403 | 200 |
+| investing.com | 403 | 403 | 200 |
+
+**Always the current browser.** Sites turn away browsers that are a few months out of date: American Airlines, Emirates and Hilton let in today's Firefox and not last spring's. koon follows the newest Chrome, Firefox and Safari, and `chrome` or `firefox` without a version always means the newest one koon knows.
+
+## Limits
+
+koon does not run JavaScript. A site that puts a JavaScript challenge first (Akamai, DataDome, AWS WAF, Kasada, PerimeterX) needs a real browser once: hand its cookies to koon with `setCookies()` (`set_cookies()` in Python and R) and koon usually carries on from there.
+
+Pick proxies whose operating system matches the profile. Bot protection compares the TCP/IP fingerprint of a connection (TTL, TCP window size and options) with the OS the browser claims; that layer comes from the kernel of the machine or proxy that opens the TCP connection, not from koon. A Windows Chrome profile through a Linux datacenter proxy is a mismatch no HTTP client can hide.
 
 ## Supported browsers
 
@@ -134,55 +160,27 @@ Chrome Mobile and Firefox Mobile send their desktop counterpart's fingerprint wi
 
 ## Features
 
-- **TLS fingerprint**: cipher list, curves, sigalgs, extension order, GREASE, ALPS, ECH GREASE, cert compression, delegated credentials, trust anchor IDs from the Chrome Root Store
-- **Fingerprint self-test**: `koon verify` (`Koon.verify()` in Node, `koon.verify()` in Python) checks JA4, JA3N, JA3, the Akamai HTTP/2 fingerprint and the QUIC JA4 your installed koon produces against the values captured from the real browsers, directly or through your proxy
-- **HTTP/2 fingerprint**: SETTINGS order, pseudo-header order, window sizes and when WINDOW_UPDATEs go out, stream IDs, HEADERS priorities and dependencies, the browser's HPACK encoder, TLS record layout, PING timing and the close
-- **HTTP/3 (QUIC)**: Chrome's, Firefox's and Safari's QUIC stacks reproduced on the wire; HTTP/3 discovery from Alt-Svc and, on the very first connection to a host, from its DNS HTTPS record's `alpn` (like real browsers do without DoH too); QUIC racing TCP like Chrome, or straight to QUIC like Safari, with fallback to TCP; 0-RTT for safe requests on resumed connections (Safari sends only its SETTINGS early, as the real one does), H3 connection pooling
-- **Browser header layout**: header order, casing and values as captured from Chrome, Firefox and Safari: navigations, form posts, fetch() calls and WebSocket handshakes, over HTTP/1.1, HTTP/2 and HTTP/3; cookie, referer, origin and your own headers land where the browser puts them
-- **Client hints**: Chrome, Edge, Opera, Brave, Samsung Internet and Opera Mobile profiles send the User-Agent, device and network client hints an origin asks for (ALPS ACCEPT_CH over HTTP/2 and HTTP/3, `Accept-CH`, `Critical-CH`), with Chromium's rounding, and fetch() and subresource requests in the hash order of Blink's header map, as Chromium does
-- **Chrome's field trials**: like a slice of real Chrome 151+ installations, a client may be enrolled in Chrome's variable handshake-padding trial and ask servers to pad the handshake; each koon client draws once, matching the trial's real group weights, or pin the group yourself (`serverPadding` in Node, `server_padding` in Python and R, `--server-padding` in the CLI, shared with `koon verify`)
-- **Response body cap**: `maxResponseBody`/`max_response_body` (100 MiB by default, `0` disables it) fails a response with `BODY_ERROR` instead of buffering an unbounded or malicious server's response, decompression bombs included; `--max-response-body` in the CLI
-- **Request headers on every response**: `requestHeaders` shows exactly what was sent, including HTTP/2 and HTTP/3 pseudo-headers
-- **Plain HTTP**: `http://` URLs with the header set browsers use for insecure origins; absolute-form requests through HTTP proxies
-- **Encrypted Client Hello**: real ECH over TCP and QUIC from DNS HTTPS records, read over DNS-over-HTTPS or, as Chrome and Firefox do by default, with a plain query to the system's nameserver (Firefox on macOS up to 150 only over DoH); Chromium profiles ignore a record whose `port` differs from the request's, as Chrome does; otherwise ECH GREASE in the browser's shape where the browser sends it. Safari and OkHttp send no ECH, over either transport. Firefox's ClientHelloOuter over QUIC carries a reduced transport-parameter set, matching real Firefox; Chrome's keeps the full set
-- **DNS-over-HTTPS**: Cloudflare and Google resolvers with ECH config discovery
-- **HTTP/3 discovery from DNS HTTPS records**: queried over DoH when configured, otherwise (matching a browser's own default configuration) over a plain query to the system's configured nameserver, retried over TCP when the UDP answer comes back truncated (as system resolvers and browsers do); needs the `doh` feature
-- **TLS session resumption**: session tickets per origin and proxy, used once, as in browsers; over TCP and QUIC
-- **Certificate verification**: against Mozilla's roots plus every trust anchor of the Chrome Root Store, so chains servers shorten for Chrome verify too
-- **Cookie jar**: automatic persistence with domain/path/expiry/Secure/HttpOnly/SameSite, `__Host-`/`__Secure-` prefixes and public-suffix protection
-- **Cookie import/export**: `setCookies()` / `cookies()` take and return Playwright/CDP cookie objects; invalid cookies are skipped and reported with the reason
-- **Proxy**: HTTP, HTTPS and SOCKS5; through a proxy, requests use HTTP/2 or HTTP/1.1 (HTTP/3 goes direct only). HTTPS proxies are verified like any server, with extra CAs if needed (`proxyCaCerts`, like curl's `--proxy-cacert`); koon never falls back to plain text
-- **MITM proxy server**: local proxy that re-sends all traffic through koon's fingerprinted stack; refuses to bind a non-loopback address unless `allowNonLoopback`/`allow_non_loopback` (`--allow-non-loopback`) is set, `auth`/`--auth` requires `Proxy-Authorization` from clients, and `maxConnections`/`max_connections` (`--max-connections`, default 512) bounds concurrent connections
-- **WebSocket**: `wss://` and `ws://` with the browser's TLS and handshake; over HTTP/2 (RFC 8441) where the browser uses it (Chrome, Edge, Opera and Safari 26+ on an existing HTTP/2 connection whose server enables extended CONNECT, Firefox on HTTP/2 connections of its own), HTTP/1.1 otherwise; send and receive concurrently
-- **Streaming responses**: body read on demand with backpressure and decoded as it arrives (`decode: false` / `decode=False` for the raw bytes); redirects and cookies handled like regular requests
-- **Streaming uploads**: request bodies from a stream without holding them in memory (Rust `Body::stream`; the CLI streams `-d @file` from disk)
-- **Multipart form-data**: file uploads with custom content types and the browser's boundary format
-- **Per-request options**: headers, timeout, proxy, redirect following and hooks per request, without affecting the client
-- **Ergonomic response API**: `ok`, `text()`, `json()`, `header()` on every response
-- **Session persistence**: save/load cookies and TLS session tickets to JSON
-- **Response decompression**: gzip, brotli, deflate, zstd (automatic)
-- **Local address binding**: bind outgoing connections to a specific local IP (multi-IP servers, IP rotation)
-- **Connection pooling**: H3 multiplexed + H2 multiplexed + H1.1 keep-alive
-- **Custom redirect hook**: `onRedirect(status, url, headers)`, returning a bool, intercepts and stops redirects (captcha detection, geo-block handling), per client or per request
-- **Automatic retry**: retry on transport errors with automatic proxy rotation; a request that may already have been processed (POST) is never sent twice
-- **Request hooks**: `onRequest`/`onResponse` callbacks for logging and guards; a hook that throws fails the request with its own error, and a failing `onRequest` sends nothing
-- **Proxy rotation**: round-robin over multiple proxy URLs, proxy-aware connection pool
-- **Bandwidth tracking**: per-request `bytesSent`/`bytesReceived` + cumulative counters on the client
-- **String body**: `post()`, `put()`, `patch()` accept strings directly (no `Buffer.from()` needed)
-- **User-Agent property**: `client.userAgent` exposes the profile UA for Puppeteer/Playwright sync
-- **Geo-locale matching**: `locale: 'fr-FR'` generates Accept-Language matching proxy geography
-- **Structured errors**: machine-readable code on every koon error, as `code` and as a `[CODE]` message prefix (TIMEOUT, TLS_ERROR, PROXY_ERROR, etc.)
-- **Connection info**: `resp.tlsResumed` and `resp.connectionReused` for debugging connection behavior
-- **CONNECT proxy headers**: custom headers in the HTTP CONNECT tunnel (session IDs, geo-targeting for Bright Data, Oxylabs)
-- **IPv4/IPv6 toggle**: restrict DNS resolution to a specific IP version
-- **Host pinning**: `resolve` sends a hostname to a fixed address, like curl's `--resolve host:port:address`
-- **Key logging**: set `SSLKEYLOGFILE` to write TLS secrets (TCP, QUIC and DoH) for Wireshark; anyone who can read that file can decrypt the traffic
+- **Fingerprints on every layer**: TLS, HTTP/2 and HTTP/3 as in the table above; header order, casing and values of navigations, form posts, fetch() calls and WebSocket handshakes, with cookie, referer, origin and your own headers where the browser puts them; the client hints Chromium sends when a site asks for them
+- **HTTP/3 like the browser**: found through Alt-Svc or, on the first connection, the DNS HTTPS record; racing TCP like Chrome or straight to QUIC like Safari, with fallback to TCP; 0-RTT on resumed connections
+- **Encrypted Client Hello and DNS**: real ECH from DNS HTTPS records over TCP and QUIC, read over DNS-over-HTTPS (Cloudflare, Google) or, as Chrome and Firefox do by default, with a plain query to the system's nameserver; ECH GREASE in the browser's shape otherwise (needs the `doh` feature in Rust)
+- **Chrome's field trials**: like a slice of real Chrome installations, a client may be enrolled in Chrome's handshake-padding trial; pin the group with `serverPadding`, `server_padding` or `--server-padding`
+- **Fingerprint self-test**: `koon verify` checks your installed koon against the real browsers' fingerprints (see [below](#fingerprint-self-test))
+- **TLS sessions and certificates**: session tickets per origin, used once, over TCP and QUIC; certificates verified against Mozilla's roots plus every trust anchor of the Chrome Root Store
+- **Cookies and sessions**: a jar with domain, path, expiry, Secure, HttpOnly, SameSite, `__Host-`/`__Secure-` prefixes and public-suffix protection; import and export as Playwright/CDP cookie objects; save and load cookies and TLS tickets as JSON
+- **Proxies**: HTTP, HTTPS and SOCKS5, round-robin rotation, custom CONNECT headers; retries switch the proxy and never send a POST twice; HTTP/3 goes direct
+- **MITM proxy server**: re-sends any program's traffic through koon; loopback only unless allowed, optional authentication, capped connections
+- **WebSocket**: `wss://` and `ws://` with the browser's handshake, over HTTP/2 where the browser uses it; send and receive concurrently
+- **Streaming**: response bodies read on demand with backpressure, uploads from a stream, multipart forms with the browser's boundary format
+- **Hooks**: `onRequest`, `onResponse` and `onRedirect` for logging, guards and stopping a redirect to a captcha, per client or per request
+- **Per-request options**: headers, timeout, proxy and redirect following without touching the client
+- **Response body cap**: 100 MiB by default, decompression bombs included
+- **Request headers on every response**: exactly what was sent, HTTP/2 and HTTP/3 pseudo-headers included
+- **Plain HTTP**: `http://` with the header set browsers use for insecure origins
+- **Network options**: local address binding, IPv4 or IPv6 only, host pinning like curl's `--resolve`, `locale` for an Accept-Language that matches the proxy's country
+- **Key logging**: `SSLKEYLOGFILE` writes the TLS secrets (TCP, QUIC and DoH) for Wireshark
 - **Custom profiles**: export a profile as JSON, change it and load it back (see [Custom profiles](#custom-profiles))
-- **Clean shutdown**: `shutdown()` ends open HTTP/3 connections the way the browser does when it quits
-- **Sync Python API**: `KoonSync`, a blocking client for all HTTP methods and streaming, usable from several threads and inside a running event loop such as Jupyter (WebSocket remains async-only)
-- **Drop-in adapters**: an httpx transport, a requests adapter and a `fetch()` for Node: code written for httpx, requests or fetch gets the browser fingerprint with a one-line change
-
-Pick proxies whose operating system matches the profile. Bot protection compares the TCP/IP fingerprint of a connection (TTL, TCP window size and options) with the OS the browser claims; that layer comes from the kernel of the machine or proxy that opens the TCP connection, not from koon. A Windows Chrome profile through a Linux datacenter proxy is a mismatch no HTTP client can hide.
+- **Drop-in adapters**: an httpx transport, a requests adapter and a `fetch()` for Node; `KoonSync`, a blocking Python client
+- **Structured errors**: a machine-readable code on every error (`TIMEOUT`, `TLS_ERROR`, `PROXY_ERROR`, ...)
 
 ## Usage
 
@@ -852,7 +850,7 @@ cargo build --release -p koon-node
 cd crates/python && pip install -e .
 
 # R package
-cd crates/r && Rscript -e "rextendr::document(); devtools::install()"
+R CMD INSTALL crates/r
 
 # CLI binary
 cargo build --release -p koon-cli

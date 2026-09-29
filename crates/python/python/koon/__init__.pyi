@@ -71,6 +71,9 @@ class RequestOptions(TypedDict, total=False):
     on_response: Optional[Callable[[int, str, Sequence[Tuple[str, str]]], None]]
     on_redirect: Optional[Callable[[int, str, Sequence[Tuple[str, str]]], Optional[bool]]]
 
+__version__: str
+"""The koon version, e.g. ``"1.0.1"``."""
+
 def browsers() -> List[str]:
     """Every built-in browser profile name, one per profile: every browser
     version on every OS it has a profile for, e.g. ``"chrome154-windows"``,

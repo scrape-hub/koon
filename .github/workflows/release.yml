@@ -38,6 +38,15 @@ jobs:
           curl -sSL https://github.com/EmbarkStudios/cargo-about/releases/download/0.9.2/cargo-about-0.9.2-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz --strip-components=1 -C ~/.cargo/bin cargo-about-0.9.2-x86_64-unknown-linux-musl/cargo-about
 
+      # The R crate builds on a copy of crates/core, which bootstrap.R writes
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      - name: Vendor koon-core for the R crate
+        working-directory: crates/r
+        run: Rscript bootstrap.R
+
       - name: Generate notices
         run: |
           for crate in node python cli; do
@@ -45,6 +54,10 @@ jobs:
             cargo about generate --fail -m "crates/$crate/Cargo.toml" \
               -o "notices/$crate/THIRD-PARTY-LICENSES.md" about.hbs
           done
+          # The R crate is a workspace of its own: the configuration is named explicitly
+          mkdir -p notices/r
+          cargo about generate --fail -c about.toml -m crates/r/src/rust/Cargo.toml \
+            -o notices/r/THIRD-PARTY-LICENSES.md about.hbs
 
       - name: Upload node notices
         uses: actions/upload-artifact@v7
@@ -63,6 +76,12 @@ jobs:
         with:
           name: licenses-cli
           path: notices/cli/THIRD-PARTY-LICENSES.md
+
+      - name: Upload R notices
+        uses: actions/upload-artifact@v7
+        with:
+          name: licenses-r
+          path: notices/r/THIRD-PARTY-LICENSES.md
 
   # ─── Node.js binary (Windows x64) ───────────────────────────────────
   build-node-windows:
@@ -471,6 +490,90 @@ jobs:
           name: cli-x86_64-apple-darwin
           path: koon-macos-x64
 
+  # ─── R binary package (Windows x64) ─────────────────────────────────
+  # Built for the current R release. Other R versions and Linux install from
+  # source (remotes::install_github; bootstrap.R vendors koon-core).
+  build-r-windows:
+    needs: licenses
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      # Files in inst/ land in the root folder of the installed package
+      - name: Download license notices
+        uses: actions/download-artifact@v8
+        with:
+          name: licenses-r
+          path: crates/r/inst/
+
+      # R links against the GNU toolchain of Rtools (Makevars.win)
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - name: Install NASM
+        uses: ilammy/setup-nasm@v1
+        with:
+          version: "3.02"
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+
+      - name: Build the binary package
+        run: R CMD INSTALL --build crates/r
+
+      - name: Upload R package
+        uses: actions/upload-artifact@v7
+        with:
+          name: r-windows
+          path: koon_*.zip
+
+  # ─── R binary package (macOS arm64 / Apple Silicon) ─────────────────
+  build-r-macos:
+    needs: licenses
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      # Files in inst/ land in the root folder of the installed package
+      - name: Download license notices
+        uses: actions/download-artifact@v8
+        with:
+          name: licenses-r
+          path: crates/r/inst/
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+
+      - name: Build the binary package
+        run: R CMD INSTALL --build crates/r
+
+      - name: Upload R package
+        uses: actions/upload-artifact@v7
+        with:
+          name: r-macos-arm64
+          path: koon_*.tgz
+
   # ─── Python source distribution ────────────────────────────────────
   sdist:
     runs-on: ubuntu-latest
@@ -592,7 +695,7 @@ jobs:
 
   # ─── GitHub Release with binaries ───────────────────────────────────
   publish-github:
-    needs: [licenses, build-node-windows, build-node-linux, build-node-macos-arm64, build-node-macos-x64, build-python-windows, build-python-linux, build-python-macos-arm64, build-python-macos-x64, build-cli-windows, build-cli-linux, build-cli-macos-arm64, build-cli-macos-x64, sdist]
+    needs: [licenses, build-node-windows, build-node-linux, build-node-macos-arm64, build-node-macos-x64, build-python-windows, build-python-linux, build-python-macos-arm64, build-python-macos-x64, build-cli-windows, build-cli-linux, build-cli-macos-arm64, build-cli-macos-x64, build-r-windows, build-r-macos, sdist]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     permissions:
@@ -614,6 +717,7 @@ jobs:
           cp artifacts/cli-*/* release-files/
           cp artifacts/wheels-*/*.whl release-files/
           cp artifacts/sdist/*.tar.gz release-files/
+          cp artifacts/r-*/* release-files/
           # The CLI binaries and .node files are bare assets; their notices
           # go next to them (the wheels carry their own).
           cp artifacts/licenses-cli/THIRD-PARTY-LICENSES.md release-files/THIRD-PARTY-LICENSES-cli.md

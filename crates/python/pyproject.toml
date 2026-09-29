@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "koon"
-version = "1.0.0"
+version = "1.0.1"
 description = "Browser-impersonating HTTP client: TLS, HTTP/2 and HTTP/3 fingerprints of Chrome, Firefox, Safari, Edge, Opera, Brave, Samsung Internet and OkHttp. Passes Akamai and Cloudflare fingerprint checks."
 requires-python = ">=3.9"
 license = { text = "MIT" }

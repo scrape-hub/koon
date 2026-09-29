@@ -1028,7 +1028,7 @@ dependencies = [
 
 [[package]]
 name = "koon-cli"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "bytes",
  "clap",
@@ -1042,7 +1042,7 @@ dependencies = [
 
 [[package]]
 name = "koon-core"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "base64",
  "brotli",
@@ -1080,7 +1080,7 @@ dependencies = [
 
 [[package]]
 name = "koon-node"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "http",
  "indexmap",
@@ -1093,7 +1093,7 @@ dependencies = [
 
 [[package]]
 name = "koon-python"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "koon-core",
  "pyo3",

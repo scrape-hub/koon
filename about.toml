@@ -1,10 +1,12 @@
 # cargo-about configuration for THIRD-PARTY-LICENSES.md, the license notices
-# shipped with the npm packages, the Python wheels and the CLI binaries:
+# shipped with the npm packages, the Python wheels, the CLI binaries and the R
+# binary packages:
 #
 #   cargo about generate --fail -m crates/node/Cargo.toml -o THIRD-PARTY-LICENSES.md about.hbs
 #
 # (cargo-about 0.9 installs with `cargo install cargo-about --locked --features cli`.)
-# The release workflow runs it for crates/node, crates/python and crates/cli.
+# The release workflow runs it for crates/node, crates/python and crates/cli, and
+# with `-c about.toml` for crates/r/src/rust (a workspace of its own).
 # Code and data that Cargo does not track (BoringSSL, the Chrome Root Store)
 # are fixed sections of about.hbs.
 

@@ -1507,6 +1507,8 @@ fn _verify(py: Python<'_>, browser: &str, proxy: Option<&str>) -> PyResult<Strin
 
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // The workspace version, which pyproject.toml carries as well
+    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add_function(wrap_pyfunction!(browsers, m)?)?;
     m.add_function(wrap_pyfunction!(_verify, m)?)?;
     m.add_class::<NativeClient>()?;

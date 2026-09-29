@@ -8,23 +8,24 @@ specific to installing and building the R package.
 
 ## Install
 
-R has no prebuilt binary for koon, so installing builds the Rust core from
-source:
+On Windows and on macOS with Apple silicon, with R 4.6, install the prebuilt
+package of the release, no Rust needed:
+
+```r
+install.packages("https://github.com/scrape-hub/koon/releases/download/v1.0.1/koon_1.0.1.zip", repos = NULL)  # Windows
+install.packages("https://github.com/scrape-hub/koon/releases/download/v1.0.1/koon_1.0.1.tgz", repos = NULL)  # macOS
+```
+
+Everywhere else the package builds from source:
 
 ```r
 # install.packages("remotes")
 remotes::install_github("scrape-hub/koon", subdir = "crates/r")
 ```
 
-**Requirements:**
-- Rust 1.85+
-- CMake
-- NASM (Windows, optional: without it BoringSSL is built from portable C, which is slower)
-- C compiler: MSVC (Windows), GCC or Clang (Linux/macOS)
-- GNU make
-
-A full build (BoringSSL included) takes a few minutes the first time;
-subsequent installs from the same machine are faster.
+That needs Rust 1.85+, CMake and GNU make, on Windows also Rtools, LLVM and
+`rustup target add x86_64-pc-windows-gnu`. The first build takes a few
+minutes, later ones are faster.
 
 ## Usage
 

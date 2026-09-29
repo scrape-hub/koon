@@ -658,8 +658,10 @@ impl Callbacks {
 fn callback_runner() -> RResult<Robj> {
     let namespace = find_namespace("koon")
         .map_err(|e| RError::internal(format!("koon namespace not found: {e}")))?;
-    namespace
-        .local(sym!(koon_run_callback))
+    // Evaluated rather than read from the frame: the namespace holds a
+    // lazy-load promise, which extendr only forces from R 4.5 on.
+    sym!(koon_run_callback)
+        .eval_with_env(&namespace)
         .ok()
         .filter(Robj::is_function)
         .ok_or_else(|| RError::internal("koon_run_callback() not found"))

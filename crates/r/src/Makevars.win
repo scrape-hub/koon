@@ -1,5 +1,15 @@
 TARGET = $(subst 64,x86_64,$(subst 32,i686,$(WIN)))-pc-windows-gnu
-TARGET_DIR = ./rust/target
+# A short build folder outside the package: installed from GitHub, the package
+# already sits deep in a temp folder, and BoringSSL's build tree (its test data
+# lands 204 characters below the target folder) then breaks Windows' limit of
+# 260 characters per path. The 8.3 form of %LOCALAPPDATA% has no spaces and
+# is short; the folder doubles as a cache across installs. KOON_R_TARGET_DIR
+# chooses another one.
+ifdef KOON_R_TARGET_DIR
+TARGET_DIR = $(subst \,/,$(KOON_R_TARGET_DIR))
+else
+TARGET_DIR = $(shell cygpath -ms "$(LOCALAPPDATA)")/koon-r
+endif
 LIBDIR = $(TARGET_DIR)/$(TARGET)/release
 STATLIB = $(LIBDIR)/libkoon_r.a
 # -lstdc++ is required because BoringSSL (pulled in via koon_r) contains C++ code
@@ -37,6 +47,9 @@ all: $(SHLIB)
 $(SHLIB): $(STATLIB)
 
 $(STATLIB):
+	# Inside the repository, refreshes the copy of crates/core the crate builds on
+	# (src/rust/vendor/koon-core); in an unpacked source package it does nothing.
+	cd .. && "$(R_HOME)/bin$(R_ARCH_BIN)/Rscript.exe" bootstrap.R
 	mkdir -p $(TARGET_DIR)/libgcc_mock
 	cd $(TARGET_DIR)/libgcc_mock && \
 		touch gcc_mock.c && \
@@ -59,7 +72,7 @@ $(STATLIB):
 	AR_$(subst -,_,$(TARGET))=ar \
 	BINDGEN_EXTRA_CLANG_ARGS="$(BINDGEN_ARGS)" \
 	CARGO_TARGET_$(CARGO_TARGET_ENV)_LINKER=gcc \
-	LIBRARY_PATH="$(CURDIR)/$(TARGET_DIR)/libgcc_mock" \
+	LIBRARY_PATH="$(TARGET_DIR)/libgcc_mock" \
 		cargo run --release --manifest-path=./rust/Cargo.toml --target $(TARGET) --target-dir $(TARGET_DIR) --bin document
 
 clean:

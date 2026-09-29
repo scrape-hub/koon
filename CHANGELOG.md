@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-09-29
+
+### Fixed
+
+- R: `remotes::install_github()` failed. On Windows the package now builds in
+  `%LOCALAPPDATA%\koon-r` (`KOON_R_TARGET_DIR` to change).
+- R: callbacks failed on R before 4.5 ("koon_run_callback() not found").
+
+### Added
+
+- R: prebuilt packages for Windows and macOS (Apple silicon), no Rust needed.
+- Python: `koon.__version__`.
+
 ## [1.0.0] - 2026-09-28
 
 This release rebuilds koon's fingerprints against real browser traffic:

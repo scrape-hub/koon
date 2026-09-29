@@ -949,3 +949,9 @@ def test_websocket_send_rejects_other_types(ws_url):
 
     with pytest.raises(TypeError):
         run(go())
+
+
+def test_version_is_the_installed_distributions():
+    from importlib.metadata import version
+
+    assert koon.__version__ == version("koon")

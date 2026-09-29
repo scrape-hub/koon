@@ -72,3 +72,6 @@ scripts/
 
 # Machine-specific cargo settings, such as a local linker path
 /.cargo/config.toml
+
+# Copy of crates/core for the R package, written by crates/r/bootstrap.R
+crates/r/src/rust/vendor/
