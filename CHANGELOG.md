@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Python: the project page on PyPI showed `../../README.md` instead of the
+  README.
+
 ## [1.0.1] - 2026-09-29
 
 ### Fixed

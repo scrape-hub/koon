@@ -1,10 +1,6 @@
 TARGET = $(subst 64,x86_64,$(subst 32,i686,$(WIN)))-pc-windows-gnu
-# A short build folder outside the package: installed from GitHub, the package
-# already sits deep in a temp folder, and BoringSSL's build tree (its test data
-# lands 204 characters below the target folder) then breaks Windows' limit of
-# 260 characters per path. The 8.3 form of %LOCALAPPDATA% has no spaces and
-# is short; the folder doubles as a cache across installs. KOON_R_TARGET_DIR
-# chooses another one.
+# A short build folder: from a temp folder, BoringSSL's build tree breaks
+# Windows' 260-character path limit. The 8.3 form is short and has no spaces.
 ifdef KOON_R_TARGET_DIR
 TARGET_DIR = $(subst \,/,$(KOON_R_TARGET_DIR))
 else
@@ -47,8 +43,6 @@ all: $(SHLIB)
 $(SHLIB): $(STATLIB)
 
 $(STATLIB):
-	# Inside the repository, refreshes the copy of crates/core the crate builds on
-	# (src/rust/vendor/koon-core); in an unpacked source package it does nothing.
 	cd .. && "$(R_HOME)/bin$(R_ARCH_BIN)/Rscript.exe" bootstrap.R
 	mkdir -p $(TARGET_DIR)/libgcc_mock
 	cd $(TARGET_DIR)/libgcc_mock && \

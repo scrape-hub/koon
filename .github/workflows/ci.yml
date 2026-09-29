@@ -174,8 +174,7 @@ jobs:
           key: ${{ runner.os }}-cargo-r-${{ hashFiles('crates/r/src/rust/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-r-
 
-      # The R crate builds on a copy of crates/core (bootstrap.R); fmt and clippy
-      # below need it, R CMD INSTALL refreshes it itself.
+      # fmt and clippy below need the copy of crates/core that bootstrap.R writes
       - name: Vendor koon-core
         working-directory: crates/r
         run: Rscript bootstrap.R

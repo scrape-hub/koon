@@ -30,8 +30,6 @@ $(SHLIB): $(STATLIB)
 # Without the list (a target directory from an older build), koon-r is
 # rebuilt so that rustc writes it again.
 $(STATLIB):
-	# Inside the repository, refreshes the copy of crates/core the crate builds on
-	# (src/rust/vendor/koon-core); in an unpacked source package it does nothing.
 	cd .. && "$(R_HOME)/bin/Rscript" bootstrap.R
 	test -s $(NATIVE_LIBS) || cargo clean --release -p koon-r --manifest-path=./rust/Cargo.toml --target-dir $(TARGET_DIR)
 	cargo rustc $(CARGO_ARGS) -- --print native-static-libs=$(CURDIR)/$(NATIVE_LIBS)

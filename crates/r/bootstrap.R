@@ -1,20 +1,8 @@
-# Keeps a copy of koon-core in src/rust/vendor/koon-core, where the Rust crate expects it.
-#
-# In the repository koon-core lives in crates/core, outside this package, so a
-# source package built from here (remotes::install_github(), pak, devtools)
-# would not contain it. pkgbuild runs this script before it builds the source
-# package (Config/build/bootstrap in DESCRIPTION), and src/Makevars and
-# src/Makevars.win run it before every in-tree `R CMD INSTALL crates/r`.
-# Outside the repository, in an unpacked source package, there is nothing to
-# copy and the vendored copy is used as it is.
-#
-# Only files that differ are copied: cargo decides by modification time
-# whether a path dependency changed, and a fresh copy on every install would
-# rebuild koon-core every time.
-#
-# koon-core takes its version, edition, rust-version and license from the
-# workspace (Cargo.toml at the repository root). The copy is a crate of its
-# own, so those values are written into its manifest.
+# Copies crates/core into src/rust/vendor/koon-core, so that a source package
+# built from crates/r contains koon-core. Runs before pkgbuild builds one and
+# before every in-tree install; in an unpacked source package it does nothing.
+# Only changed files are copied: cargo rebuilds a path dependency whose files
+# are newer.
 
 core <- file.path("..", "core")
 workspace <- file.path("..", "..", "Cargo.toml")
@@ -28,7 +16,6 @@ if (file.exists(file.path(core, "Cargo.toml")) && file.exists(workspace)) {
     }
   }
 
-  # src/: copy new and changed files, remove the ones koon-core no longer has
   from <- list.files(file.path(core, "src"), recursive = TRUE, all.files = TRUE)
   to <- list.files(file.path(dest, "src"), recursive = TRUE, all.files = TRUE)
   unlink(file.path(dest, "src", setdiff(to, from)))
@@ -41,7 +28,7 @@ if (file.exists(file.path(core, "Cargo.toml")) && file.exists(workspace)) {
     }
   }
 
-  # [workspace.package] of the root manifest: key = "value" lines up to the next table
+  # The copy is a crate of its own: it gets the values koon-core inherits from the workspace
   ws <- readLines(workspace, warn = FALSE)
   start <- grep("^\\[workspace\\.package\\]", ws)
   tables <- grep("^\\[", ws)
