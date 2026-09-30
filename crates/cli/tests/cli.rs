@@ -10,9 +10,9 @@ use tempfile::TempDir;
 mod common;
 use common::text;
 
-/// Local server answering one request per connection. Routes: `/echo` →
-/// the request line, headers and body as text; `/status/N` → status N;
-/// `/big` → 1 MiB; `/slow` → after 3 s.
+/// Local server answering one request per connection. Routes: `/echo` ->
+/// the request line, headers and body as text; `/status/N` -> status N;
+/// `/big` -> 1 MiB; `/slow` -> after 3 s.
 fn server() -> u16 {
     common::mock_server(|_method, path, head, body| {
         let headers = vec![

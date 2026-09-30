@@ -73,12 +73,12 @@ pub fn h3_server_with_alps(cert: X509, key: PKey<Private>, alps: Arc<Mutex<Vec<u
     h3_server_inner(cert, key, socket, None, Some(alps))
 }
 
-/// An HTTP/3 server on a UDP socket the caller already bound — for a test
+/// An HTTP/3 server on a UDP socket the caller already bound: for a test
 /// that needs the server's port picked before it starts (matching a TCP
 /// port already bound elsewhere: pick that one first with `:0`, since
 /// Windows never excludes it there, then bind UDP to the same number and
 /// retry on a fresh TCP port if that fails; Hyper-V/WSL reserve some TCP
-/// ranges — `netsh int ipv4 show excludedportrange protocol=tcp` — and
+/// ranges, `netsh int ipv4 show excludedportrange protocol=tcp`, and
 /// binding UDP first risked landing on one).
 pub fn h3_server_with_socket(
     cert: X509,
@@ -256,7 +256,7 @@ pub struct ClientSocket {
     pub zero_rtt: usize,
     /// The datagrams that start with a long-header packet, in order.
     pub long_header_datagrams: Vec<Vec<u8>>,
-    /// Bytes the server has sent this client so far — a test waits for this
+    /// Bytes the server has sent this client so far: a test waits for this
     /// to stop growing to know the server has nothing more in flight (its
     /// session ticket included), instead of guessing how long that takes.
     pub server_bytes: usize,
@@ -372,7 +372,7 @@ impl Relay {
     }
 
     /// Wait until the last client socket stops receiving bytes from the
-    /// server for two consecutive 20 ms polls (at most 2 s) — the server may
+    /// server for two consecutive 20 ms polls (at most 2 s): the server may
     /// still have data in flight after a response completes (a session
     /// ticket, for instance), with no explicit signal for it landing; a
     /// quiet relay is the closest thing to "done".

@@ -517,7 +517,8 @@ fn response_to_list(resp: HttpResponse) -> List {
         bytes_received = resp.bytes_received as f64,
         tls_resumed = resp.tls_resumed,
         connection_reused = resp.connection_reused,
-        remote_address = string_or_null(resp.remote_address.as_deref())
+        remote_address = string_or_null(resp.remote_address.as_deref()),
+        blocked_by = string_or_null(resp.blocked_by())
     )
 }
 

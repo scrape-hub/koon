@@ -1,7 +1,7 @@
 {
   "name": "koonjs",
-  "version": "1.0.1",
-  "description": "Browser-impersonating HTTP client: TLS, HTTP/2 and HTTP/3 fingerprints of Chrome, Firefox, Safari, Edge, Opera, Brave, Samsung Internet and OkHttp. Passes Akamai and Cloudflare fingerprint checks.",
+  "version": "1.1.0",
+  "description": "Browser-impersonating HTTP client: TLS, HTTP/2 and HTTP/3 fingerprints of Chrome, Firefox, Safari, Edge, Opera, Brave, Samsung Internet and OkHttp, checked against the real browsers.",
   "main": "index.js",
   "types": "index.d.ts",
   "license": "MIT",
@@ -23,10 +23,10 @@
     "README.md"
   ],
   "optionalDependencies": {
-    "@koonjs/win32-x64-msvc": "1.0.1",
-    "@koonjs/linux-x64-gnu": "1.0.1",
-    "@koonjs/darwin-arm64": "1.0.1",
-    "@koonjs/darwin-x64": "1.0.1"
+    "@koonjs/win32-x64-msvc": "1.1.0",
+    "@koonjs/linux-x64-gnu": "1.1.0",
+    "@koonjs/darwin-arm64": "1.1.0",
+    "@koonjs/darwin-x64": "1.1.0"
   },
   "scripts": {
     "build": "node build.js",

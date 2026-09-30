@@ -30,8 +30,27 @@ export interface KoonHeaderEntry {
 }
 
 /**
+ * The bot protection that answered instead of the page. `javascript` is a JavaScript
+ * challenge and `block-page` a block page of no known vendor, `consent` a cookie consent page.
+ */
+export type KoonBlockedBy =
+  | 'cloudflare'
+  | 'akamai'
+  | 'datadome'
+  | 'perimeterx'
+  | 'aws-waf'
+  | 'imperva'
+  | 'kasada'
+  | 'baleen'
+  | 'google'
+  | 'amazon'
+  | 'javascript'
+  | 'block-page'
+  | 'consent';
+
+/**
  * Headers to send, in order: an object (insertion order), or `[name, value]`
- * pairs — an array, a `Map`, a fetch `Headers` or any other iterable of pairs.
+ * pairs: an array, a `Map`, a fetch `Headers` or any other iterable of pairs.
  * A name given more than once is sent once, with the last value, at the
  * position of its first occurrence. A pair that is not two strings throws
  * `INVALID_ARGUMENT`.
@@ -214,6 +233,8 @@ export class KoonResponse {
   readonly remoteAddress: string | null;
   /** Content-Type header value (e.g. "text/html; charset=utf-8"), or null if absent. */
   readonly contentType: string | null;
+  /** The bot protection that answered instead of the page, or null for the page itself. A plain error status gives null. */
+  readonly blockedBy: KoonBlockedBy | null;
 
   /** Decode the body as text with the charset of its Content-Type header, else UTF-8. */
   text(): string;
@@ -444,7 +465,7 @@ export class Koon {
   cookies(): KoonCookie[];
 
   /**
-   * Close all pooled connections and release resources, without waiting. The client can still be used after — new connections open on demand.
+   * Close all pooled connections and release resources, without waiting. The client can still be used after: new connections open on demand.
    * Idle HTTP/3 connections end as the browser ends them at shutdown; one with a response still being read ends
    * as when the pool drops it once the response is done: Chrome-family profiles discard it without sending
    * anything, as Chromium does; Firefox profiles close it with H3_NO_ERROR. `shutdown()` ends everything at once.

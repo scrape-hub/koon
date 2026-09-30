@@ -2,7 +2,7 @@
 //! (as in Chrome, Firefox and curl): when set, the secrets of every TLS handshake (TCP and QUIC)
 //! are appended to it in the NSS key log format, for Wireshark and similar tools to decrypt the
 //! traffic. **Anyone who can read that file can decrypt every connection it covers**, including
-//! cookies, credentials and response bodies — set it only for debugging, never in production. Read
+//! cookies, credentials and response bodies: set it only for debugging, never in production. Read
 //! once, when the first TLS context of the process is built; on Unix the file is created readable
 //! by its owner only.
 

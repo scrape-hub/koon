@@ -89,7 +89,7 @@ pub struct HttpsRecord {
 
 impl HttpsRecord {
     /// The address hints (`ipv6hint` before `ipv4hint`, as most dual-stack clients try IPv6 first),
-    /// for a client that skips its own A/AAAA lookup in favor of them — Safari does (arXiv
+    /// for a client that skips its own A/AAAA lookup in favor of them: Safari does (arXiv
     /// 2403.15672), falling back to a normal lookup when a record carries neither.
     pub fn hint_addresses(&self) -> Vec<IpAddr> {
         self.ipv6hint
@@ -139,7 +139,7 @@ impl DohResolver {
     }
 
     /// Creates a resolver that additionally trusts the certificates of the PEM bundle `pem` for its
-    /// own DoH connection — for a local DoH server in a test, whose certificate koon's built-in
+    /// own DoH connection: for a local DoH server in a test, whose certificate koon's built-in
     /// root store does not cover.
     ///
     /// # Errors

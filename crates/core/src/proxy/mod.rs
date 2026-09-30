@@ -4,7 +4,7 @@ mod server;
 
 // A live handle that can mint a certificate for any hostname using the CA's private key; no
 // caller outside this crate's own tests needs it (every public thing a caller can do with a CA
-// — get its cert path, get its cert as PEM — has a `ProxyServer` method already, and `server.rs`
+// (its cert path, its cert as PEM) has a `ProxyServer` method already, and `server.rs`
 // reaches the type itself via `super::ca::CertAuthority`, not through this re-export). Public
 // only under "test-util", the crate's own dev-dependency feature for its integration tests.
 #[cfg(feature = "test-util")]

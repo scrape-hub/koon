@@ -424,7 +424,7 @@ async fn chrome_frames() {
 
     let headers: Vec<&Frame> = frames.iter().filter(|f| f.kind == HEADERS).collect();
     assert_eq!(headers.iter().map(|f| f.stream).collect::<Vec<_>>(), [1, 3]);
-    // u=0 → 256; u=1 → 220, on the open stream 1.
+    // u=0 -> 256; u=1 -> 220, on the open stream 1.
     assert_eq!(priority(headers[0]), Some((true, 0, 256)));
     assert_eq!(priority(headers[1]), Some((true, 1, 220)));
     for h in &headers {

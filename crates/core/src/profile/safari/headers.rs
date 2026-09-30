@@ -72,7 +72,7 @@ pub(crate) struct SafariLayout {
     /// that (macOS 12/13 and iOS 16.0/16.1's Sonoma stack, `fetch_metadata: false` in
     /// [`SafariVersion`](super::SafariVersion)), the request builder's hash order for a
     /// non-navigation request is a different one, calibrated on macOS 12.5/12.6/13.0 and the iOS
-    /// 16.0/16.1 simulators — a captured header *set* changes `CFNetwork`'s hash order, and fetch
+    /// 16.0/16.1 simulators: a captured header *set* changes `CFNetwork`'s hash order, and fetch
     /// metadata is the biggest such change within the Sonoma stack.
     pub(crate) fetch_metadata: bool,
 }

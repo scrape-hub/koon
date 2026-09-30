@@ -27,7 +27,7 @@ function check(name, condition, detail) {
     console.log(`  ok    ${name}`);
   } else {
     stats.failures++;
-    console.log(`  FAIL  ${name}${detail === undefined ? '' : ` — ${detail}`}`);
+    console.log(`  FAIL  ${name}${detail === undefined ? '' : `: ${detail}`}`);
   }
 }
 

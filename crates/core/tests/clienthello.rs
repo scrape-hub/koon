@@ -2,7 +2,7 @@
 //!
 //! A local TLS server records the raw ClientHello of every connection, so the
 //! extension layout koon puts on the wire is checked without network access.
-//! It also issues session tickets, which covers resumed handshakes — public
+//! It also issues session tickets, which covers resumed handshakes: public
 //! fingerprinting services never resume, so the online tests cannot see them.
 
 use std::sync::{Arc, Mutex};
@@ -28,7 +28,7 @@ const X25519: u16 = 0x001d;
 const P256: u16 = 0x0017;
 
 /// Real Firefox 156 connecting to a hostname, captured through a CONNECT
-/// relay. Identical in Firefox 147–156 apart from server_name, which is
+/// relay. Identical in Firefox 147-156 apart from server_name, which is
 /// missing when a capture targets an IP literal.
 const FIREFOX_FULL_HANDSHAKE: &[u16] = &[
     0x0000, 0x0017, 0xff01, 0x000a, 0x000b, 0x0023, 0x0010, 0x0005, 0x0022, 0x0012, 0x0033, 0x002b,

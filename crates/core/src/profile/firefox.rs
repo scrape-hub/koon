@@ -80,10 +80,10 @@ fn firefox_profile(major: u32, os: Os) -> BrowserProfile {
 }
 
 // ========== TLS ==========
-// Identical across Firefox 135–150; later versions drop ciphers and groups, see the version
+// Identical across Firefox 135-150; later versions drop ciphers and groups, see the version
 // constants below.
 
-// TLS 1.3 order: AES_128(4865) → CHACHA20(4867) → AES_256(4866), as real Firefox/NSS sends it.
+// TLS 1.3 order: AES_128(4865) -> CHACHA20(4867) -> AES_256(4866), as real Firefox/NSS sends it.
 // Requires preserve_tls13_cipher_order = true.
 const FIREFOX_CIPHER_LIST: &str = "\
 TLS_AES_128_GCM_SHA256:\
@@ -168,7 +168,7 @@ const FIREFOX_CURVES_156: &str = "X25519MLKEM768:X25519:P-256:P-384:P-521";
 /// First Firefox version without ffdhe2048/ffdhe3072.
 const FIREFOX_NO_FFDHE_VERSION: u32 = 156;
 
-// Firefox does not permute extensions — it emits this fixed order (the same in every captured
+// Firefox does not permute extensions: it emits this fixed order (the same in every captured
 // version), which differs from BoringSSL's internal one and is visible in JA3 (but not JA4, which
 // sorts). The list must name every extension the profile sends: BoringSSL appends unlisted ones in
 // random order. pre_shared_key is always written last by BoringSSL and is deliberately absent.
@@ -252,7 +252,7 @@ fn firefox_tls(major: u32) -> TlsConfig {
         record_size_limit: Some(16385),
         server_padding: None,
         server_padding_trial: None,
-        // Firefox/NSS uses AES_128 → CHACHA20 → AES_256 (differs from BoringSSL default).
+        // Firefox/NSS uses AES_128 -> CHACHA20 -> AES_256 (differs from BoringSSL default).
         preserve_tls13_cipher_order: true,
         danger_accept_invalid_certs: false,
     }

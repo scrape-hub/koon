@@ -196,7 +196,7 @@ def test_per_request_timeout_raises(base_url):
 
 
 def test_per_request_timeout_zero_overrides_short_client_timeout(base_url):
-    """timeout=0 means "no timeout", overriding a short client-level default —
+    """timeout=0 means "no timeout", overriding a short client-level default:
     the core handles this, the binding must not add its own wrapper on top."""
 
     async def go():
@@ -955,3 +955,9 @@ def test_version_is_the_installed_distributions():
     from importlib.metadata import version
 
     assert koon.__version__ == version("koon")
+
+
+def test_blocked_by_names_the_bot_protection(base_url):
+    with koon.KoonSync("chrome") as client:
+        assert client.get(f"{base_url}/challenge").blocked_by == "cloudflare"
+        assert client.get(f"{base_url}/echo").blocked_by is None

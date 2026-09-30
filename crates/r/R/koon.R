@@ -165,6 +165,11 @@ NULL
 #'   \item{`connection_reused`}{`TRUE` if a pooled connection was reused.}
 #'   \item{`remote_address`}{IP address of the peer (the proxy when one is
 #'     used), or `NULL`.}
+#'   \item{`blocked_by`}{The bot protection that answered instead of the page
+#'     (`"cloudflare"`, `"akamai"`, `"datadome"`, `"perimeterx"`, `"aws-waf"`,
+#'     `"imperva"`, `"kasada"`, `"baleen"`, `"google"`, `"amazon"`,
+#'     `"javascript"`, `"block-page"` or `"consent"`), or `NULL` for the page
+#'     itself. A plain error status gives `NULL`.}
 #' }
 #'
 #' @section Errors and interrupts:

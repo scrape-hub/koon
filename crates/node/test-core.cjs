@@ -42,7 +42,7 @@ async function testLatestProfiles() {
   ];
   for (const [browser, marker] of expected) {
     const ua = new Koon({ browser }).userAgent;
-    check(`${browser} → ${marker}`, ua.includes(marker), ua);
+    check(`${browser} -> ${marker}`, ua.includes(marker), ua);
   }
   check('bare name is Windows', new Koon({ browser: 'chrome' }).userAgent.includes('Windows NT'));
   check('bare safari is macOS', new Koon({ browser: 'safari' }).userAgent.includes('Macintosh'));

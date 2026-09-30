@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Browser-impersonating HTTP client: TLS, HTTP/2 and HTTP/3 fingerprints of Chrome, Firefox, Safari, Edge, Opera, Brave, Samsung Internet and OkHttp. Passes Akamai and Cloudflare fingerprint checks."
+description = "Browser-impersonating HTTP client: TLS, HTTP/2 and HTTP/3 fingerprints of Chrome, Firefox, Safari, Edge, Opera, Brave, Samsung Internet and OkHttp, checked against the real browsers."
 repository = "https://github.com/scrape-hub/koon"
 homepage = "https://github.com/scrape-hub/koon"
 keywords = ["tls-fingerprint", "browser-impersonation", "anti-bot", "web-scraping", "http-client"]
@@ -59,7 +59,7 @@ serde_json = "1"
 # HTTP/1.1 response parsing
 httparse = "1"
 
-# WebSocket frame codec (no TLS features — we use our own BoringSSL)
+# WebSocket frame codec (no TLS features: we use our own BoringSSL)
 tungstenite = "0.24"
 tokio-tungstenite = { version = "0.24", default-features = false }
 

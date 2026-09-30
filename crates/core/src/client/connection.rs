@@ -48,7 +48,7 @@ pub(crate) struct OpenedStream {
 pub(crate) enum AlpnMode {
     /// The profile's list (h2 + http/1.1 for browsers).
     Profile,
-    /// http/1.1 only — WebSocket upgrades.
+    /// http/1.1 only: WebSocket upgrades.
     Http11Only,
 }
 
@@ -62,7 +62,7 @@ const HOST_CACHE_TTL: Duration = Duration::from_secs(60);
 /// Most hosts kept in the host cache (Chrome: 1000).
 const HOST_CACHE_SIZE: usize = 1000;
 
-/// Recently resolved addresses per host, as the resolver returned them — before the IP version and
+/// Recently resolved addresses per host, as the resolver returned them: before the IP version and
 /// local address filtering, which depends on the request.
 #[derive(Default)]
 pub(super) struct HostCache {
@@ -88,9 +88,9 @@ impl HostCache {
     }
 }
 
-/// Strip the brackets around an IPv6 literal host (`"[::1]"` → `"::1"`); other hosts pass through
+/// Strip the brackets around an IPv6 literal host (`"[::1]"` -> `"::1"`); other hosts pass through
 /// unchanged. Shared by every place that needs the bare host for a lookup, comparison or override
-/// key — the URL and header forms keep the brackets, which SNI, DNS and socket addresses don't
+/// key: the URL and header forms keep the brackets, which SNI, DNS and socket addresses don't
 /// want.
 pub(super) fn strip_brackets(host: &str) -> &str {
     host.trim_start_matches('[').trim_end_matches(']')
@@ -638,7 +638,7 @@ impl super::Client {
     }
 
     /// The ECH config from `host`'s DNS HTTPS record: via `DoH` when configured, else the plain
-    /// system-resolver query — except Firefox up to 150 on macOS ([`https_rr_doh_only`]), which
+    /// system-resolver query: except Firefox up to 150 on macOS ([`https_rr_doh_only`]), which
     /// then gets none.
     ///
     /// [`https_rr_doh_only`]: crate::quic::QuicConfig::https_rr_doh_only
@@ -679,7 +679,7 @@ impl super::Client {
     }
 
     /// The port to open the first connection to `host` as HTTP/3 on, when its DNS HTTPS record
-    /// advertises `h3` — checked before Alt-Svc has anything cached, for a profile that follows
+    /// advertises `h3`: checked before Alt-Svc has anything cached, for a profile that follows
     /// HTTPS records (see [`QuicConfig::https_rr`](crate::quic::QuicConfig::https_rr)). The
     /// record's own `port` (RFC 9460 §7.2) overrides `port` for Safari and Firefox; Chromium skips
     /// such a record.
@@ -739,7 +739,7 @@ fn select_https_record(
         .find(|record| !chromium || record.port.is_none_or(|p| p == port))
 }
 
-/// `addrs` with those the host has a route to first, in their order, then the rest — the same probe
+/// `addrs` with those the host has a route to first, in their order, then the rest: the same probe
 /// getaddrinfo's RFC 6724 rule 1 uses (a UDP `connect`, which sends nothing). The record's hints
 /// aren't pre-sorted like a resolver's A/AAAA answers, so without this an unreachable IPv6 hint
 /// (QUIC only tries the first address) would wrongly fall back to TCP.

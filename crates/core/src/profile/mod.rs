@@ -156,8 +156,8 @@ pub enum HeaderFamily {
 
 impl HeaderFamily {
     /// The family of a profile, from its headers: a `sec-ch-ua` header makes it Chromium; otherwise
-    /// the User-Agent decides (`Firefox/` → Firefox, starting with `okhttp` → `OkHttp`, `Safari/` →
-    /// Safari, anything else → Other). Chromium's User-Agent contains `Safari/` too, so a Chromium
+    /// the User-Agent decides (`Firefox/` -> Firefox, starting with `okhttp` -> `OkHttp`, `Safari/` ->
+    /// Safari, anything else -> Other). Chromium's User-Agent contains `Safari/` too, so a Chromium
     /// profile without client hints needs an explicit [`BrowserProfile::header_family`].
     #[must_use]
     pub fn detect(profile: &BrowserProfile) -> Self {
@@ -316,7 +316,7 @@ fn table_version<T: Copy>(
     Ok(row)
 }
 
-/// Ascending majors as ranges (`"29-30, 32"`), for [`table_version`]'s error — a contiguous table
+/// Ascending majors as ranges (`"29-30, 32"`), for [`table_version`]'s error: a contiguous table
 /// (every one, today) reads like the plain `"min-max"` it stands in for.
 fn version_ranges(majors: &[u32]) -> String {
     let mut ranges = Vec::new();
@@ -666,16 +666,16 @@ impl BrowserProfile {
     /// Resolve a browser profile by name.
     ///
     /// Accepts formats like:
-    /// - `"chrome"`, `"firefox"`, `"edge"`, `"opera"` — latest version, Windows
-    ///   ([`DEFAULT_OS`]); `"safari"` — latest version, macOS
-    /// - `"chrome152"`, `"firefox154"` — specific version, Windows
-    /// - `"chrome152-windows"`, `"chrome152-macos"`, `"chrome152-linux"` — specific version + OS
-    /// - `"chrome152windows"`, `"chrome152macos"` — the same without a dash (Node.js/Python)
+    /// - `"chrome"`, `"firefox"`, `"edge"`, `"opera"`: latest version, Windows
+    ///   ([`DEFAULT_OS`]); `"safari"`: latest version, macOS
+    /// - `"chrome152"`, `"firefox154"`: specific version, Windows
+    /// - `"chrome152-windows"`, `"chrome152-macos"`, `"chrome152-linux"`: specific version + OS
+    /// - `"chrome152windows"`, `"chrome152macos"`: the same without a dash (Node.js/Python)
     /// - `"chrome-mobile152"`, `"firefox-mobile154"`, `"safari-mobile26.6"`,
-    ///   `"edge-mobile153"`, `"brave-mobile154"` — Android/iOS
-    /// - `"brave154"` — Brave by the Chromium major it reports; `"samsung"`,
-    ///   `"samsung30"` — Samsung Internet; `"opera-mobile102"` — Opera for Android (Android)
-    /// - `"safari266"`, `"safari18.3"` — Safari version formats
+    ///   `"edge-mobile153"`, `"brave-mobile154"`: Android/iOS
+    /// - `"brave154"`: Brave by the Chromium major it reports; `"samsung"`,
+    ///   `"samsung30"`: Samsung Internet; `"opera-mobile102"`: Opera for Android (Android)
+    /// - `"safari266"`, `"safari18.3"`: Safari version formats
     /// - `"okhttp"`, `"okhttp4"`, `"okhttp5"`, also with `-android`
     ///
     /// Case-insensitive. [`names`](Self::names) lists every profile.
@@ -687,8 +687,8 @@ impl BrowserProfile {
         Self::resolve_with_name(name).map(|(_, profile)| profile)
     }
 
-    /// The entry of [`names`](Self::names) a name resolves to: `chrome` → `chrome154-windows`,
-    /// `safari-mobile26.6` → `safari266-ios`, `okhttp4-android` → `okhttp4`. Accepts what
+    /// The entry of [`names`](Self::names) a name resolves to: `chrome` -> `chrome154-windows`,
+    /// `safari-mobile26.6` -> `safari266-ios`, `okhttp4-android` -> `okhttp4`. Accepts what
     /// [`resolve`](Self::resolve) accepts.
     ///
     /// # Errors

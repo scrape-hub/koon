@@ -222,7 +222,7 @@ pub fn build_websocket_h2(
 /// to macOS 15 it is a hash order that a subprotocol changes; from macOS 26 on the extended CONNECT
 /// over HTTP/2 has the same order without Host, the key, Connection and Upgrade. Before fetch
 /// metadata (macOS 12/13, iOS 16.0/16.1, `fetch_metadata: false`) the handshake carries no
-/// `Sec-Fetch-*` at all and the remaining headers hash to their own order — captured from macOS
+/// `Sec-Fetch-*` at all and the remaining headers hash to their own order: captured from macOS
 /// 12.6 (real Safari 16.0) and the iOS 16.0 simulator.
 fn safari_websocket_order(
     stack: crate::profile::SafariStack,

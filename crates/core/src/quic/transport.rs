@@ -8,7 +8,7 @@
 //! `parameter_layout()`:
 //! - **Packet numbering**: Chromium (quiche) shares one number space across all three spaces,
 //!   starting at 1; Neqo starts its first Initial at a small random number (1-1024, below 33 seven
-//!   times out of eight — `neqo_first_initial`); Apple starts every space at a fixed 0.
+//!   times out of eight: `neqo_first_initial`); Apple starts every space at a fixed 0.
 //! - **Initial padding**: Chromium and Apple pad the first flight with PADDING frames up to the
 //!   configured datagram size; Neqo instead trails zero bytes after the record
 //!   (`InitialPadding::TrailingZeros`).
@@ -24,7 +24,7 @@
 //! - **ACK policy**: Chromium acks every datagram under quiche's policy plus ack decimation; Neqo
 //!   and Apple ack every datagram too, under the RFC 9000 standard policy, with no decimation.
 //! - **Coalescing**: Chromium and Neqo coalesce everything that can go out in one flight (e.g. the
-//!   reply to a resumed handshake); Apple never coalesces — a handshake ACK, the Finished and the
+//!   reply to a resumed handshake); Apple never coalesces: a handshake ACK, the Finished and the
 //!   first 1-RTT data each go in a datagram of their own.
 //! - **Connection IDs**: Chromium and Apple use a fixed 8-byte length; Neqo's own length varies
 //!   (`5 + (v & (v >> 4))`, floored at 8), and it alone offers 0-length client IDs and, from
@@ -349,7 +349,7 @@ impl QuicSetup {
 
 /// The TLS context shared by every QUIC connection of a client: the profile's ClientHello, minus
 /// the per-connection parts (ALPS, ECH, key shares), which [`QuicSetup::client_config`] attaches
-/// through quinn-btls's [`PerConnectionConfig`] instead — real ECH does not need its own context,
+/// through quinn-btls's [`PerConnectionConfig`] instead: real ECH does not need its own context,
 /// only its own `Ssl` (see [`crate::tls::connector::configure_quic_ssl`]).
 fn crypto_config(
     tls: &TlsConfig,
@@ -655,7 +655,7 @@ fn fingerprint(stack: QuicStack, size: u16) -> FingerprintConfig {
     fingerprint
 }
 
-/// neqo's first Initial packet number: 1–1024, below 33 seven times out of eight.
+/// neqo's first Initial packet number: 1-1024, below 33 seven times out of eight.
 fn neqo_first_initial(rng: &mut dyn RngCore) -> u64 {
     let mut r = [0u8; 2];
     rng.fill_bytes(&mut r);

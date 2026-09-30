@@ -15,7 +15,7 @@ use std::thread;
 type Answer = (u16, Vec<(&'static str, String)>, Vec<u8>);
 
 /// Start a server that answers every connection with one request, handed to
-/// `route(method, path, head, body)` — `head` is the full request line and
+/// `route(method, path, head, body)`: `head` is the full request line and
 /// headers, as sent, without the trailing blank line. Returns the port.
 pub fn mock_server<R>(route: R) -> u16
 where

@@ -29,7 +29,7 @@ impl BoundaryStyle {
         let mut rng = rand::rng();
         match self {
             Self::WebKit => {
-                // Blink's table: A–Z, a–z, 0–9, then A and B again.
+                // Blink's table: A-Z, a-z, 0-9, then A and B again.
                 const MAP: &[u8; 64] =
                     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789AB";
                 let suffix: String = (0..16)

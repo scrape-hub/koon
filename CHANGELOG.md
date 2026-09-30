@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-30
+
+### Added
+
+- Responses name the bot protection that answered instead of the page:
+  `blockedBy` in Node, `blocked_by` in Python, R and Rust (also as a function
+  for streaming responses), in the CLI's `--json` output and in `-v`.
+
 ### Fixed
 
 - Python: the project page on PyPI showed `../../README.md` instead of the

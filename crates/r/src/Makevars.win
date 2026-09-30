@@ -15,7 +15,7 @@ PKG_LIBS = -L$(LIBDIR) -lkoon_r -lstdc++ -lws2_32 -lbcrypt -luserenv -lntdll -lc
 # Tools paths (forward slashes for MSYS2 shell)
 CARGO_BIN = $(subst \,/,$(USERPROFILE))/.cargo/bin
 
-# bindgen include paths — auto-detected from the installed LLVM and Rtools so
+# bindgen include paths: auto-detected from the installed LLVM and Rtools so
 # the build survives toolchain upgrades instead of pinning clang/gcc/rtools
 # versions. Picks the highest installed version of each. 8.3 short names avoid
 # spaces in paths.

@@ -169,7 +169,7 @@ impl super::Client {
             .map(|e| e.h3_port)
     }
 
-    /// Whether the HTTP/3 alternative of an origin recently failed — checked before racing QUIC
+    /// Whether the HTTP/3 alternative of an origin recently failed: checked before racing QUIC
     /// again, whether it was learned from Alt-Svc or from a DNS HTTPS record.
     pub(super) fn h3_broken(&self, host: &str, port: u16) -> bool {
         let cache = crate::util::lock_recover(&self.alt_svc);

@@ -228,10 +228,10 @@ pub(super) const SAFARI_SONOMA_H3_BODY: &[&str] = &[
 ];
 
 /// Safari before fetch metadata (macOS 12/13 and iOS 16.0/16.1, `fetch_metadata: false`): a first
-/// navigation, no cookie and no referer yet — the same order the profile's own navigation template
+/// navigation, no cookie and no referer yet: the same order the profile's own navigation template
 /// already uses. Captured from macOS 12.5, 12.6 (Safari 15.6.1) and 13.0/13.6 and the iOS 16.0/16.1
 /// simulators; identical over HTTP/2 and HTTP/3 (the header set, and so the hash order, does not
-/// change with the transport here — unlike the fetch-metadata tables above, this state never adds a
+/// change with the transport here: unlike the fetch-metadata tables above, this state never adds a
 /// `priority` header).
 pub(super) const SAFARI_SONOMA_LEGACY_FIRST: &[&str] = &[
     "user-agent",
@@ -251,7 +251,7 @@ pub(super) const SAFARI_SONOMA_LEGACY_GET: &[&str] = &[
     CUSTOM,
 ];
 
-/// Safari before fetch metadata: any GET with a referer (`fetch()`, subresources, a link click) —
+/// Safari before fetch metadata: any GET with a referer (`fetch()`, subresources, a link click),
 /// the four request kinds only differ in `accept`'s value, not its position.
 pub(super) const SAFARI_SONOMA_LEGACY_GET_REFERER: &[&str] = &[
     "cookie",

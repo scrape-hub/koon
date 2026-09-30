@@ -334,7 +334,7 @@ fn ios_body_order() {
 
 /// Safari before fetch metadata (macOS 12/13, iOS 16.0/16.1, `fetch_metadata: false`): a
 /// different hash order than macOS 14/iOS 17 (which already sends fetch metadata), no
-/// `sec-fetch-*` and no `priority` at all, and — the bug this fixes — the `Accept: */*` and
+/// `sec-fetch-*` and no `priority` at all, and, the bug this fixes, the `Accept: */*` and
 /// Origin adjustments for a non-navigation request still apply even though nothing gates them on
 /// `sec-fetch-mode` being present. Captured from macOS 12.5, 12.6 (Safari 15.6.1) and 13.0/13.6,
 /// and the iOS 16.0/16.1 simulators.
@@ -395,7 +395,7 @@ fn macos_legacy_matches_the_capture() {
 
         // A POST with no caller-supplied Accept/sec-fetch-mode: koon must still detect Cors mode
         // from the method/content-type alone and default Accept to `*/*`, exactly as it does for
-        // profiles that do send fetch metadata — this is the fix (the adjustment used to be gated
+        // profiles that do send fetch metadata: this is the fix (the adjustment used to be gated
         // on `sec-fetch-mode` already being in the template).
         let post = request(
             &p,
@@ -539,7 +539,7 @@ fn websocket(profile: &BrowserProfile, extra: &[(&str, &str)]) -> Vec<(String, S
 }
 
 /// Safari before fetch metadata (macOS 12/13, iOS 16.0/16.1): no `Sec-Fetch-*` in the WebSocket
-/// handshake either, and its own hash order — captured from real Safari 16.0 on macOS 12.6 and the
+/// handshake either, and its own hash order: captured from real Safari 16.0 on macOS 12.6 and the
 /// iOS 16.0 simulator.
 #[test]
 fn websocket_upgrades_before_fetch_metadata_match_the_captures() {

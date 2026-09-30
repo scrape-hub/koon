@@ -730,6 +730,8 @@ pub struct KoonResponse {
     pub connection_reused: bool,
     #[napi(readonly)]
     pub remote_address: Option<String>,
+    #[napi(readonly)]
+    pub blocked_by: Option<String>,
     headers: Vec<(String, String)>,
     request_headers: Vec<(String, String)>,
     /// Shared with the `body` Buffer once that is created, without a copy.
@@ -742,6 +744,7 @@ pub struct KoonResponse {
 impl From<koon_core::HttpResponse> for KoonResponse {
     fn from(response: koon_core::HttpResponse) -> Self {
         Self {
+            blocked_by: response.blocked_by().map(str::to_owned),
             status: response.status,
             version: response.version,
             url: response.url,

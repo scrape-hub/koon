@@ -886,7 +886,11 @@ fn header<'a>(response: &'a StreamingResponse, name: &str) -> Option<&'a str> {
 }
 
 /// The `--json` envelope around a response and its body.
-fn json_envelope(response: &StreamingResponse, body: &[u8]) -> Result<Vec<u8>, CliError> {
+fn json_envelope(
+    response: &StreamingResponse,
+    body: &[u8],
+    blocked: Option<&str>,
+) -> Result<Vec<u8>, CliError> {
     // Keeps header order (serde_json's "preserve_order") and groups
     // repeated names (e.g. Set-Cookie) into an array under one key.
     let mut headers = serde_json::Map::new();
@@ -905,6 +909,7 @@ fn json_envelope(response: &StreamingResponse, body: &[u8]) -> Result<Vec<u8>, C
         "body": text.as_ref(),
         "version": response.version,
         "url": response.url,
+        "blocked_by": blocked,
     });
     let mut bytes = serde_json::to_vec_pretty(&envelope)
         .map_err(|e| CliError::other(format!("Failed to serialize JSON: {e}")))?;
@@ -923,8 +928,9 @@ async fn write_response(cli: &Cli, response: &mut StreamingResponse) -> Result<(
             .collect_body()
             .await
             .map_err(failed("Request failed"))?;
+        let blocked = report_blocked(cli, response, &body);
         let bytes = if cli.json_output {
-            json_envelope(response, &body)?
+            json_envelope(response, &body, blocked)?
         } else {
             // A Windows console rejects bytes that are not UTF-8, so a
             // Latin-1, Shift_JIS or binary body would abort mid-output: a
@@ -944,12 +950,17 @@ async fn write_response(cli: &Cli, response: &mut StreamingResponse) -> Result<(
     // it, as curl leaves a partial download on disk past `--max-filesize`.
     let max_response_body = cli.connection.resolved_max_response_body();
     let mut received: u64 = 0;
+    let mut first_part = Vec::new();
     let mut sink = Sink::open(output)?;
     let mut open = sink.write(head.unwrap_or_default().as_bytes())?;
     while open {
         match response.next_chunk().await {
             Some(chunk) => {
                 let chunk = chunk.map_err(failed("Request failed"))?;
+                if cli.verbose && first_part.len() < BLOCK_SCAN_BYTES {
+                    let take = chunk.len().min(BLOCK_SCAN_BYTES - first_part.len());
+                    first_part.extend_from_slice(&chunk[..take]);
+                }
                 received += chunk.len() as u64;
                 if max_response_body != 0 && received > max_response_body {
                     return Err(koon_core::Error::Body(
@@ -963,7 +974,20 @@ async fn write_response(cli: &Cli, response: &mut StreamingResponse) -> Result<(
             None => break,
         }
     }
+    report_blocked(cli, response, &first_part);
     sink.finish(cli.verbose)
+}
+
+// As much of a streamed body as `blocked_by` looks at
+const BLOCK_SCAN_BYTES: usize = 400_000;
+
+/// Which bot protection answered instead of the page; `-v` says so on stderr.
+fn report_blocked(cli: &Cli, response: &StreamingResponse, body: &[u8]) -> Option<&'static str> {
+    let blocked = koon_core::blocked_by(response.status, &response.headers, body, &response.url);
+    if let (true, Some(by)) = (cli.verbose, blocked) {
+        eprintln!("* The site answered with a bot protection page: {by}");
+    }
+    blocked
 }
 
 fn load_profile(browser: &str, profile_json: Option<&str>) -> Result<BrowserProfile, CliError> {

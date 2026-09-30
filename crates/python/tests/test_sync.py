@@ -60,7 +60,7 @@ def test_koonsync_close_closes_pool(base_url):
     resp = client.get(base_url + "/echo")
     assert resp.status == 200
     client.close()
-    # The client remains usable after close() — new connections open lazily.
+    # The client remains usable after close(): new connections open lazily.
     resp2 = client.get(base_url + "/echo")
     assert resp2.status == 200
 

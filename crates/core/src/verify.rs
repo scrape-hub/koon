@@ -380,7 +380,7 @@ pub(crate) const SAFARI_MACOS_14: Reference = Reference {
 };
 
 /// Safari on iOS 16.0 and 16.1: the TLS of iOS 17 (ecdsa_sha1, 2 MB HTTP/2 window), but no
-/// `SETTINGS_ENABLE_PUSH` at all (like macOS 12 and 13) — iOS 17 sends `2:0`.
+/// `SETTINGS_ENABLE_PUSH` at all (like macOS 12 and 13): iOS 17 sends `2:0`.
 pub(crate) const SAFARI_IOS_16: Reference = Reference {
     id: "safari-ios16",
     source: "Safari on iOS 16.0 and 16.1 (ecdsa_sha1, no SETTINGS_ENABLE_PUSH): real Safari on \
@@ -510,7 +510,7 @@ const OKHTTP_5: Reference = Reference {
     ..Reference::EMPTY
 };
 
-/// A version as `(major, minor)`: `154` → `(154, 0)`, `26.6` → `(26, 6)`.
+/// A version as `(major, minor)`: `154` -> `(154, 0)`, `26.6` -> `(26, 6)`.
 type Version = (u32, u32);
 
 fn parse_version(version: &str) -> Option<Version> {
@@ -1457,7 +1457,7 @@ mod tests {
     }
 
     /// A Safari profile has a reference exactly when its release was captured, and a QUIC reference
-    /// exactly when its transport parameters were and it reaches HTTP/3 at all — through Alt-Svc
+    /// exactly when its transport parameters were and it reaches HTTP/3 at all: through Alt-Svc
     /// or, on macOS 15.1 and 15.2, only through the DNS HTTPS record.
     #[test]
     fn safari_references_follow_the_captures() {

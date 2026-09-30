@@ -43,7 +43,7 @@ pub fn leaf(host: &str) -> (X509, PKey<Private>) {
 }
 
 /// A `mozilla_intermediate_v5` acceptor builder for `cert`/`key`, with no
-/// ALPN callback set — callers add their own protocol negotiation.
+/// ALPN callback set: callers add their own protocol negotiation.
 pub fn tls_acceptor_builder(cert: &X509, key: &PKey<Private>) -> SslAcceptorBuilder {
     let mut builder = SslAcceptor::mozilla_intermediate_v5(SslMethod::tls()).unwrap();
     builder.set_certificate(cert).unwrap();
@@ -68,7 +68,7 @@ pub async fn alt_svc_server(host: &str, h3_port: u16) -> u16 {
 }
 
 /// Plain HTTPS server on 127.0.0.1 for `host`, answering every request with
-/// `200 ok` and no Alt-Svc header — for a test that must rule out Alt-Svc as
+/// `200 ok` and no Alt-Svc header: for a test that must rule out Alt-Svc as
 /// the reason a client reached HTTP/3 (see `https_rr.rs`). Returns its port.
 pub async fn plain_server(host: &str) -> u16 {
     plain_server_with_headers(host, "").await
@@ -170,7 +170,7 @@ pub async fn fake_https_dns_server(
 }
 
 /// A nameserver that truncates every UDP answer (the `TC` bit, no usable
-/// record — as if the real one had not fit the EDNS buffer) and answers the
+/// record: as if the real one had not fit the EDNS buffer) and answers the
 /// real query, a ServiceMode record for `host` carrying `params`, only over
 /// TCP on the same port number (independent namespaces): the system's
 /// resolvers and the browsers retry over TCP instead of trusting a

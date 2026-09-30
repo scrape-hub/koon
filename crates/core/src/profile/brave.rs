@@ -16,7 +16,7 @@ use super::{BrowserProfile, HeaderFamily, Os, table_version};
 pub struct Brave;
 
 /// Every supported Brave release: the Chromium major it builds on (the profile's version), the last
-/// Brave release on it and its Chromium full version. Only the major is read — Brave reduces every
+/// Brave release on it and its Chromium full version. Only the major is read: Brave reduces every
 /// full version to `{major}.0.0.0` on the wire; the other two columns are release-note provenance,
 /// kept so the exact Brave build this profile was captured from stays on record.
 pub(super) const BRAVE_CHROMIUM: &[(u32, &str, &str)] = &[

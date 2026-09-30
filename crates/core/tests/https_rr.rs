@@ -36,7 +36,7 @@ fn alpn_params(alpn: &[&str]) -> Vec<(SvcParamKey, SvcParamValue)> {
 }
 
 /// Like [`alpn_params`], with the record's `port` SvcParam (RFC 9460 §7.2)
-/// set to `port` — captured on macOS Safari against a record that set it to
+/// set to `port`: captured on macOS Safari against a record that set it to
 /// 8443.
 fn alpn_port_params(alpn: &[&str], port: u16) -> Vec<(SvcParamKey, SvcParamValue)> {
     let mut params = alpn_params(alpn);
@@ -45,12 +45,12 @@ fn alpn_port_params(alpn: &[&str], port: u16) -> Vec<(SvcParamKey, SvcParamValue
 }
 
 /// HTTPS server on 127.0.0.1 for `host` that answers every request with a
-/// plain 200, no Alt-Svc header — so any HTTP/3 attempt in these tests can
+/// plain 200, no Alt-Svc header: so any HTTP/3 attempt in these tests can
 /// only come from the DNS HTTPS record, never from a learned alternative.
 /// `port` 0 picks one; TCP and UDP port numbers are independent, so this
 /// can share a number with a UDP-only `h3_server` on purpose (see
 /// `first_connection_actually_uses_http3_when_a_real_server_answers`, which
-/// needs a record with no `port` SvcParam — the common case — to still
+/// needs a record with no `port` SvcParam, the common case, to still
 /// reach the same address as the URL's own port). Returns the bound port.
 async fn plain_server(host: &str, port: u16) -> u16 {
     let listener = TcpListener::bind(("127.0.0.1", port)).await.unwrap();
@@ -93,7 +93,7 @@ fn serve_plain_tls(host: &str, listener: TcpListener) -> u16 {
 /// test that needs an [`h3_server_with_socket`] and a plain TLS server to
 /// share one: binds TCP on `:0` first (the OS never hands out a port from
 /// Windows' excluded ranges for that), then tries UDP on the number it
-/// picked, retrying on a fresh TCP port if that fails — Hyper-V/WSL reserve
+/// picked, retrying on a fresh TCP port if that fails: Hyper-V/WSL reserve
 /// some TCP ranges (`netsh int ipv4 show excludedportrange protocol=tcp`),
 /// and binding UDP first risked landing on one of them.
 async fn bind_matching_tcp_and_udp() -> (TcpListener, std::net::UdpSocket) {
@@ -108,7 +108,7 @@ async fn bind_matching_tcp_and_udp() -> (TcpListener, std::net::UdpSocket) {
 }
 
 /// A profile whose DNS HTTPS record advertises `h3` still ends up on TCP
-/// when nothing answers on the QUIC port — Chrome races it
+/// when nothing answers on the QUIC port: Chrome races it
 /// (`connect_racing_quic`) so the 300 ms head start is the only delay.
 #[tokio::test]
 async fn first_connection_falls_back_to_tcp_when_the_advertised_h3_never_answers() {
@@ -169,7 +169,7 @@ async fn safari_direct_quic_attempt_falls_back_to_tcp_too() {
 }
 
 /// A profile whose QUIC config turns `https_rr` off (a custom profile, or
-/// koon before this feature) never queries the record at all — it relies on
+/// koon before this feature) never queries the record at all: it relies on
 /// Alt-Svc alone.
 #[tokio::test]
 async fn a_profile_with_https_rr_off_never_queries_the_record() {
@@ -196,7 +196,7 @@ async fn a_profile_with_https_rr_off_never_queries_the_record() {
 }
 
 /// A record without `h3` in its `alpn` does not trigger a QUIC attempt
-/// either — only the presence of `h3` does.
+/// either: only the presence of `h3` does.
 #[tokio::test]
 async fn a_record_without_h3_alpn_is_not_treated_as_an_http3_alternative() {
     let (dns_addr, queries) = common::fake_https_dns_server(HOST, alpn_params(&["h2"])).await;
@@ -223,8 +223,8 @@ async fn a_record_without_h3_alpn_is_not_treated_as_an_http3_alternative() {
 
 /// The positive case the fallback tests above exist to be measured
 /// against: when a real HTTP/3 server does answer on the address the DNS
-/// HTTPS record promised, the very first connection to a fresh client — a
-/// host it never saw an Alt-Svc header for — actually completes over
+/// HTTPS record promised, the very first connection to a fresh client: a
+/// host it never saw an Alt-Svc header for: actually completes over
 /// HTTP/3. Matches Chrome's `dnsAlpnH3Job*` and Firefox's `HTTPSSVC`
 /// routing (both captured live against cloudflare.com on Windows 11) and
 /// Safari's straight-to-QUIC (Codemagic capture on macOS).
@@ -233,7 +233,7 @@ async fn first_connection_actually_uses_http3_when_a_real_server_answers() {
     for chrome in [true, false] {
         // A record with no `port` SvcParam (the common case) means the
         // HTTP/3 attempt targets the URL's own port, so the HTTP/3 server
-        // has to sit on the very port the plain one does — fine, since TCP
+        // has to sit on the very port the plain one does: fine, since TCP
         // and UDP port numbers are independent namespaces.
         let (tcp_listener, udp_socket) = bind_matching_tcp_and_udp().await;
         let (cert, key) = common::leaf(HOST);
@@ -393,7 +393,7 @@ async fn truncated_udp_answer_retries_over_tcp() {
 
 /// A DNS-over-HTTPS server on 127.0.0.1 answering every `/dns-query` POST
 /// with an HTTPS record for `host` advertising `alpn`. Returns its port and
-/// its throwaway CA in PEM, for [`DohResolver::with_extra_roots`] — a real
+/// its throwaway CA in PEM, for [`DohResolver::with_extra_roots`], a real
 /// DoH provider's certificate chains to a publicly trusted root, which a
 /// local test server cannot present, so this is the one part of the DoH
 /// path the native resolver's tests above cannot stand in for.
@@ -459,7 +459,7 @@ async fn doh_server(host: &str, alpn: &[&str]) -> (u16, Vec<u8>) {
 
 /// The DoH resolver's own connection (TLS to a server outside koon's
 /// built-in root store, trusted only via [`DohResolver::with_extra_roots`])
-/// yields the same record a real provider would, over its own HTTP/2 POST —
+/// yields the same record a real provider would, over its own HTTP/2 POST:
 /// not just the wire-format parsing `parse_https_answers` shares with the
 /// native resolver.
 #[tokio::test]
@@ -543,7 +543,7 @@ async fn oversized_doh_server(host: &str, body_len: usize) -> (u16, Vec<u8>) {
 }
 
 /// A DoH server that accepts a `/dns-query` POST and its request body, then
-/// never answers it — no headers, no data, no reset — to check that the
+/// never answers it (no headers, no data, no reset), to check that the
 /// resolver gives up instead of hanging forever on a peer that goes silent
 /// after accepting the request.
 async fn hanging_doh_server(host: &str) -> (u16, Vec<u8>) {
@@ -602,7 +602,7 @@ async fn doh_resolver_rejects_a_response_larger_than_a_dns_message() {
 }
 
 /// TRANSPORT-2: a DoH peer that accepts the request and then goes silent
-/// does not hang the lookup forever — the resolver's own response timeout
+/// does not hang the lookup forever: the resolver's own response timeout
 /// (a few seconds) gives up instead.
 #[tokio::test]
 async fn doh_resolver_times_out_on_a_silent_peer() {

@@ -2,7 +2,7 @@
 //! through it. Certificate-authority behaviour (leaf signing, caching, CA persistence) is
 //! unit-tested next to `CertAuthority` in `src/proxy/ca.rs`.
 //!
-//! No network access needed — origins run on 127.0.0.1, and the TLS tests
+//! No network access needed: origins run on 127.0.0.1, and the TLS tests
 //! only terminate TLS at the proxy.
 
 use std::net::SocketAddr;
@@ -870,7 +870,7 @@ async fn connections_beyond_the_cap_wait_for_a_free_slot() {
     // task finish, so it never releases its permit on its own.
     let mut a = TcpStream::connect(proxy.local_addr()).await.unwrap();
     a.write_all(b"GET").await.unwrap();
-    // Give the accept loop time to actually accept A and spawn its handler before B connects —
+    // Give the accept loop time to actually accept A and spawn its handler before B connects:
     // local loopback accept is normally sub-millisecond, this only bounds against scheduler
     // noise, not a race the test itself needs to win.
     tokio::time::sleep(Duration::from_millis(300)).await;

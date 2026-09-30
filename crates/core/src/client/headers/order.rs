@@ -28,7 +28,7 @@ const CONNECTION_SPECIFIC: &[&str] = &[
 
 /// The header order of a Safari request: by the network stack of its profile
 /// ([`SafariLayout`](crate::profile::SafariLayout)) and the kind of request, plus (up to macOS
-/// 14/iOS 17 only) the header set and protocol — HTTP/3 differs there; macOS 15+ uses the HTTP/2
+/// 14/iOS 17 only) the header set and protocol: HTTP/3 differs there; macOS 15+ uses the HTTP/2
 /// layouts for both, but plain http gets its own layouts only from macOS 15 on.
 pub(super) fn safari_order(
     layout: crate::profile::SafariLayout,
@@ -345,7 +345,7 @@ pub fn host_header(uri: &Uri) -> String {
     }
 }
 
-/// HTTP/1.1 casing of the headers the client generates, lowercase → wire. Browsers and `OkHttp`
+/// HTTP/1.1 casing of the headers the client generates, lowercase -> wire. Browsers and `OkHttp`
 /// write these in canonical Title-Case; Client Hints, which Chromium defines in lowercase, and
 /// caller-supplied names keep theirs.
 const HTTP1_NAMES: &[(&str, &str)] = &[

@@ -453,7 +453,7 @@ impl super::Client {
         let setup = async {
             let setup = self.quic_setup()?;
             // Concurrent with resolving the address, as `connect_tls` does for TCP: same lookup,
-            // same profile's ECH config, same Safari/OkHttp skip (`skips_ech`) — neither sends ECH
+            // same profile's ECH config, same Safari/OkHttp skip (`skips_ech`): neither sends ECH
             // at all, real or GREASE.
             let (addrs, ech_config_list) = tokio::join!(self.resolve(&key.host, h3_port), async {
                 if self.skips_ech() {

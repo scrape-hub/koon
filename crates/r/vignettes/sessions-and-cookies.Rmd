@@ -128,7 +128,7 @@ login_body <- '{"username": "user", "password": "pass"}'
 resp <- client$post("https://example.com/api/login", login_body,
   headers = c("Content-Type" = "application/json"))
 
-# Step 2: Session cookies are now stored — subsequent requests are authenticated
+# Step 2: Session cookies are now stored; subsequent requests are authenticated
 resp <- client$get("https://example.com/api/profile")
 profile <- jsonlite::fromJSON(resp$text)
 

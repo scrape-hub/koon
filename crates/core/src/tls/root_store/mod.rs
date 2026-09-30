@@ -1,4 +1,4 @@
-//! The root certificates koon verifies server certificates against: one store per profile —
+//! The root certificates koon verifies server certificates against: one store per profile,
 //! Mozilla's roots plus every trust anchor of the embedded Chrome Root Store versions, deduplicated
 //! (which roots a browser trusts does not show on the wire, so the union loses nothing). What a
 //! profile advertises stays per version ([`chrome_trust_anchor_ids`]).

@@ -194,7 +194,7 @@ const QUIC_TAHOE: Quic = Quic {
 };
 
 /// macOS 14 Sonoma: also what 14.6 sends (Safari 17.6, the last Safari 17), confirmed identical
-/// in every layer checked — TLS/QUIC JA4, HTTP/2 SETTINGS and WINDOW_UPDATE, QUIC transport
+/// in every layer checked: TLS/QUIC JA4, HTTP/2 SETTINGS and WINDOW_UPDATE, QUIC transport
 /// parameters, and request headers over HTTP/2, HTTP/3 and WebSocket.
 const MACOS_14: Release = Release {
     tls: Stack::Sonoma,
@@ -212,7 +212,7 @@ const MACOS_14: Release = Release {
     reference: Some(&SAFARI_MACOS_14),
 };
 /// macOS 12 Monterey: the TLS and HTTP/2 layer of macOS 14 (same JA4, same HEADERS layout), but
-/// without `SETTINGS_ENABLE_PUSH` and without HTTP/3 at all — no QUIC packet and no DNS HTTPS
+/// without `SETTINGS_ENABLE_PUSH` and without HTTP/3 at all: no QUIC packet and no DNS HTTPS
 /// query in any phase of a capture (`H`, `R`'s racing test, both HTTPS-record and Alt-Svc routes).
 /// Confirmed on 12.6 too (Safari 15.6.1, the version that ships on that image before the 16.0
 /// update): same TLS/QUIC/SETTINGS as 12.5, zero QUIC packets again.
@@ -240,7 +240,7 @@ const MACOS_13: Release = Release {
 /// macOS 13.6: captured to send exactly the stack of macOS 13.0 (TLS with `ecdsa_sha1`, no
 /// `SETTINGS_ENABLE_PUSH`, the QUIC transport parameters and JA4 of [`QUIC_SONOMA`]). Only the
 /// header layer differs from the macOS 13.0/Safari 16.1 profile: Safari 16.4 added fetch metadata
-/// (`sec-fetch-*`), which this capture (Safari 16.6) already sends — a `WebKit` version change, not
+/// (`sec-fetch-*`), which this capture (Safari 16.6) already sends: a `WebKit` version change, not
 /// a network-stack one.
 const MACOS_13_6: Release = Release {
     captured: Some("macOS 13.6"),
@@ -308,7 +308,7 @@ const MACOS_15_4: Release = Release {
 };
 /// Also what macOS 15.6.1, 15.7, 15.7.9 and 15.8 send: same TLS JA4, HTTP/2 SETTINGS (no
 /// `ENABLE_CONNECT_PROTOCOL`), QUIC transport parameters (private parameter `4`) and
-/// `accept-encoding` (no zstd) as the 15.5 capture — 15.8 confirmed with stock Safari 18.6 (a
+/// `accept-encoding` (no zstd) as the 15.5 capture: 15.8 confirmed with stock Safari 18.6 (a
 /// pure OS point update, no Safari version change), request headers included (navigation,
 /// fetch/subresource, CORS/preflight, plain http, WebSocket).
 const MACOS_15_5: Release = Release {
@@ -397,7 +397,7 @@ const MACOS_27: Release = Release {
     ..MACOS_26
 };
 /// iOS 16.0 and 16.1: captured to send exactly the TLS and QUIC of iOS 17.0.1 (same JA4, same
-/// transport parameter values), but no `SETTINGS_ENABLE_PUSH` — like macOS 12 and 13,
+/// transport parameter values), but no `SETTINGS_ENABLE_PUSH`: like macOS 12 and 13,
 /// `http2_enable_push` is macOS 14/iOS 17 on, not from iOS 16.x on despite the shared Sonoma stack.
 const IOS_16: Release = Release {
     http2_enable_push: false,
@@ -411,9 +411,9 @@ const IOS_16: Release = Release {
     ..MACOS_14
 };
 /// iOS 16.4: `IOS_16` with fetch metadata (its `SafariVersion` sets `fetch_metadata: true`, like
-/// macOS 13.6) — every other layer (TLS, QUIC, the header hash order fetch metadata picks) matches
+/// macOS 13.6): every other layer (TLS, QUIC, the header hash order fetch metadata picks) matches
 /// the iOS 17.0.1 capture exactly, `SETTINGS_ENABLE_PUSH` still absent. Its own captured release,
-/// standing in for 16.5 and 16.6 (`derived`; their simulators are no longer downloadable — Apple's
+/// standing in for 16.5 and 16.6 (`derived`; their simulators are no longer downloadable: Apple's
 /// network stack does not change within a patch release, but this is not itself verified).
 const IOS_16_4: Release = Release {
     captured: Some("iOS 16.4"),

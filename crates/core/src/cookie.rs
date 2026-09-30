@@ -152,7 +152,7 @@ impl CookieJar {
         }
     }
 
-    /// Insert or replace a cookie, keyed by (name, domain, path, `host_only`) — a host-only and a
+    /// Insert or replace a cookie, keyed by (name, domain, path, `host_only`): a host-only and a
     /// domain cookie of the same name coexist, as in browsers. Replacing keeps the original
     /// creation time (RFC 6265 §5.3 step 11.3). A cookie whose `expires` is already past removes
     /// the matching stored cookie instead (a `Set-Cookie` deletion).
@@ -896,7 +896,7 @@ fn parse_http_date(s: &str) -> Option<SystemTime> {
     let days = days_from_civil(year, month, day);
     let total_secs = days * 86400 + i64::from(hour) * 3600 + i64::from(min) * 60 + i64::from(sec);
     // Valid per RFC 6265 (min year 1601) but pre-epoch; clamp since `SystemTime` can't go negative
-    // — still reads as "already expired".
+    // still reads as "already expired".
     let total_secs = total_secs.max(0) as u64;
     UNIX_EPOCH.checked_add(Duration::from_secs(total_secs))
 }
@@ -912,7 +912,7 @@ const fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
     era * 146097 + doe as i64 - 719468
 }
 
-/// Check whether `domain` is itself a public suffix (eTLD, e.g. `com` or `co.uk`) — cookies must
+/// Check whether `domain` is itself a public suffix (eTLD, e.g. `com` or `co.uk`): cookies must
 /// not be scoped to one, or one site could set cookies readable by every sibling under it. Requires
 /// a *known* PSL entry (`Suffix::is_known`): `psl::suffix`'s "no rule matched" fallback would
 /// otherwise treat any single-label intranet host (`localhost`, `corp`) as a public suffix too.
@@ -1191,7 +1191,7 @@ mod tests {
     #[test]
     fn test_host_only_and_domain_cookie_coexist() {
         // A host-only `sid` on example.com and a domain `sid` on .example.com are distinct cookies,
-        // not an overwrite of one another — the upsert key must include host_only.
+        // not an overwrite of one another: the upsert key must include host_only.
         let mut jar = CookieJar::new();
         jar.set(test_cookie("sid", "example.com", "/", true));
         jar.set(test_cookie("sid", "example.com", "/", false));
@@ -1572,7 +1572,7 @@ mod tests {
         let url = "https://example.com/";
         let sub_url = uri("https://sub.example.com/");
 
-        // Cookie without explicit Domain → host_only = true
+        // Cookie without explicit Domain -> host_only = true
         store(&mut jar, url, &["hostonly=yes; Path=/"]);
         assert!(jar.cookie_header(&uri(url)).is_some());
         assert!(jar.cookie_header(&sub_url).is_none());
@@ -1644,7 +1644,7 @@ mod tests {
 
     #[test]
     fn test_http_date_parsing_rfc850_style() {
-        // "DD-Mon-YY(YY)" — still sent by a number of real servers.
+        // "DD-Mon-YY(YY)": still sent by a number of real servers.
         let date = parse_http_date("Fri, 18-Sep-2026 12:00:00 GMT").unwrap();
         let expected = days_from_civil(2026, 9, 18) as u64 * 86400 + 12 * 3600;
         assert_eq!(epoch_secs(date), expected);

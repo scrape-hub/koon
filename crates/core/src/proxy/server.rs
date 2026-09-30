@@ -31,8 +31,8 @@ const STREAMED_BODY_PIECES: usize = 8;
 /// Largest request head (request line and headers) the proxy accepts.
 const MAX_HEAD_SIZE: usize = 64 * 1024;
 
-/// How long the proxy waits on any single read or write with the proxied client — a request head,
-/// a tunnel's TLS handshake, a body chunk, or a response chunk/flush — covering the whole head, so
+/// How long the proxy waits on any single read or write with the proxied client (a request head,
+/// a tunnel's TLS handshake, a body chunk, or a response chunk/flush), covering the whole head, so
 /// a client trickling it byte by byte is disconnected like one that sends nothing, and covering
 /// each direction, so a client that stops reading its socket cannot hold the connection (and
 /// whatever it holds upstream) open forever either.
@@ -311,7 +311,7 @@ impl Shared {
 }
 
 /// The TLS acceptor for intercepted tunnels: one context for every host, so the proxied client can
-/// resume sessions, with no certificate set — each connection gets the leaf for its SNI (or the
+/// resume sessions, with no certificate set: each connection gets the leaf for its SNI (or the
 /// CONNECT target's, for a client that sends none, e.g. for an IP literal) from the CA's cache,
 /// signing one on demand if needed.
 fn build_acceptor(ca: Arc<CertAuthority>) -> Result<SslAcceptor, Error> {
@@ -341,7 +341,7 @@ fn build_acceptor(ca: Arc<CertAuthority>) -> Result<SslAcceptor, Error> {
 /// Accept loop: listens for incoming connections and spawns handlers, which end together with the
 /// server. Bounded by `connections`: a permit is acquired before the next `accept()` is even
 /// polled, so once the cap is reached the listener simply stops being polled (no new task, socket
-/// or — for a tunnel — signed leaf cert and TLS session is created) until a running connection
+/// or, for a tunnel, signed leaf cert and TLS session is created) until a running connection
 /// ends and frees its permit.
 async fn accept_loop(
     listener: TcpListener,
@@ -952,9 +952,9 @@ async fn read_request<S: AsyncRead + Unpin>(
     }))
 }
 
-/// How a request body is delimited, per RFC 9112 §6.3: chunked, `Content-Length`, or — with neither
-/// — no body at all. Rejects both headers together, a `Transfer-Encoding` not ending in `chunked`,
-/// and an invalid or conflicting `Content-Length` — the ambiguities request smuggling exploits.
+/// How a request body is delimited, per RFC 9112 §6.3: chunked, `Content-Length`, or, with neither
+/// no body at all. Rejects both headers together, a `Transfer-Encoding` not ending in `chunked`,
+/// and an invalid or conflicting `Content-Length`: the ambiguities request smuggling exploits.
 fn request_framing(headers: &[(String, String)]) -> Result<BodyFraming, Error> {
     fn values<'a>(headers: &'a [(String, String)], name: &str) -> Vec<&'a str> {
         headers
@@ -1421,7 +1421,7 @@ mod tests {
         assert!(matches!(result, Err(Error::Timeout)), "{result:?}");
     }
 
-    /// An `AsyncWrite` that accepts data instantly but never completes a flush — mimicking a
+    /// An `AsyncWrite` that accepts data instantly but never completes a flush: mimicking a
     /// socket whose bytes went into the OS send buffer but whose peer never drains it.
     struct NeverFlushes;
 

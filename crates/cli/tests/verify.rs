@@ -34,10 +34,10 @@ const WRONG_JA4: &str = "t13d1516h2_8daaf6152771_806a8c22fdea";
 const PADDED_JA4: &str = "t13d1518h2_8daaf6152771_4980c97edce0";
 const PADDED_JA3N: &str = "a3a3161a080b73bda9cc285fb367fcc0";
 
-/// Mock services, one request per connection. Routes: `/chrome` →
-/// `CHROME_JSON`, `/peet` → `CHROME_PEET_JSON`, `/wrong` → `CHROME_JSON`
-/// with `WRONG_JA4`, `/padded` → `CHROME_JSON` with `PADDED_JA4` and
-/// `PADDED_JA3N`, `/down` → 503, `/html` → a page without JSON.
+/// Mock services, one request per connection. Routes: `/chrome` ->
+/// `CHROME_JSON`, `/peet` -> `CHROME_PEET_JSON`, `/wrong` -> `CHROME_JSON`
+/// with `WRONG_JA4`, `/padded` -> `CHROME_JSON` with `PADDED_JA4` and
+/// `PADDED_JA3N`, `/down` -> 503, `/html` -> a page without JSON.
 fn server() -> u16 {
     common::mock_server(|_method, path, _head, _body| {
         let (status, content_type, body) = match path {
@@ -79,7 +79,7 @@ fn koon_verify(args: &[&str]) -> Output {
     command.args(args).output().expect("koon runs")
 }
 
-/// The profile name `name` resolves to (`chrome154` → `chrome154-<default
+/// The profile name `name` resolves to (`chrome154` -> `chrome154-<default
 /// OS>`).
 fn canonical(name: &str) -> String {
     koon_core::BrowserProfile::resolve_name(name)

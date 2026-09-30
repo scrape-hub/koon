@@ -807,9 +807,11 @@ impl<'py> IntoPyObject<'py> for Response {
 
     fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
         let r = self.0;
+        let blocked_by = r.blocked_by();
         Bound::new(
             py,
             KoonResponse {
+                blocked_by,
                 status: r.status,
                 headers: HeaderList::new(r.headers),
                 body: PyBytes::new(py, &r.body).unbind(),
@@ -889,6 +891,10 @@ struct KoonResponse {
     /// Remote IP address of the peer (the proxy when one is used).
     #[pyo3(get)]
     remote_address: Option<String>,
+    /// The bot protection that answered instead of the page, or None for
+    /// the page itself. A plain error status gives None.
+    #[pyo3(get)]
+    blocked_by: Option<&'static str>,
     request_headers: HeaderList,
     text: PyOnceLock<Py<PyString>>,
 }

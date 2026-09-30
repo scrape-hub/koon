@@ -1,5 +1,5 @@
 //! WebSocket connections (RFC 6455), over HTTP/1.1 or, as browsers do, over an HTTP/2 stream (RFC
-//! 8441 extended CONNECT) where the profile's browser would use one — see `OverH2` for which, and
+//! 8441 extended CONNECT) where the profile's browser would use one: see `OverH2` for which, and
 //! `ClosingBehavior` for how it ends that stream. None of them runs WebSockets over HTTP/3 (RFC
 //! 9220) by default.
 

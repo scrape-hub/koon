@@ -35,7 +35,7 @@ async fn timeout() {
         .build()
         .unwrap();
 
-    // httpbin.org/delay/10 waits 10s — should time out.
+    // httpbin.org/delay/10 waits 10s: should time out.
     let result = client.get("https://httpbin.org/delay/10").await;
     assert!(result.is_err(), "Should timeout after 2s on 10s delay");
 }
@@ -46,7 +46,7 @@ async fn http3_via_alt_svc() {
     // Google advertises h3 via Alt-Svc too, but also publishes a DNS HTTPS
     // record with `alpn=h3` (like most of Google's own domains), so a
     // default profile reaches HTTP/3 on its very first connection through
-    // `https_rr` instead — see `http3_via_dns_https_record` for that. This
+    // `https_rr` instead: see `http3_via_dns_https_record` for that. This
     // test isolates the older, still-real Alt-Svc-only mechanism (used
     // whenever a browser's own profile has it off, or as a fallback where no
     // HTTPS record is reachable) by turning `https_rr` off: the first
@@ -69,7 +69,7 @@ async fn http3_via_alt_svc() {
 
 /// The default profile (`https_rr` on) reaches HTTP/3 on its very first
 /// connection to a host it never talked to before, from the DNS HTTPS
-/// record alone — no Alt-Svc round trip needed (see `http3_via_alt_svc` for
+/// record alone: no Alt-Svc round trip needed (see `http3_via_alt_svc` for
 /// the older, Alt-Svc-only mechanism this complements, and
 /// `tests/https_rr.rs` for the offline, non-network version of this same
 /// check).

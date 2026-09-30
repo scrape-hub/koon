@@ -46,7 +46,7 @@ dist/
 crates/r/src/entrypoint.o
 crates/r/src/rust/target/
 # R: optional machine-specific bindgen config for direct `cargo` builds.
-# R CMD INSTALL doesn't need it — Makevars.win auto-detects clang/Rtools paths.
+# R CMD INSTALL doesn't need it: Makevars.win auto-detects clang/Rtools paths.
 crates/r/src/rust/.cargo/config.toml
 
 # Playwright MCP

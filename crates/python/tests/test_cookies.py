@@ -214,7 +214,7 @@ def test_opaque_partition_key_is_skipped():
 
 
 def test_partition_key_none_is_accepted():
-    """CDP always includes partitionKey, set to None for an ordinary cookie —
+    """CDP always includes partitionKey, set to None for an ordinary cookie:
     that must not be treated as partitioned."""
     client = KoonSync("chrome")
     client.set_cookies(

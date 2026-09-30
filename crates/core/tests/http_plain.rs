@@ -21,9 +21,9 @@ struct Seen {
 
 /// Local HTTP/1.1 server with keep-alive that records every request.
 ///
-/// Routes: `/redirect` → 302 to `/final`, `/see-other` → 303 to `/final`,
-/// `/303?to=URL` and `/307?to=URL` → that redirect to URL, `/slow` →
-/// responds after 2 s, `/cookie` → sets a cookie, anything else → 200 "ok".
+/// Routes: `/redirect` -> 302 to `/final`, `/see-other` -> 303 to `/final`,
+/// `/303?to=URL` and `/307?to=URL` -> that redirect to URL, `/slow` ->
+/// responds after 2 s, `/cookie` -> sets a cookie, anything else -> 200 "ok".
 struct Server {
     port: u16,
     seen: Arc<Mutex<Vec<Seen>>>,

@@ -165,7 +165,7 @@ pub(super) const CHROME_152_MACOS_TRUST_ANCHOR_ORDER: [&[u8]; 32] = [
 /// `trust_anchor_ids`, from [`chromium_trust_anchor_ids`], carries the IDs of the Chrome Root Store
 /// compiled into the release, letting a server pick or shorten its chain for an anchor Chrome
 /// trusts; koon's root store verifies such a chain by holding every embedded Chrome anchor
-/// alongside Mozilla's. Chromium 152–153 list the IDs in hash-set order
+/// alongside Mozilla's. Chromium 152-153 list the IDs in hash-set order
 /// ([`CHROME_152_MACOS_TRUST_ANCHOR_ORDER`] is macOS's fixed exception); 154 sorts them.
 pub fn chromium_tls(
     chromium_major: u32,

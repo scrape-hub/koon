@@ -46,6 +46,13 @@ impl HttpResponse {
         decode_body_text(&self.body, header_value(&self.headers, "content-type"))
     }
 
+    /// The bot protection that answered instead of the page, or `None` for the page itself: see
+    /// [`blocked_by`](crate::blocked_by) for the values.
+    #[must_use]
+    pub fn blocked_by(&self) -> Option<&'static str> {
+        super::blocked::blocked_by(self.status, &self.headers, &self.body, &self.url)
+    }
+
     /// Extract the charset from the Content-Type header (e.g. `"utf-8"` from `"text/html;
     /// charset=utf-8"`). Returns `None` if no charset is specified.
     #[must_use]
@@ -66,7 +73,7 @@ pub fn decode_body_text<'a>(body: &'a [u8], content_type: Option<&str>) -> Cow<'
 }
 
 /// Parse the charset value from a Content-Type header string. E.g. `"text/html; charset=shift_jis"`
-/// → `Some("shift_jis")`.
+/// -> `Some("shift_jis")`.
 fn parse_charset(content_type: &str) -> Option<&str> {
     content_type.split(';').find_map(|part| {
         let part = part.trim();
@@ -127,7 +134,7 @@ fn deserialize_tls_sessions<'de, D: serde::Deserializer<'de>>(
 
 /// Undo the content codings of a response body (RFC 9110 §8.4) with a [`ContentDecoder`]. An empty
 /// body (HEAD, 204, 304) is returned as is, and so is a body with a coding koon cannot decode. `max`
-/// caps the decoded size (see [`ContentDecoder::limit`]) — a decompression bomb is then caught by
+/// caps the decoded size (see [`ContentDecoder::limit`]), a decompression bomb is then caught by
 /// its decoded size, independent of how small the compressed `data` is.
 ///
 /// # Errors

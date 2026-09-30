@@ -28,8 +28,8 @@ pip install "koon[requests]"   # with the requests adapter's dependency
 **R**
 ```r
 # Windows, or macOS on Apple silicon, with R 4.6: the prebuilt package of the release
-install.packages("https://github.com/scrape-hub/koon/releases/download/v1.0.1/koon_1.0.1.zip", repos = NULL)  # Windows
-install.packages("https://github.com/scrape-hub/koon/releases/download/v1.0.1/koon_1.0.1.tgz", repos = NULL)  # macOS
+install.packages("https://github.com/scrape-hub/koon/releases/download/v1.1.0/koon_1.1.0.zip", repos = NULL)  # Windows
+install.packages("https://github.com/scrape-hub/koon/releases/download/v1.1.0/koon_1.1.0.tgz", repos = NULL)  # macOS
 
 # Other platforms and R versions build from source: Rust 1.85+ and CMake, on
 # Windows also Rtools, LLVM and `rustup target add x86_64-pc-windows-gnu`
@@ -120,9 +120,11 @@ Every fingerprint change of every browser is checked against captures from the r
 
 ## Limits
 
-koon does not run JavaScript. A site that puts a JavaScript challenge first (Akamai, DataDome, AWS WAF, Kasada, PerimeterX) needs a real browser once: hand its cookies to koon with `setCookies()` (`set_cookies()` in Python and R) and koon usually carries on from there.
+koon does not run JavaScript. A site that puts a JavaScript challenge first (Akamai, DataDome, AWS WAF, Kasada, PerimeterX) needs a real browser once; `blockedBy` says when that happens. Hand the browser's cookies to koon with `setCookies()` (`set_cookies()` in Python and R) and koon usually carries on from there.
 
 Pick proxies whose operating system matches the profile. Bot protection compares the TCP/IP fingerprint of a connection (TTL, TCP window size and options) with the OS the browser claims; that layer comes from the kernel of the machine or proxy that opens the TCP connection, not from koon. A Windows Chrome profile through a Linux datacenter proxy is a mismatch no HTTP client can hide.
+
+Match the language to the IP as well. koon asks for English pages unless you set `locale`, and some sites turn away a request whose language does not fit the country of its IP.
 
 ## Supported browsers
 
@@ -175,6 +177,7 @@ Chrome Mobile and Firefox Mobile send their desktop counterpart's fingerprint wi
 - **Per-request options**: headers, timeout, proxy and redirect following without touching the client
 - **Response body cap**: 100 MiB by default, decompression bombs included
 - **Request headers on every response**: exactly what was sent, HTTP/2 and HTTP/3 pseudo-headers included
+- **Bot protection named**: `blockedBy` (`blocked_by` in Python, R and Rust) names the bot protection that answered instead of the page (Cloudflare, Akamai, DataDome, ...), which the status code alone does not tell
 - **Plain HTTP**: `http://` with the header set browsers use for insecure origins
 - **Network options**: local address binding, IPv4 or IPv6 only, host pinning like curl's `--resolve`, `locale` for an Accept-Language that matches the proxy's country
 - **Key logging**: `SSLKEYLOGFILE` writes the TLS secrets (TCP, QUIC and DoH) for Wireshark
@@ -232,6 +235,7 @@ console.log(r1.body);                           // raw Buffer
 console.log(r1.tlsResumed);                     // TLS session was reused
 console.log(r1.connectionReused);               // pooled connection was reused
 console.log(r1.remoteAddress);                  // peer IP (the proxy when one is used)
+console.log(r1.blockedBy);                      // null, or e.g. 'cloudflare' when bot protection answered
 console.log(r1.bytesSent, r1.bytesReceived);    // bandwidth per request
 
 // Per-request headers, timeout, proxy and hooks
@@ -371,6 +375,7 @@ with KoonSync("chrome",                          # latest Chrome on Windows
     print(r.tls_resumed)        # TLS session was reused
     print(r.connection_reused)  # pooled connection was reused
     print(r.bytes_sent, r.bytes_received)  # bandwidth per request
+    print(r.blocked_by)         # None, or e.g. "cloudflare" when bot protection answered
 
     # Per-request headers, timeout, proxy and hooks
     r = client.get("https://httpbin.org/get",
@@ -511,6 +516,7 @@ resp$text           # body as string (charset-aware)
 resp$content_type   # e.g. "text/html; charset=utf-8"
 resp$body           # raw vector
 resp$headers        # data.frame with name + value columns
+resp$blocked_by     # NULL, or e.g. "cloudflare" when bot protection answered
 
 # Parse JSON (via jsonlite)
 data <- jsonlite::fromJSON(resp$text)
@@ -567,7 +573,7 @@ koon -F name=value -F photo=@photo.png -F "doc=@report.bin;type=application/pdf"
 # Custom headers
 koon -b safari -H "Authorization: Bearer token" https://api.example.com
 
-# Verbose output (request/response headers on stderr)
+# Verbose output (request/response headers on stderr, and the bot protection if one answered)
 koon -v https://httpbin.org/get
 
 # Response headers: -i includes them in the output, -I sends a HEAD request
@@ -577,7 +583,7 @@ koon -I https://example.com
 # Fail on HTTP errors (status >= 400): no output, exit code 22
 koon -f -o page.html https://example.com
 
-# JSON output
+# JSON output: status, headers, body, version, url and blocked_by
 koon --json https://httpbin.org/get
 
 # Save the response to a file (written as it arrives)
@@ -673,6 +679,9 @@ async fn main() -> Result<(), koon_core::Error> {
 
     let r = client.get("https://example.com").await?;
     println!("{} {} ({} bytes)", r.status, r.version, r.body.len());
+    if let Some(by) = r.blocked_by() {
+        println!("{by} answered instead of the page");
+    }
 
     // Per-request headers, timeout, proxy, redirects and hooks
     let options = RequestOptions {

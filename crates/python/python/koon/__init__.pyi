@@ -7,6 +7,7 @@ from typing import (
     Dict,
     Iterator,
     List,
+    Literal,
     Mapping,
     Optional,
     Sequence,
@@ -20,6 +21,24 @@ from typing import (
 # 3.11. Type-checking only; a `.pyi` is never imported at runtime.
 from typing_extensions import TypedDict, Unpack
 
+# `javascript` is a JavaScript challenge and `block-page` a block page of no
+# known vendor, `consent` a cookie consent page.
+BlockedBy = Literal[
+    "cloudflare",
+    "akamai",
+    "datadome",
+    "perimeterx",
+    "aws-waf",
+    "imperva",
+    "kasada",
+    "baleen",
+    "google",
+    "amazon",
+    "javascript",
+    "block-page",
+    "consent",
+]
+
 # Headers may be given as any mapping (a dict, httpx.Headers, requests'
 # CaseInsensitiveDict, MappingProxyType, ...), read in its iteration order,
 # or as a sequence of (name, value) pairs. They are sent in that order. A
@@ -32,10 +51,10 @@ LocalAddress = Union[str, IPv4Address, IPv6Address]
 
 # A Playwright/CDP-style cookie dict. Recognized keys (others are ignored):
 #   name, value: str (required; a missing one raises KoonInvalidArgument)
-#   domain: str — a leading dot makes a domain cookie (also sent to
-#       subdomains), none a host-only cookie
+#   domain: str (a leading dot makes a domain cookie, also sent to
+#       subdomains; none a host-only cookie)
 #   path: str (default "/")
-#   url: str — instead of domain/path (not together with either): a host-only
+#   url: str (instead of domain/path, not together with either): a host-only
 #       cookie for the URL's host, with the URL path up to its last "/" as
 #       path, and secure set by the scheme (https)
 #   expires: float (unix seconds up to 253402300799; -1 or omitted/None
@@ -44,10 +63,10 @@ LocalAddress = Union[str, IPv4Address, IPv6Address]
 #   sameSite: "Strict" | "Lax" | "None" (case-insensitive; default "Lax")
 #   hostOnly: bool (overrides what domain/url imply)
 #   partitionKey: a cookie whose partitionKey is present and not None is
-#       skipped — browsers send partitioned (CHIPS) cookies only in a
+#       skipped: browsers send partitioned (CHIPS) cookies only in a
 #       third-party context, never with top-level requests.
-#   partitionKeyOpaque: bool — CDP's flag for an opaque partition key; True
-#       skips the cookie like a partitionKey.
+#   partitionKeyOpaque: bool (CDP's flag for an opaque partition key; True
+#       skips the cookie like a partitionKey)
 # The dicts returned by `cookies()` have name, value, domain (with a leading
 # dot for domain cookies), path, expires, httpOnly, secure, sameSite and
 # hostOnly, and feed straight back into `set_cookies()`.
@@ -276,7 +295,7 @@ class Koon:
         ...
     def close(self) -> None:
         """Close all pooled connections and release resources, without
-        waiting. The client can still be used afterward — new connections open
+        waiting. The client can still be used afterward: new connections open
         as needed. Idle HTTP/3 connections end as the browser ends them at
         shutdown; one with a response still being read ends as when the pool
         drops it once the response is done: Chrome-family profiles discard it
@@ -296,7 +315,7 @@ class Koon:
         """
         ...
     async def __aenter__(self) -> "Koon":
-        """Support ``async with`` — returns the client."""
+        """Support ``async with``: returns the client."""
         ...
     async def __aexit__(
         self,
@@ -304,7 +323,7 @@ class Koon:
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> None:
-        """Support ``async with`` — shuts the client down (``shutdown()``)."""
+        """Support ``async with``: shuts the client down (``shutdown()``)."""
         ...
     async def get(
         self, url: str, **options: Unpack[RequestOptions]
@@ -458,6 +477,11 @@ class KoonResponse:
     def remote_address(self) -> Optional[str]:
         """Remote IP address of the peer (e.g. "1.2.3.4" or "::1"; the proxy when one is used)."""
         ...
+    @property
+    def blocked_by(self) -> Optional[BlockedBy]:
+        """The bot protection that answered instead of the page, or None for the page itself.
+        A plain error status gives None."""
+        ...
     def json(self) -> object:
         """Parse response body as JSON (delegates to ``json.loads``)."""
         ...
@@ -535,7 +559,7 @@ class KoonStreamingResponse:
         """Support ``async for chunk in response:``."""
         ...
     async def __anext__(self) -> bytes:
-        """Async iterator next — returns bytes or raises StopAsyncIteration."""
+        """Async iterator next: returns bytes or raises StopAsyncIteration."""
         ...
     def close(self) -> None:
         """Drop the rest of the body without reading it: the stream is closed
@@ -552,7 +576,7 @@ class KoonStreamingResponse:
     async def __aexit__(
         self, exc_type: object, exc_val: object, exc_tb: object
     ) -> bool:
-        """Support ``async with`` — closes the response (``close()``)."""
+        """Support ``async with``: closes the response (``close()``)."""
         ...
 
 class KoonSyncStreamingResponse:
@@ -621,25 +645,25 @@ class KoonSyncStreamingResponse:
         """Support ``for chunk in response:``."""
         ...
     def __next__(self) -> bytes:
-        """Iterator next — returns bytes or raises StopIteration."""
+        """Iterator next: returns bytes or raises StopIteration."""
         ...
     def close(self) -> None:
         """Drop the rest of the body without reading it, as
         ``KoonStreamingResponse.close()`` does."""
         ...
     def __enter__(self) -> "KoonSyncStreamingResponse":
-        """Support ``with`` — returns the response."""
+        """Support ``with``: returns the response."""
         ...
     def __exit__(
         self, exc_type: object, exc_val: object, exc_tb: object
     ) -> bool:
-        """Support ``with`` — closes the response (``close()``)."""
+        """Support ``with``: closes the response (``close()``)."""
         ...
 
 class KoonWebSocket:
     """A WebSocket connection with browser-fingerprinted TLS.
 
-    Send, receive and close can run concurrently — a pending ``receive()``
+    Send, receive and close can run concurrently: a pending ``receive()``
     never blocks a ``send()``.
     """
 
@@ -656,12 +680,12 @@ class KoonWebSocket:
         (0-65535, else ``KoonInvalidArgument``) and reason."""
         ...
     async def __aenter__(self) -> "KoonWebSocket":
-        """Support ``async with`` — returns self."""
+        """Support ``async with``: returns self."""
         ...
     async def __aexit__(
         self, exc_type: object, exc_val: object, exc_tb: object
     ) -> bool:
-        """Support ``async with`` — closes the connection on exit."""
+        """Support ``async with``: closes the connection on exit."""
         ...
 
 class KoonProxy:
@@ -719,7 +743,7 @@ class KoonProxy:
             browser: Browser to impersonate (e.g. "chrome", "firefox154").
             profile_json: Custom browser profile as JSON string (overrides ``browser``).
             listen_addr: Address to listen on (default: "127.0.0.1:0" for random port).
-            header_mode: Header mode — "impersonate" (default) or "passthrough"
+            header_mode: "impersonate" (default) or "passthrough"
                 (any case; anything else raises ``KoonInvalidArgument``).
             ca_dir: Directory for CA certificate storage.
             timeout: Timeout in seconds, fractions allowed, for a forwarded
@@ -863,7 +887,7 @@ class KoonSync:
         ...
     def close(self) -> None:
         """Close all pooled connections without waiting, as
-        ``Koon.close()`` does. The client can still be used afterward — new
+        ``Koon.close()`` does. The client can still be used afterward: new
         connections open as needed. ``shutdown()`` ends everything at once."""
         ...
     def shutdown(self) -> None:
@@ -878,7 +902,7 @@ class KoonSync:
         """
         ...
     def __enter__(self) -> "KoonSync":
-        """Support ``with`` — returns the client."""
+        """Support ``with``: returns the client."""
         ...
     def __exit__(
         self,
@@ -886,7 +910,7 @@ class KoonSync:
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> None:
-        """Support ``with`` — shuts the client down (``shutdown()``)."""
+        """Support ``with``: shuts the client down (``shutdown()``)."""
         ...
     def get(self, url: str, **options: Unpack[RequestOptions]) -> KoonResponse:
         """Perform a blocking HTTP GET request."""

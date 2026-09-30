@@ -155,7 +155,7 @@ impl Error {
     }
 
     /// Whether this error provably occurred before any request was sent (during DNS/TCP, the TLS
-    /// handshake, or a proxy CONNECT) — safe to retry even for a non-idempotent method like POST.
+    /// handshake, or a proxy CONNECT): safe to retry even for a non-idempotent method like POST.
     pub const fn is_pre_send(&self) -> bool {
         matches!(
             self,

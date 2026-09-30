@@ -15,7 +15,7 @@ const MAX_IDLE_H1_PER_ORIGIN: usize = 6;
 const MAX_MULTIPLEXED_ORIGINS: usize = 1024;
 
 /// Pool key: scheme, origin and the proxy the connection goes through. Connections are never shared
-/// across proxies — a different proxy URL (including its credentials, which often carry a session
+/// across proxies: a different proxy URL (including its credentials, which often carry a session
 /// ID) is a different exit.
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub(crate) struct PoolKey {
@@ -223,7 +223,7 @@ impl ConnectionPool {
 
     /// Pool a new multiplexed connection for `key`, returning its ID (`None` if not pooled);
     /// requests in flight on the current one still complete when it's replaced. A new HTTP/2
-    /// connection always replaces the current one; HTTP/3 replaces HTTP/2 but not another HTTP/3 —
+    /// connection always replaces the current one; HTTP/3 replaces HTTP/2 but not another HTTP/3:
     /// a QUIC connection that wins after TCP takes over, as Chrome prefers a QUIC session once it
     /// has one.
     pub fn put_mux(&self, key: PoolKey, mux: Mux, info: ConnInfo) -> Option<u64> {

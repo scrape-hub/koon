@@ -405,7 +405,7 @@ mod tests {
         let (cert_a, _) = ca.get_or_create_leaf("a.example.com").unwrap();
         let (cert_b, _) = ca.get_or_create_leaf("b.example.com").unwrap();
         ca.get_or_create_leaf("c.example.com").unwrap();
-        // Touch "a" again so it is no longer the least recently used entry — "b" is, since it
+        // Touch "a" again so it is no longer the least recently used entry: "b" is, since it
         // was inserted but never looked up again.
         ca.get_or_create_leaf("a.example.com").unwrap();
 
@@ -470,7 +470,7 @@ mod tests {
 
         // Several threads race to generate leaf certs for two domains at once. Signing must not
         // happen while the cache lock is held, so two threads can genuinely race on the same new
-        // domain — but whichever result loses that race must still agree with what ended up
+        // domain, but whichever result loses that race must still agree with what ended up
         // cached.
         let domains = ["a.example.com", "b.example.com"];
         let handles: Vec<_> = (0..8)

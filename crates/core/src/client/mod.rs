@@ -1,5 +1,6 @@
 mod alt_svc;
 mod blink_header_map;
+mod blocked;
 pub(crate) mod body;
 pub(crate) mod client_hints;
 mod connection;
@@ -14,6 +15,7 @@ pub(crate) mod request_body;
 mod response;
 mod ws;
 
+pub use blocked::blocked_by;
 pub(crate) use connection::{BoxedIo, PrefixedStream};
 pub(crate) use h2::H2Conn;
 pub(crate) use h3::H3Conn;
@@ -271,7 +273,7 @@ impl ClientBuilder {
     /// etc. and [`StreamingResponse::collect_body`](crate::StreamingResponse::collect_body)/
     /// [`decode_content`](crate::StreamingResponse::decode_content) fail with [`Error::Body`] instead
     /// of growing the buffer further, and a compressed body decoding past `max` fails the same way
-    /// even if its compressed size is smaller — both protect against an unbounded or malicious server
+    /// even if its compressed size is smaller: both protect against an unbounded or malicious server
     /// (a stalled close, or a decompression bomb), which this crate has no other bound against.
     /// Reading a streaming response chunk by chunk without decoding it is not capped: the caller
     /// already controls how much of it to read. `0` disables the cap. Default: 100 MiB.
@@ -386,7 +388,7 @@ impl ClientBuilder {
     ///
     /// The connection stays encrypted, but anyone on the way to the proxy can pose as it and read
     /// the proxy credentials, the hosts requested and plain `http://` requests; prefer
-    /// [`proxy_ca_certs`](Self::proxy_ca_certs). Origins are still verified — this affects proxies
+    /// [`proxy_ca_certs`](Self::proxy_ca_certs). Origins are still verified: this affects proxies
     /// only, unlike
     /// [`TlsConfig::danger_accept_invalid_certs`](crate::tls::TlsConfig::danger_accept_invalid_certs).
     #[must_use]
@@ -404,7 +406,7 @@ impl ClientBuilder {
 
     /// Connects to `addr` for requests to `host` on `addr.port()` instead of resolving `host` (like
     /// curl's `--resolve host:port:addr`); repeated calls for the same host and port add addresses,
-    /// tried in order. Everything else — TLS server name, Host header, cookies, Alt-Svc — still
+    /// tried in order. Everything else (TLS server name, Host header, cookies, Alt-Svc) still
     /// uses `host` itself; through a proxy, connections go to the proxy, whose host name these
     /// entries resolve too.
     #[must_use]
@@ -440,7 +442,7 @@ impl ClientBuilder {
     /// Uses `resolver` for the plain (non-DoH) DNS HTTPS-record query a profile's default
     /// configuration makes on its own (see
     /// [`QuicConfig::https_rr`](crate::quic::QuicConfig::https_rr)), instead of discovering the
-    /// system's nameserver — for a sandbox that can't read it, or to pin a test server. Ignored
+    /// system's nameserver: for a sandbox that can't read it, or to pin a test server. Ignored
     /// once [`doh`](Self::doh) is set.
     #[must_use]
     #[cfg(feature = "doh")]
@@ -583,7 +585,7 @@ pub struct Client {
     resolve_overrides: ResolveOverrides,
     #[cfg(feature = "doh")]
     doh_resolver: Option<DohResolver>,
-    /// Queries HTTPS DNS records over plain DNS when no [`DohResolver`] is configured — a profile's
+    /// Queries HTTPS DNS records over plain DNS when no [`DohResolver`] is configured: a profile's
     /// default (non-DoH) configuration, which still discovers HTTP/3 through them (see
     /// [`QuicConfig::https_rr`](crate::quic::QuicConfig::https_rr)).
     #[cfg(feature = "doh")]
@@ -994,8 +996,8 @@ fn accept_language_style(profile: &BrowserProfile) -> AcceptLanguageStyle {
     }
 }
 
-/// The Accept-Language value for a locale: the locale, its base language, then English (`"de"` →
-/// de, en-US, en; `"en-US"` → en-US, en), weighted as `"fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7"`
+/// The Accept-Language value for a locale: the locale, its base language, then English (`"de"` ->
+/// de, en-US, en; `"en-US"` -> en-US, en), weighted as `"fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7"`
 /// (Chromium, Firefox 147+) or `"fr-FR,fr;q=0.8,en-US;q=0.5,en;q=0.3"` (Firefox ≤146).
 fn build_accept_language(locale: &str, style: AcceptLanguageStyle) -> String {
     let lang = locale.split('-').next().unwrap_or(locale);

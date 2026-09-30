@@ -238,7 +238,7 @@ pub enum SettingId {
 pub struct StreamDep {
     /// Stream this one depends on.
     pub stream_id: u32,
-    /// Weight minus one, as on the wire: 0–255 for weights 1–256.
+    /// Weight minus one, as on the wire: 0-255 for weights 1-256.
     pub weight: u8,
     /// Makes the dependency exclusive.
     pub exclusive: bool,
@@ -253,7 +253,7 @@ pub struct PriorityFrame {
     pub stream_id: u32,
     /// Stream it depends on.
     pub dependency: u32,
-    /// Weight minus one, as on the wire: 0–255 for weights 1–256.
+    /// Weight minus one, as on the wire: 0-255 for weights 1-256.
     pub weight: u8,
     /// Makes the dependency exclusive.
     pub exclusive: bool,

@@ -597,7 +597,7 @@ async fn chrome_transport_parameters_match_the_browser() {
 #[tokio::test]
 async fn chrome_initial_packets_match_the_browser() {
     let flight = capture(chrome_latest()).await;
-    // Chrome's full ClientHello, 1948–1984 bytes with its trust anchor IDs,
+    // Chrome's full ClientHello, 1948-1984 bytes with its trust anchor IDs,
     // takes two Initials.
     assert_eq!(flight.initials.len(), 2);
     // Connection IDs: 8-byte Initial DCID, empty own ID.
@@ -1109,7 +1109,7 @@ async fn safari_initial_packets_match_the_browser() {
 /// domain's HTTPS record (`crates/core/src/tls/ech_grease.rs`'s GREASE
 /// tests already cover the shape without one). BoringSSL only needs it
 /// well-formed to send real ECH, not a key it could complete a
-/// handshake with — the peer here never answers regardless.
+/// handshake with: the peer here never answers regardless.
 #[cfg(feature = "doh")]
 const REAL_ECH_CONFIG_LIST: &[u8] = &[
     0x00, 0x45, 0xfe, 0x0d, 0x00, 0x41, 0x5a, 0x00, 0x20, 0x00, 0x20, 0x03, 0x58, 0x44, 0x6e, 0x4e,
@@ -1144,7 +1144,7 @@ async fn ech_dns_server(host: &str, port: u16) -> SocketAddr {
 }
 
 /// The very first QUIC connection to a host whose DNS HTTPS record
-/// carries an ECH config sends that config, not GREASE — matching
+/// carries an ECH config sends that config, not GREASE: matching
 /// `set_ech_config_list` for TCP and captured live for QUIC (Chrome 154
 /// and Firefox 157 against quic.browserleaks.com on Windows 11: real,
 /// non-random kdf/aead and a config_id from the record, not GREASE's
@@ -1196,14 +1196,14 @@ async fn ech_over_quic_uses_the_records_config_not_grease() {
 
     let ech = hello.ext(ECH);
     // ClientECH: outer (type 0), HKDF-SHA256, AES-128-GCM, config_id
-    // 0x5a from the record — never GREASE's random AEAD or config_id.
+    // 0x5a from the record: never GREASE's random AEAD or config_id.
     assert_eq!(ech[..6], [0x00, 0x00, 0x01, 0x00, 0x01, 0x5a]);
     let enc_len = u16::from_be_bytes([ech[6], ech[7]]);
     assert_eq!(enc_len, 32);
 }
 
 /// Firefox's neqo forwards only a small allowlisted subset of transport
-/// parameters into the ClientHelloOuter of a split ECH ClientHello — the
+/// parameters into the ClientHelloOuter of a split ECH ClientHello: the
 /// outer is only ever a fallback the server completes if it rejects the
 /// real, encrypted one, so most parameters would be both meaningless there
 /// and a source of real, distinguishing values a hello otherwise meant to
@@ -1212,8 +1212,8 @@ async fn ech_over_quic_uses_the_records_config_not_grease() {
 /// Firefox 157 on Windows 11 against quic.browserleaks.com's real ECH
 /// config sent exactly `max_ack_delay`, `initial_src_cid` and
 /// `version_information`, ascending by id, decrypted from the QUIC
-/// Initial — the same three `write_ech_outer` (quinn-proto) filters from
-/// the real (inner, unaffected — see
+/// Initial: the same three `write_ech_outer` (quinn-proto) filters from
+/// the real (inner, unaffected: see
 /// `firefox_transport_parameters_match_the_browser`) set. Chrome's own
 /// outer keeps the full set (also captured), so this is neqo (Firefox)
 /// only (`QuicStack::Neqo`, `quic/transport.rs`'s `crypto_config`).
@@ -1271,7 +1271,7 @@ async fn firefox_ech_outer_hello_reduces_transport_parameters() {
     assert_eq!(
         ids,
         [0x0b, 0x0f, 0x11],
-        "max_ack_delay, initial_src_cid, version_information — ascending, nothing else"
+        "max_ack_delay, initial_src_cid, version_information: ascending, nothing else"
     );
     let tp: BTreeMap<u64, Vec<u8>> = params.into_iter().collect();
     assert_eq!(

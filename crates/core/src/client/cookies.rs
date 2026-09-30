@@ -83,7 +83,7 @@ impl Client {
     /// Return a snapshot of every cookie currently stored in the jar (e.g. to export back into a
     /// browser via Playwright/CDP `addCookies()`).
     ///
-    /// Returns an empty `Vec` if the cookie jar is disabled, same as an empty jar — there's nothing
+    /// Returns an empty `Vec` if the cookie jar is disabled, same as an empty jar: there's nothing
     /// to export either way.
     pub fn cookies(&self) -> Vec<Cookie> {
         match &self.cookie_jar {
@@ -425,7 +425,7 @@ mod tests {
 
     /// Both import paths reject a CRLF-injected name or value: `set_cookies`' own
     /// `validate_and_normalize` for a raw `Cookie`, `CookieParams::into_cookie`'s validation for
-    /// `set_cookie_params` — each exactly once, not the other's job too.
+    /// `set_cookie_params`: each exactly once, not the other's job too.
     #[test]
     fn both_import_paths_reject_crlf_in_name_or_value() {
         let client = Client::new(Chrome::latest()).unwrap();

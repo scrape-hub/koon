@@ -39,7 +39,7 @@ pub struct NativeHttpsResolver {
 }
 
 impl NativeHttpsResolver {
-    /// Queries `nameserver` directly instead of discovering the system's configured one — for a
+    /// Queries `nameserver` directly instead of discovering the system's configured one: for a
     /// sandbox where that read is unavailable or wrong, or to point the query at a specific (e.g.
     /// local test) server.
     pub fn with_nameserver(nameserver: SocketAddr) -> Self {
@@ -54,7 +54,7 @@ impl NativeHttpsResolver {
 
     /// Query the HTTPS DNS record for `hostname` (the ServiceMode answer with the lowest
     /// SvcPriority); `Ok(None)` when the system's nameserver could not be found, did not answer in
-    /// time, or answered without a usable record — the caller falls back to Alt-Svc, same as a
+    /// time, or answered without a usable record: the caller falls back to Alt-Svc, same as a
     /// browser without this capability.
     ///
     /// # Errors
@@ -86,7 +86,7 @@ impl NativeHttpsResolver {
             .await
             .ok()
             .and_then(Result::ok);
-        // A truncated answer (`TC` bit) may be missing SvcParams — retry over TCP instead of
+        // A truncated answer (`TC` bit) may be missing SvcParams: retry over TCP instead of
         // parsing it as is.
         let msg = match msg {
             Some(msg) if msg.truncated() => {
@@ -171,7 +171,7 @@ async fn query_udp(server: SocketAddr, wire: &[u8]) -> Result<hickory_proto::op:
 }
 
 /// Send `wire` to `server` over TCP (RFC 1035 §4.2.2: a 2-byte big-endian length before the
-/// message, on both sides) and parse the response — the retry after a truncated UDP answer.
+/// message, on both sides) and parse the response: the retry after a truncated UDP answer.
 async fn query_tcp(server: SocketAddr, wire: &[u8]) -> Result<Message, Error> {
     let mut stream = TcpStream::connect(server).await.map_err(|e| {
         let message = format!("connecting TCP socket to {server}: {e}");

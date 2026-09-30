@@ -44,7 +44,7 @@ const REQUEST_BODY_HEADERS: &[&str] = &[
     "content-length",
 ];
 
-/// Whether a method is idempotent per RFC 9110 §9.2.2 — safe to retry automatically. POST and PATCH
+/// Whether a method is idempotent per RFC 9110 §9.2.2: safe to retry automatically. POST and PATCH
 /// are excluded: retrying them after the request was sent risks a duplicate submission.
 fn is_idempotent(method: &Method) -> bool {
     matches!(
@@ -285,8 +285,8 @@ impl super::Client {
     /// [`Body`]: bytes, a string, a stream, or `None`. `options` override client settings for this
     /// request; the timeout covers connecting, every redirect and reading the body. A failed hop
     /// (never one that already got its response) is retried per
-    /// [`max_retries`](super::ClientBuilder::max_retries) — any retryable error for an idempotent
-    /// method, else only before the request left — with the rotation's next proxy and a fresh
+    /// [`max_retries`](super::ClientBuilder::max_retries), any retryable error for an idempotent
+    /// method, else only before the request left: with the rotation's next proxy and a fresh
     /// timeout. Fails as [`request`](Self::request) does, also with
     /// [`Error::InvalidHeader`]/[`Error::Proxy`] for an invalid `options`.
     pub async fn send(
@@ -498,7 +498,7 @@ impl super::Client {
         // A navigation response teaches the client hints of its origin. Restarting resends the
         // request from its first URL, which needs a replayable body: a stream this attempt already
         // took (`Hop::replay` then returns `None`) can't go out again, so the response is just
-        // returned as final instead of failing — the same rule a redirect already applies, and what
+        // returned as final instead of failing: the same rule a redirect already applies, and what
         // a browser does too (it can't resend a consumed body either).
         let navigation = matches!(hop.source, HeaderSource::Profile)
             && headers::builds_navigation(&hop.method, &hop.client_headers, &hop.request_headers);
@@ -626,7 +626,7 @@ impl super::Client {
         let mut reuse = true;
         loop {
             // Single-flight-connect: `gate` must stay held until the connection attempt starts
-            // (`exchange_on_new_connection`), not just until this block ends — dropping it early
+            // (`exchange_on_new_connection`), not just until this block ends: dropping it early
             // would reintroduce the thundering herd the gate exists to prevent.
             #[allow(clippy::significant_drop_tightening)]
             let gate = self.pool.connect_gate(key).await;

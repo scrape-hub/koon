@@ -168,6 +168,11 @@ pseudo-headers first).}
 \item{\code{connection_reused}}{\code{TRUE} if a pooled connection was reused.}
 \item{\code{remote_address}}{IP address of the peer (the proxy when one is
 used), or \code{NULL}.}
+\item{\code{blocked_by}}{The bot protection that answered instead of the page
+(\code{"cloudflare"}, \code{"akamai"}, \code{"datadome"}, \code{"perimeterx"}, \code{"aws-waf"},
+\code{"imperva"}, \code{"kasada"}, \code{"baleen"}, \code{"google"}, \code{"amazon"},
+\code{"javascript"}, \code{"block-page"} or \code{"consent"}), or \code{NULL} for the page
+itself. A plain error status gives \code{NULL}.}
 }
 }
 

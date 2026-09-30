@@ -502,7 +502,7 @@ async fn wait_for(log: &Log, check: impl Fn(&[Conn]) -> bool) {
 }
 
 /// Wait until the log stops changing for two consecutive 20 ms polls (at
-/// most 2 s), then return it — for asserting that nothing more arrives on a
+/// most 2 s), then return it: for asserting that nothing more arrives on a
 /// connection, where there is no positive event left to poll for (the
 /// frame log is a snapshot a background task refreshes every 10 ms, so a
 /// quiet log is the closest thing to "done").
@@ -1033,7 +1033,7 @@ async fn no_close_reply_after_end_stream() {
         // The client observing its stream end (END_STREAM) is downstream of
         // the server having read and answered "server-close", so the frame
         // log (updated synchronously as the server reads) is already
-        // current here — no further wait needed, deterministically.
+        // current here: no further wait needed, deterministically.
         assert!(ws.receive().await.unwrap().is_none());
         let conns = conns(&log);
         let conn = conns.last().unwrap();

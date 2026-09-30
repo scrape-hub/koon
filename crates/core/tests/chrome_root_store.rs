@@ -5,7 +5,7 @@
 //! of `net/data/ssl/chrome_root_store/root_store.textproto` and the
 //! `additional_certs` marked `tls_trust_anchor` (intermediates Chrome trusts
 //! as anchors of their own), with the certificates from `root_store.certs`
-//! and `additional.certs` and their trust anchor IDs — what Chromium's
+//! and `additional.certs` and their trust anchor IDs: what Chromium's
 //! `root_store_tool` compiles into `kChromeRootCertList`. Anchor
 //! constraints are left out; koon does not evaluate them.
 //!

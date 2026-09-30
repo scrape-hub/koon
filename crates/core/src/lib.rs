@@ -27,8 +27,8 @@ pub mod websocket;
 
 pub use client::{
     Body, Client, ClientBuilder, ConnectionOptions, ContentDecoder, HttpResponse, IpVersion,
-    OnRedirectHook, OnRequestHook, OnResponseHook, RequestOptions, SessionExport, decode_body_text,
-    parse_method,
+    OnRedirectHook, OnRequestHook, OnResponseHook, RequestOptions, SessionExport, blocked_by,
+    decode_body_text, parse_method,
 };
 pub use cookie::{Cookie, CookieJar, CookieParams, SameSite, SkippedCookie};
 pub use error::Error;

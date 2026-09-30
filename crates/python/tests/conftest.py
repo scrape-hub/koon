@@ -87,6 +87,14 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(500)
             self.send_header("Content-Length", "0")
             self.end_headers()
+        elif path == "/challenge":
+            page = b"<html><head><title>Just a moment...</title></head></html>"
+            self.send_response(403)
+            self.send_header("cf-mitigated", "challenge")
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(page)))
+            self.end_headers()
+            self.wfile.write(page)
         else:
             self.send_response(404)
             self.send_header("Content-Length", "0")

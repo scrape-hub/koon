@@ -10,7 +10,7 @@ async fn websocket_echo() {
     let client = Client::new(Chrome::latest()).unwrap();
     let ws = client.websocket("wss://echo.websocket.org").await.unwrap();
 
-    // echo.websocket.org sends a welcome message first — consume it.
+    // echo.websocket.org sends a welcome message first: consume it.
     let welcome = ws.receive().await.unwrap();
     assert!(welcome.is_some(), "Should receive welcome message");
 

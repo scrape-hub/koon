@@ -199,7 +199,7 @@ fn request_priority(
         };
         Some((weight, false))
     };
-    // The wire weight is 1–256, the frame field one less.
+    // The wire weight is 1-256, the frame field one less.
     let (weight, exclusive): (u16, bool) = match scheme {
         HeadersPriority::SafariSonoma => safari((255, 24, 8))?,
         HeadersPriority::SafariSequoia => safari((256, 64, 4))?,
@@ -247,7 +247,7 @@ fn priority_urgency(value: &str) -> Option<u8> {
 
 /// Chromium's HTTP/2 weight of a request priority: the urgency Chromium sends is its SPDY priority
 /// (`ConvertRequestPriorityToQuicPriority`), and `Spdy3PriorityToHttp2Weight` spreads SPDY
-/// priorities 0–7 over 256–1.
+/// priorities 0-7 over 256-1.
 // Matches Chromium's own float-to-int cast; the result is always in 1-256.
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn chromium_weight(urgency: u8) -> u16 {

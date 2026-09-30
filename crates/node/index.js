@@ -309,7 +309,7 @@ KoonProxy.start = function start(options) {
 
 // Literal `module.exports.X = ...` assignments (not a loop over a list, and
 // not `module.exports = native` alone) so cjs-module-lexer can statically
-// detect these as named exports — that's what lets ESM do
+// detect these as named exports: that's what lets ESM do
 // `import { Koon } from 'koonjs'`.
 module.exports.Koon = Koon;
 module.exports.KoonProxy = KoonProxy;

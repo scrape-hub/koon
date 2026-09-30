@@ -571,7 +571,7 @@ fn combined(headers: &[(String, String)], name: &str) -> Option<String> {
 
 impl super::Client {
     /// Learn from a navigation response: remember the hints its `Accept-CH` asks for, and return
-    /// the origin if `Critical-CH` asks for a new one koon can send — the caller then restarts the
+    /// the origin if `Critical-CH` asks for a new one koon can send: the caller then restarts the
     /// navigation once per origin (`CriticalClientHintsThrottle`); `restarted` names origins
     /// already restarted.
     pub(super) fn learn_client_hints(
