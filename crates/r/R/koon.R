@@ -116,11 +116,16 @@ NULL
 #'     (optionally with `path`) or `url`; `expires`, `httpOnly`, `secure`,
 #'     `sameSite` and `hostOnly` are optional. Every valid cookie is
 #'     imported; the others are skipped, e.g. one with an invalid value or
-#'     domain, and so are partitioned (CHIPS) cookies: those with a
-#'     `partitionKey` holding anything but `NULL` or `NA` (a string, CDP's key
-#'     object, or a row of the nested data frame `jsonlite::fromJSON()` makes
-#'     of such objects) or with `partitionKeyOpaque = TRUE`; browsers send them
-#'     only in a third-party context. Returns the skipped cookies invisibly,
+#'     domain. A partitioned (CHIPS) cookie is imported when it is partitioned
+#'     under its own site (such as Cloudflare's `cf_clearance`); its
+#'     `partitionKey` is Playwright's top-level site (`"https://example.com"`)
+#'     or CDP's key object (a list with `topLevelSite` and
+#'     `hasCrossSiteAncestor`, or a row of the nested data frame
+#'     `jsonlite::fromJSON()` makes of those). Cookies of another site's
+#'     partition, with a cross-site ancestor (`hasCrossSiteAncestor` or
+#'     Playwright's `_crHasCrossSiteAncestor`) or with
+#'     `partitionKeyOpaque = TRUE` are skipped: browsers send those only to
+#'     embedded frames. Returns the skipped cookies invisibly,
 #'     as a data frame with `index` (their row or element in `cookies`),
 #'     `name` and `reason`, with no rows when all were imported. A field of
 #'     the wrong type (e.g. a non-numeric `expires`) is an error.}

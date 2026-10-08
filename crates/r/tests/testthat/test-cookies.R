@@ -33,11 +33,11 @@ test_that("cookies round-trip in the Playwright shape", {
 
 test_that("set_cookies() reports the skipped cookies invisibly", {
   client <- Koon$new("chrome")
-  # A list of named lists: one valid, one invalid value, one partitioned.
+  # A list of named lists: one valid, one invalid value, one partitioned under another site.
   visible <- withVisible(client$set_cookies(list(
     list(name = "ok", value = "1", domain = "example.com"),
     list(name = "bad", value = "a;b", domain = "example.com"),
-    list(name = "chips", value = "1", domain = "example.com", partitionKey = "https://example.com")
+    list(name = "chips", value = "1", domain = "example.com", partitionKey = "https://other.com")
   )))
   expect_false(visible$visible)
   skipped <- visible$value
@@ -63,33 +63,42 @@ test_that("set_cookies() reports the skipped cookies invisibly", {
   # Cookies the core cannot import are skipped and reported, not errors.
   expect_identical(client$set_cookies(list(list(name = "c", value = "3")))$name, "c")
   expect_identical(
-    client$set_cookies(list(list(name = "c", value = "3", domain = "x.test", partitionKey = "https://x.test")))$name,
+    client$set_cookies(list(list(name = "c", value = "3", domain = "x.test", partitionKey = "https://y.test")))$name,
     "c"
   )
 })
 
-test_that("partitioned cookies are skipped, also as nested data frame columns", {
+test_that("only cookies partitioned under their own site are imported", {
   # jsonlite makes a nested data frame of CDP's partition key objects.
   cdp <- jsonlite::fromJSON('[
-    {"name": "kept", "value": "1", "domain": "x.test", "partitionKey": null},
-    {"name": "keyed", "value": "2", "domain": "x.test",
+    {"name": "plain", "value": "1", "domain": "x.test", "partitionKey": null},
+    {"name": "own", "value": "2", "domain": "x.test",
      "partitionKey": {"topLevelSite": "https://x.test", "hasCrossSiteAncestor": false}},
-    {"name": "opaque", "value": "3", "domain": "x.test", "partitionKeyOpaque": true},
-    {"name": "also_kept", "value": "4", "domain": "x.test", "partitionKeyOpaque": false}
+    {"name": "other", "value": "3", "domain": "x.test",
+     "partitionKey": {"topLevelSite": "https://y.test", "hasCrossSiteAncestor": false}},
+    {"name": "ancestor", "value": "4", "domain": "x.test",
+     "partitionKey": {"topLevelSite": "https://x.test", "hasCrossSiteAncestor": true}},
+    {"name": "opaque", "value": "5", "domain": "x.test", "partitionKeyOpaque": true},
+    {"name": "not_opaque", "value": "6", "domain": "x.test", "partitionKeyOpaque": false}
   ]')
   expect_true(is.data.frame(cdp$partitionKey))
   importer <- Koon$new()
   skipped <- importer$set_cookies(cdp)
-  expect_identical(skipped$name, c("keyed", "opaque"))
-  expect_identical(skipped$index, c(2L, 3L))
-  expect_setequal(importer$cookies()$name, c("kept", "also_kept"))
+  expect_identical(skipped$name, c("other", "ancestor", "opaque"))
+  expect_identical(skipped$index, c(3L, 4L, 5L))
+  expect_match(skipped$reason, "partitioned")
+  expect_setequal(importer$cookies()$name, c("plain", "own", "not_opaque"))
 
-  as_list <- Koon$new()
-  skipped <- as_list$set_cookies(list(
-    list(name = "a", value = "1", domain = "x.test", partitionKeyOpaque = TRUE),
-    list(name = "b", value = "2", domain = "x.test", partitionKey = list(topLevelSite = "https://x.test"))
+  # Playwright's shape: the top-level site as a string, its ancestor flag beside it.
+  playwright <- Koon$new()
+  skipped <- playwright$set_cookies(list(
+    list(name = "own", value = "1", domain = ".x.test", partitionKey = "https://x.test"),
+    list(name = "ancestor", value = "2", domain = "x.test", partitionKey = "https://x.test",
+         `_crHasCrossSiteAncestor` = TRUE),
+    list(name = "listed", value = "3", domain = "x.test", partitionKey = list(topLevelSite = "https://x.test"))
   ))
-  expect_identical(skipped$name, c("a", "b"))
+  expect_identical(skipped$name, "ancestor")
+  expect_setequal(playwright$cookies()$name, c("own", "listed"))
 })
 
 test_that("malformed cookie input is an error", {

@@ -10,7 +10,8 @@ use koon_core::multipart::Multipart;
 use koon_core::profile::BrowserProfile;
 use koon_core::{
     Body, BoundaryStyle, Client, ClientBuilder, CookieParams, Error as KoonError, HeaderFamily,
-    IpVersion, ProxyServer, ProxyServerAuth, ProxyServerConfig, SkippedCookie, WsMessage,
+    IpVersion, PartitionKey, ProxyServer, ProxyServerAuth, ProxyServerConfig, SkippedCookie,
+    WsMessage,
 };
 use napi::bindgen_prelude::*;
 use napi::threadsafe_function::{ErrorStrategy, ThreadsafeFunction, ThreadsafeFunctionCallMode};
@@ -585,18 +586,25 @@ pub struct KoonCookie {
     pub http_only: Option<bool>,
     pub same_site: Option<String>,
     pub host_only: Option<bool>,
-    /// CDP's partition key object or Playwright's string; any value other
-    /// than `null` marks a partitioned cookie.
+    /// CDP's `{ topLevelSite, hasCrossSiteAncestor }` or Playwright's
+    /// top-level site string; `null` for none.
     pub partition_key: Option<JsUnknown>,
+    /// Playwright's `hasCrossSiteAncestor` for a string `partitionKey`.
+    #[napi(js_name = "_crHasCrossSiteAncestor")]
+    pub cr_has_cross_site_ancestor: Option<bool>,
     pub partition_key_opaque: Option<bool>,
 }
 
-impl From<KoonCookie> for CookieParams {
-    fn from(cookie: KoonCookie) -> Self {
-        let has_partition_key = cookie
-            .partition_key
-            .is_some_and(|key| !matches!(key.get_type(), Ok(ValueType::Null)));
-        Self {
+impl TryFrom<KoonCookie> for CookieParams {
+    type Error = napi::Error;
+
+    fn try_from(cookie: KoonCookie) -> Result<Self> {
+        let partition_key = partition_key(
+            cookie.partition_key,
+            cookie.cr_has_cross_site_ancestor,
+            cookie.partition_key_opaque,
+        )?;
+        Ok(Self {
             name: cookie.name,
             value: cookie.value,
             domain: cookie.domain,
@@ -607,9 +615,46 @@ impl From<KoonCookie> for CookieParams {
             secure: cookie.secure.unwrap_or(false),
             same_site: cookie.same_site,
             host_only: cookie.host_only,
-            partitioned: has_partition_key || cookie.partition_key_opaque == Some(true),
-        }
+            partition_key,
+        })
     }
+}
+
+/// A cookie's partition key from CDP's or Playwright's fields.
+fn partition_key(
+    key: Option<JsUnknown>,
+    cross_site_ancestor: Option<bool>,
+    opaque: Option<bool>,
+) -> Result<Option<PartitionKey>> {
+    if opaque == Some(true) {
+        return Ok(Some(PartitionKey::Opaque));
+    }
+    let Some(key) = key else {
+        return Ok(None);
+    };
+    let (top_level_site, cross_site_ancestor) = match key.get_type()? {
+        ValueType::Null => return Ok(None),
+        ValueType::String => (
+            key.coerce_to_string()?.into_utf8()?.into_owned()?,
+            cross_site_ancestor,
+        ),
+        ValueType::Object => {
+            let key = key.coerce_to_object()?;
+            let site = key
+                .get::<_, String>("topLevelSite")?
+                .ok_or_else(|| invalid_argument("partitionKey has no topLevelSite"))?;
+            (site, key.get::<_, bool>("hasCrossSiteAncestor")?)
+        }
+        _ => {
+            return Err(invalid_argument(
+                "partitionKey must be a string, an object or null",
+            ));
+        }
+    };
+    Ok(Some(PartitionKey::Site {
+        top_level_site,
+        cross_site_ancestor: cross_site_ancestor.unwrap_or(false),
+    }))
 }
 
 impl From<CookieParams> for KoonCookie {
@@ -626,6 +671,7 @@ impl From<CookieParams> for KoonCookie {
             same_site: cookie.same_site,
             host_only: cookie.host_only,
             partition_key: None,
+            cr_has_cross_site_ancestor: None,
             partition_key_opaque: None,
         }
     }
@@ -1023,7 +1069,12 @@ impl Koon {
     pub fn set_cookies(&self, cookies: Vec<KoonCookie>) -> Result<Vec<KoonSkippedCookie>> {
         let skipped = self
             .client
-            .set_cookie_params(cookies.into_iter().map(CookieParams::from).collect())
+            .set_cookie_params(
+                cookies
+                    .into_iter()
+                    .map(CookieParams::try_from)
+                    .collect::<Result<_>>()?,
+            )
             .map_err(koon_napi_error)?;
         Ok(skipped.into_iter().map(KoonSkippedCookie::from).collect())
     }

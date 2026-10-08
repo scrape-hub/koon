@@ -176,40 +176,40 @@ def test_missing_domain_and_url_skips_the_cookie():
     client.close()
 
 
-def test_partitioned_cookie_is_skipped():
-    """Browsers send partitioned (CHIPS) cookies only in a third-party
-    context, so a full browser export imports without them."""
+def test_partitioned_cookies_import_only_from_their_own_site():
+    """Browsers send a cookie partitioned under its own site (Cloudflare's
+    cf_clearance) on top-level requests, the others only to frames embedded
+    in another site."""
     client = KoonSync("chrome")
     skipped = client.set_cookies(
         [
             {"name": "kept", "value": "1", "domain": "example.com"},
             {
-                "name": "a",
+                "name": "cdp",
                 "value": "1",
                 "domain": "example.com",
-                "partitionKey": {"topLevelSite": "https://example.com"},
+                "partitionKey": {"topLevelSite": "https://example.com", "hasCrossSiteAncestor": False},
             },
+            {"name": "pw", "value": "1", "domain": ".example.com", "partitionKey": "https://example.com"},
+            {
+                "name": "other_site",
+                "value": "1",
+                "domain": "example.com",
+                "partitionKey": {"topLevelSite": "https://other.com"},
+            },
+            {
+                "name": "ancestor",
+                "value": "1",
+                "domain": "example.com",
+                "partitionKey": "https://example.com",
+                "_crHasCrossSiteAncestor": True,
+            },
+            {"name": "opaque", "value": "1", "domain": "example.com", "partitionKeyOpaque": True},
         ]
     )
-    assert [c["name"] for c in client.cookies()] == ["kept"]
-    assert [(s["index"], s["name"]) for s in skipped] == [(1, "a")]
-    assert "partitioned" in skipped[0]["reason"]
-    client.close()
-
-
-def test_opaque_partition_key_is_skipped():
-    """CDP marks a cookie with an opaque partition key by
-    partitionKeyOpaque, as the Node binding reads it."""
-    client = KoonSync("chrome")
-    skipped = client.set_cookies(
-        [
-            {"name": "kept", "value": "v", "domain": "example.com", "partitionKeyOpaque": False},
-            {"name": "opaque", "value": "v", "domain": "example.com", "partitionKeyOpaque": True},
-        ]
-    )
-    assert [c["name"] for c in client.cookies()] == ["kept"]
-    assert [(s["index"], s["name"]) for s in skipped] == [(1, "opaque")]
-    assert "partitioned" in skipped[0]["reason"]
+    assert [c["name"] for c in client.cookies()] == ["kept", "cdp", "pw"]
+    assert [(s["index"], s["name"]) for s in skipped] == [(3, "other_site"), (4, "ancestor"), (5, "opaque")]
+    assert all("partitioned" in s["reason"] for s in skipped)
     client.close()
 
 

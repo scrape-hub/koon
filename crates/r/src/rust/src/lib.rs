@@ -9,7 +9,7 @@ use extendr_api::prelude::*;
 use koon_core::dns::DohConfig;
 use koon_core::{
     decode_body_text, parse_method, BrowserProfile, Client, CookieParams, HttpResponse, IpVersion,
-    RequestOptions,
+    PartitionKey, RequestOptions,
 };
 use std::borrow::Cow;
 use std::net::IpAddr;
@@ -365,19 +365,6 @@ fn row_count(column: &Robj) -> usize {
     }
 }
 
-/// Whether a `partitionKey` field holds a key: anything with a value other
-/// than `NULL` or `NA`, looking into lists (a CDP key object, or a nested
-/// data frame row whose fields are all `NA` when the cookie has none).
-fn has_partition_key(value: &Robj) -> bool {
-    if value.is_null() || value.is_na() {
-        return false;
-    }
-    match List::try_from(value) {
-        Ok(list) => list.values().any(|item| has_partition_key(&item)),
-        Err(_) => true,
-    }
-}
-
 /// Cookies in the Playwright/CDP shape: a data frame with one row per cookie
 /// (e.g. `jsonlite::fromJSON()` of Playwright's `cookies()`), or a list of
 /// named lists. Fields the core does not know are ignored.
@@ -441,8 +428,29 @@ fn cookie(index: usize, get: impl Fn(&str) -> RResult<Option<Robj>>) -> RResult<
         secure: flag("secure")?.unwrap_or(false),
         same_site: text("sameSite")?,
         host_only: flag("hostOnly")?,
-        partitioned: get("partitionKey")?.is_some_and(|key| has_partition_key(&key))
-            || flag("partitionKeyOpaque")? == Some(true),
+        partition_key: if flag("partitionKeyOpaque")? == Some(true) {
+            Some(PartitionKey::Opaque)
+        } else {
+            let key = get("partitionKey")?;
+            // CDP's key object, or the row of the nested data frame jsonlite makes of those.
+            let (site, ancestor) = match key.as_ref().map(List::try_from) {
+                Some(Ok(object)) => (
+                    field(&object, "topLevelSite"),
+                    field(&object, "hasCrossSiteAncestor"),
+                ),
+                _ => (key, get("_crHasCrossSiteAncestor")?),
+            };
+            let site = site
+                .map_or(Ok(None), |x| Option::<String>::try_from(&x))
+                .map_err(|_| invalid("partitionKey", "a string or a list with `topLevelSite`"))?;
+            let ancestor = ancestor
+                .map_or(Ok(None), |x| Option::<bool>::try_from(&x))
+                .map_err(|_| invalid("hasCrossSiteAncestor", "TRUE or FALSE"))?;
+            site.map(|top_level_site| PartitionKey::Site {
+                top_level_site,
+                cross_site_ancestor: ancestor.unwrap_or(false),
+            })
+        },
     })
 }
 

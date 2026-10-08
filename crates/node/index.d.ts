@@ -330,11 +330,15 @@ export interface KoonCookie {
   /** Only send to the exact domain. Defaults to whether `domain` has no leading dot (true with `url`). */
   hostOnly?: boolean;
   /**
-   * CHIPS partition key. `setCookies()` skips (and reports) partitioned cookies: browsers
-   * send them only in a third-party context, never with top-level requests.
+   * CHIPS partition key: Playwright's top-level site (`'https://example.com'`) or CDP's object.
+   * `setCookies()` imports a cookie partitioned under its own site (such as Cloudflare's
+   * `cf_clearance`) and skips (and reports) the others: browsers send those only to frames
+   * embedded in another site, never with a top-level request.
    */
-  partitionKey?: unknown;
-  /** Opaque CHIPS partition key. `true` makes `setCookies()` skip the cookie like `partitionKey`. */
+  partitionKey?: string | { topLevelSite: string; hasCrossSiteAncestor?: boolean } | null;
+  /** Playwright's flag for a partition key with a cross-site ancestor; `true` skips the cookie. */
+  _crHasCrossSiteAncestor?: boolean;
+  /** CDP's flag for an opaque partition key; `true` skips the cookie. */
   partitionKeyOpaque?: boolean;
 }
 
@@ -344,7 +348,7 @@ export interface KoonSkippedCookie {
   index: number;
   /** The cookie's name. */
   name: string;
-  /** Why it was not imported, e.g. an invalid value or domain, or a partitioned cookie. */
+  /** Why it was not imported, e.g. an invalid value or domain, or another site's partition. */
   reason: string;
 }
 
@@ -450,12 +454,13 @@ export class Koon {
   /**
    * Insert or replace cookies imported from an external source (e.g. a
    * browser's cookie jar via Playwright/CDP `cookies()`). Every valid cookie
-   * is imported; the others, e.g. one with an invalid value or domain or a
-   * partitioned cookie, are skipped and returned, so one odd cookie does not
-   * cost a whole browser export. An empty array means all were imported.
+   * is imported; the others, e.g. one with an invalid value or domain or
+   * one partitioned under another site, are skipped and returned, so one odd
+   * cookie does not cost a whole browser export. An empty array means all were imported.
    * Throws `COOKIE_JAR_DISABLED` if the client was created with
    * `cookieJar: false`, and `INVALID_ARGUMENT` for an array element that is
-   * not a cookie object (e.g. one without `name`).
+   * not a cookie object (e.g. one without `name`, or with a `partitionKey`
+   * that is neither a string, an object with `topLevelSite` nor null).
    */
   setCookies(cookies: KoonCookie[]): KoonSkippedCookie[];
   /**

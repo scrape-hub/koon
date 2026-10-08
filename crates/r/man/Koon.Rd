@@ -117,11 +117,16 @@ of named lists. Each cookie needs \code{name}, \code{value} and either \code{dom
 (optionally with \code{path}) or \code{url}; \code{expires}, \code{httpOnly}, \code{secure},
 \code{sameSite} and \code{hostOnly} are optional. Every valid cookie is
 imported; the others are skipped, e.g. one with an invalid value or
-domain, and so are partitioned (CHIPS) cookies: those with a
-\code{partitionKey} holding anything but \code{NULL} or \code{NA} (a string, CDP's key
-object, or a row of the nested data frame \code{jsonlite::fromJSON()} makes
-of such objects) or with \code{partitionKeyOpaque = TRUE}; browsers send them
-only in a third-party context. Returns the skipped cookies invisibly,
+domain. A partitioned (CHIPS) cookie is imported when it is partitioned
+under its own site (such as Cloudflare's \code{cf_clearance}); its
+\code{partitionKey} is Playwright's top-level site (\code{"https://example.com"})
+or CDP's key object (a list with \code{topLevelSite} and
+\code{hasCrossSiteAncestor}, or a row of the nested data frame
+\code{jsonlite::fromJSON()} makes of those). Cookies of another site's
+partition, with a cross-site ancestor (\code{hasCrossSiteAncestor} or
+Playwright's \code{_crHasCrossSiteAncestor}) or with
+\code{partitionKeyOpaque = TRUE} are skipped: browsers send those only to
+embedded frames. Returns the skipped cookies invisibly,
 as a data frame with \code{index} (their row or element in \code{cookies}),
 \code{name} and \code{reason}, with no rows when all were imported. A field of
 the wrong type (e.g. a non-numeric \code{expires}) is an error.}

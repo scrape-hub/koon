@@ -327,8 +327,7 @@ pub fn farble_accept_language(
     site: &Uri,
 ) {
     const FAKE_Q_VALUES: [&str; 5] = [";q=0.5", ";q=0.6", ";q=0.7", ";q=0.8", ";q=0.9"];
-    let host = site.host().unwrap_or("").to_ascii_lowercase();
-    let domain = psl::domain_str(&host).unwrap_or(&host).to_string();
+    let domain = crate::util::site(site.host().unwrap_or(""));
     let q = FAKE_Q_VALUES[state.farbling_index(&domain, FAKE_Q_VALUES.len())];
     if let Some((_, value)) = headers
         .iter_mut()

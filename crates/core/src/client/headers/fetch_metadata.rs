@@ -5,6 +5,7 @@ use http::{Method, Uri};
 use super::order::host_header;
 use super::util::{header_value, is_get_or_head, merge_caller_headers, remove, set};
 use super::{Family, Mode};
+use crate::util::same_site;
 
 /// The kind of request a browser would make with this method and these caller headers.
 pub(super) fn detect_mode(
@@ -205,13 +206,4 @@ pub(super) fn compute_fetch_site(request_url: &Uri, origin_value: &str) -> &'sta
         return "same-site";
     }
     "cross-site"
-}
-
-/// Whether two hosts share a registrable domain (eTLD+1, Public Suffix List).
-pub(super) fn same_site(host1: &str, host2: &str) -> bool {
-    let site = |host: &str| {
-        let host = host.to_ascii_lowercase();
-        psl::domain_str(&host).map(str::to_string).unwrap_or(host)
-    };
-    site(host1) == site(host2)
 }

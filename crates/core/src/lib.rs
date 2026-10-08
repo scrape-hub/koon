@@ -30,7 +30,7 @@ pub use client::{
     OnRedirectHook, OnRequestHook, OnResponseHook, RequestOptions, SessionExport, blocked_by,
     decode_body_text, parse_method,
 };
-pub use cookie::{Cookie, CookieJar, CookieParams, SameSite, SkippedCookie};
+pub use cookie::{Cookie, CookieJar, CookieParams, PartitionKey, SameSite, SkippedCookie};
 pub use error::Error;
 pub use multipart::{BoundaryStyle, Multipart, Part};
 pub use profile::{

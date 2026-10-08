@@ -78,12 +78,14 @@ client$set_cookies(list(
 ))
 ```
 
-Every valid cookie is imported. An invalid one (say, a value with a `;`)
-and a partitioned cookie (one with a `partitionKey`, also as the nested
-data frame column `jsonlite::fromJSON()` makes of CDP's key objects, or with
-`partitionKeyOpaque = TRUE`) are skipped; `$set_cookies()` returns those
-invisibly, as a data frame with their `index` in the input, `name` and
-`reason`:
+Every valid cookie is imported, partitioned (CHIPS) cookies too when they
+are partitioned under their own site, as Cloudflare's `cf_clearance` is.
+An invalid one (say, a value with a `;`) and a cookie of another site's
+partition (its `partitionKey` names another top-level site, also in the
+nested data frame column `jsonlite::fromJSON()` makes of CDP's key objects)
+are skipped; browsers send the latter only to frames embedded in that site.
+`$set_cookies()` returns the skipped cookies invisibly, as a data frame with
+their `index` in the input, `name` and `reason`:
 
 ```{r}
 skipped <- client$set_cookies(jsonlite::fromJSON("playwright-cookies.json"))

@@ -19,7 +19,7 @@ use pyo3::types::{PyBytes, PyDict, PyList, PyMapping, PyString};
 
 use koon_core::{
     Body, BoundaryStyle, BrowserProfile, ClientBuilder, CookieParams, HeaderFamily, HeaderMode,
-    IpVersion, Multipart, OnRedirectHook, OnRequestHook, OnResponseHook, ProxyServer,
+    IpVersion, Multipart, OnRedirectHook, OnRequestHook, OnResponseHook, PartitionKey, ProxyServer,
     ProxyServerConfig, RequestOptions, SkippedCookie, WsMessage,
 };
 
@@ -225,13 +225,45 @@ struct CookieDict {
     #[pyo3(default)]
     host_only: Option<bool>,
     #[pyo3(default)]
-    partition_key: Option<Py<PyAny>>,
+    partition_key: Option<PartitionKeyArg>,
+    #[pyo3(item("_crHasCrossSiteAncestor"), default)]
+    cr_has_cross_site_ancestor: Option<bool>,
     #[pyo3(default)]
     partition_key_opaque: Option<bool>,
 }
 
+/// A partition key as Playwright (the top-level site) or CDP (an object)
+/// gives it.
+#[derive(FromPyObject)]
+enum PartitionKeyArg {
+    Site(String),
+    Cdp(CdpPartitionKey),
+}
+
+#[derive(FromPyObject)]
+#[pyo3(from_item_all, rename_all = "camelCase")]
+struct CdpPartitionKey {
+    top_level_site: String,
+    #[pyo3(default)]
+    has_cross_site_ancestor: Option<bool>,
+}
+
 impl From<CookieDict> for CookieParams {
     fn from(c: CookieDict) -> Self {
+        let partition_key = if c.partition_key_opaque == Some(true) {
+            Some(PartitionKey::Opaque)
+        } else {
+            c.partition_key.map(|key| {
+                let (top_level_site, cross_site_ancestor) = match key {
+                    PartitionKeyArg::Site(site) => (site, c.cr_has_cross_site_ancestor),
+                    PartitionKeyArg::Cdp(key) => (key.top_level_site, key.has_cross_site_ancestor),
+                };
+                PartitionKey::Site {
+                    top_level_site,
+                    cross_site_ancestor: cross_site_ancestor.unwrap_or(false),
+                }
+            })
+        };
         Self {
             name: c.name,
             value: c.value,
@@ -243,7 +275,7 @@ impl From<CookieDict> for CookieParams {
             secure: c.secure.unwrap_or(false),
             same_site: c.same_site,
             host_only: c.host_only,
-            partitioned: c.partition_key.is_some() || c.partition_key_opaque == Some(true),
+            partition_key,
         }
     }
 }

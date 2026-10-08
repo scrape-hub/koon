@@ -13,3 +13,15 @@ pub(crate) fn lock_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
+
+/// The site of a host: its registrable domain (eTLD+1, Public Suffix List), lowercase; a host
+/// without one (an IP address, `localhost`) is its own site.
+pub(crate) fn site(host: &str) -> String {
+    let host = host.to_ascii_lowercase();
+    psl::domain_str(&host).map(str::to_string).unwrap_or(host)
+}
+
+/// Whether two hosts belong to the same site.
+pub(crate) fn same_site(host1: &str, host2: &str) -> bool {
+    site(host1) == site(host2)
+}

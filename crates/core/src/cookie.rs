@@ -6,6 +6,7 @@ use http::Uri;
 use serde::{Deserialize, Serialize};
 
 use crate::error::Error;
+use crate::util::same_site;
 
 /// A `name=value` pair may not exceed this many bytes, matching the limit browsers enforce on a
 /// single cookie (RFC 6265 recommends at least 4096).
@@ -395,9 +396,58 @@ pub struct CookieParams {
     pub same_site: Option<String>,
     /// Overrides whether the cookie is host-only.
     pub host_only: Option<bool>,
-    /// A partitioned (CHIPS) cookie; unsupported (no partitions in the jar).
-    /// `Client::set_cookie_params` skips and reports these; converting one alone is an error.
-    pub partitioned: bool,
+    /// The partition of a partitioned (CHIPS) cookie. Only a partition keyed by the cookie's own
+    /// site converts: browsers send cookies of other partitions only to embedded frames, which
+    /// koon never loads (`Client::set_cookie_params` skips and reports them).
+    pub partition_key: Option<PartitionKey>,
+}
+
+/// The partition key of a partitioned (CHIPS) cookie, as browsers export it (CDP's
+/// `partitionKey` and `partitionKeyOpaque`, Playwright's `partitionKey`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PartitionKey {
+    /// Keyed by a top-level site such as `https://example.com`.
+    Site {
+        /// The top-level site.
+        top_level_site: String,
+        /// Whether a frame of another site stood between the top-level page and the frame that
+        /// set the cookie (CDP's `hasCrossSiteAncestor`).
+        cross_site_ancestor: bool,
+    },
+    /// An opaque key (a sandboxed or fenced frame).
+    Opaque,
+}
+
+impl PartitionKey {
+    /// Whether browsers send a cookie of `domain` from this partition on a top-level request to
+    /// that domain, the only kind of request koon makes.
+    fn is_first_party_of(&self, domain: &str) -> bool {
+        match self {
+            Self::Site {
+                top_level_site,
+                cross_site_ancestor: false,
+            } => url::Url::parse(top_level_site)
+                .ok()
+                .and_then(|url| url.host_str().map(|host| same_site(host, domain)))
+                .unwrap_or(false),
+            _ => false,
+        }
+    }
+}
+
+impl std::fmt::Display for PartitionKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Site {
+                top_level_site,
+                cross_site_ancestor: false,
+            } => f.write_str(top_level_site),
+            Self::Site { top_level_site, .. } => {
+                write!(f, "{top_level_site} with a cross-site ancestor")
+            }
+            Self::Opaque => f.write_str("an opaque key"),
+        }
+    }
 }
 
 /// A cookie that [`Client::set_cookies`](crate::Client::set_cookies) or
@@ -415,13 +465,6 @@ pub struct SkippedCookie {
 impl CookieParams {
     /// Convert into a [`Cookie`]; the error is the reason the params are invalid.
     pub(crate) fn into_cookie(self) -> Result<Cookie, String> {
-        if self.partitioned {
-            return Err(
-                "partitioned (CHIPS) cookies are not supported: browsers send them \
-                        only in a third-party context"
-                    .into(),
-            );
-        }
         let (domain, path, default_host_only, secure) = match (self.url, self.domain) {
             (Some(_), Some(_)) => return Err("a cookie has either url or domain, not both".into()),
             (Some(_), None) if self.path.is_some() => {
@@ -451,6 +494,16 @@ impl CookieParams {
             (None, None) => return Err("a cookie needs a url or a domain".into()),
         };
         let host_only = self.host_only.unwrap_or(default_host_only);
+        if let Some(key) = self
+            .partition_key
+            .as_ref()
+            .filter(|key| !key.is_first_party_of(&domain))
+        {
+            return Err(format!(
+                "partitioned under {key}: browsers send it only to embedded frames, never on a \
+                 top-level request"
+            ));
+        }
 
         // The same acceptance rules every other path into the jar applies (`parse_set_cookie`,
         // and `client/cookies.rs`'s import path for a raw `Cookie`): name/value shape and the
@@ -524,7 +577,7 @@ impl From<&Cookie> for CookieParams {
             secure: cookie.secure,
             same_site: Some(cookie.same_site.as_str().to_string()),
             host_only: Some(cookie.host_only),
-            partitioned: false,
+            partition_key: None,
         }
     }
 }
@@ -1774,11 +1827,6 @@ mod tests {
             },
             CookieParams {
                 domain: domain(),
-                partitioned: true,
-                ..params("partitioned")
-            },
-            CookieParams {
-                domain: domain(),
                 same_site: Some("sometimes".to_string()),
                 ..params("same site")
             },
@@ -1786,6 +1834,43 @@ mod tests {
         for p in invalid {
             let name = p.name.clone();
             assert!(p.into_cookie().is_err(), "{name}");
+        }
+    }
+
+    #[test]
+    fn test_params_partitioned_only_under_the_cookies_own_site() {
+        let site = |top_level_site: &str, cross_site_ancestor| PartitionKey::Site {
+            top_level_site: top_level_site.to_string(),
+            cross_site_ancestor,
+        };
+        let convert = |domain: &str, key| {
+            CookieParams {
+                domain: Some(domain.to_string()),
+                partition_key: Some(key),
+                ..params("chips")
+            }
+            .into_cookie()
+        };
+
+        for (domain, top_level_site) in [
+            (".example.com", "https://example.com"),
+            ("www.example.com", "https://example.com"),
+        ] {
+            assert!(
+                convert(domain, site(top_level_site, false)).is_ok(),
+                "{domain}"
+            );
+        }
+        for (key, reason) in [
+            (site("https://other.com", false), "under https://other.com:"),
+            (
+                site("https://example.com", true),
+                "with a cross-site ancestor",
+            ),
+            (PartitionKey::Opaque, "under an opaque key"),
+        ] {
+            let err = convert("example.com", key).unwrap_err();
+            assert!(err.contains(reason), "{err}");
         }
     }
 

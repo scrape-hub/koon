@@ -262,23 +262,30 @@ async function testCookies() {
     check(`imports the valid cookie next to ${what}`, JSON.stringify(importing.cookies().map((c) => c.name)) === '["ok"]');
   }
 
-  const skipping = new Koon();
-  const partitioned = skipping.setCookies([
+  const partitioning = new Koon();
+  const partitioned = partitioning.setCookies([
     { name: 'kept', value: 'v', domain: 'a.example' },
-    { name: 'cdp', value: 'v', domain: 'a.example', partitionKey: { topLevelSite: 'https://a.example' } },
-    { name: 'pw', value: 'v', domain: 'a.example', partitionKey: 'https://a.example' },
+    { name: 'cdp', value: 'v', domain: 'a.example', partitionKey: { topLevelSite: 'https://a.example', hasCrossSiteAncestor: false } },
+    { name: 'pw', value: 'v', domain: '.a.example', partitionKey: 'https://a.example', _crHasCrossSiteAncestor: false },
+    { name: 'otherSite', value: 'v', domain: 'a.example', partitionKey: { topLevelSite: 'https://b.example', hasCrossSiteAncestor: false } },
+    { name: 'ancestor', value: 'v', domain: 'a.example', partitionKey: 'https://a.example', _crHasCrossSiteAncestor: true },
     { name: 'opaque', value: 'v', domain: 'a.example', partitionKeyOpaque: true },
   ]);
   check(
-    'partitioned cookies are skipped, the rest is imported',
-    JSON.stringify(skipping.cookies().map((c) => c.name)) === JSON.stringify(['kept']),
-    JSON.stringify(skipping.cookies().map((c) => c.name))
+    'cookies partitioned under their own site are imported',
+    JSON.stringify(partitioning.cookies().map((c) => c.name)) === JSON.stringify(['kept', 'cdp', 'pw']),
+    JSON.stringify(partitioning.cookies().map((c) => c.name))
   );
   check(
-    'partitioned cookies are reported',
-    JSON.stringify(partitioned.map((c) => [c.index, c.name])) === JSON.stringify([[1, 'cdp'], [2, 'pw'], [3, 'opaque']]) &&
+    'cookies of other partitions are skipped and reported',
+    JSON.stringify(partitioned.map((c) => [c.index, c.name])) === JSON.stringify([[3, 'otherSite'], [4, 'ancestor'], [5, 'opaque']]) &&
       partitioned.every((c) => c.reason.includes('partitioned')),
     JSON.stringify(partitioned)
+  );
+  await expectThrows(
+    () => new Koon().setCookies([{ name: 'x', value: 'v', domain: 'a.example', partitionKey: 1 }]),
+    'a partitionKey that is neither a string nor an object',
+    'INVALID_ARGUMENT'
   );
 
   await expectThrows(

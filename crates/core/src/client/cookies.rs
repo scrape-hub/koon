@@ -33,9 +33,8 @@ impl Client {
     /// [`set_cookies`](Self::set_cookies) from the Playwright/CDP shape (see [`CookieParams`]); a
     /// cookie whose fields don't convert (e.g. both `url` and `domain`), whose name/value or
     /// `__Secure-`/`__Host-` prefix is invalid, or that names a public-suffix domain without
-    /// `host_only`, is skipped too, and so is a
-    /// partitioned (CHIPS) one, since koon never makes the third-party requests it needs. Fails as
-    /// `set_cookies` does.
+    /// `host_only`, is skipped too, and so is a partitioned (CHIPS) one from another site's
+    /// partition, which browsers send only to embedded frames. Fails as `set_cookies` does.
     pub fn set_cookie_params(
         &self,
         cookies: Vec<CookieParams>,
@@ -132,7 +131,7 @@ fn validate_and_normalize(cookie: &mut Cookie) -> Result<(), &'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cookie::SameSite;
+    use crate::cookie::{PartitionKey, SameSite};
     use crate::profile::Chrome;
     use std::time::SystemTime;
 
@@ -175,23 +174,33 @@ mod tests {
     }
 
     #[test]
-    fn set_cookie_params_skips_and_reports_partitioned_cookies() {
+    fn set_cookie_params_skips_and_reports_third_party_partitioned_cookies() {
         let client = Client::new(Chrome::latest()).unwrap();
-        let param = |name: &str, partitioned: bool| CookieParams {
+        let param = |name: &str, top_level_site: Option<&str>| CookieParams {
             name: name.to_string(),
             value: "v".to_string(),
             domain: Some("example.com".to_string()),
-            partitioned,
+            partition_key: top_level_site.map(|site| PartitionKey::Site {
+                top_level_site: site.to_string(),
+                cross_site_ancestor: false,
+            }),
             ..CookieParams::default()
         };
         let skipped = client
-            .set_cookie_params(vec![param("kept", false), param("chips", true)])
+            .set_cookie_params(vec![
+                param("plain", None),
+                param("first_party", Some("https://example.com")),
+                param("third_party", Some("https://other.com")),
+            ])
             .unwrap();
         assert_eq!(skipped.len(), 1);
-        assert_eq!((skipped[0].index, skipped[0].name.as_str()), (1, "chips"));
+        assert_eq!(
+            (skipped[0].index, skipped[0].name.as_str()),
+            (2, "third_party")
+        );
         assert!(skipped[0].reason.contains("partitioned"), "{skipped:?}");
         let names: Vec<String> = client.cookies().into_iter().map(|c| c.name).collect();
-        assert_eq!(names, ["kept"]);
+        assert_eq!(names, ["plain", "first_party"]);
     }
 
     #[test]

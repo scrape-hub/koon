@@ -62,11 +62,16 @@ LocalAddress = Union[str, IPv4Address, IPv6Address]
 #   httpOnly, secure: bool
 #   sameSite: "Strict" | "Lax" | "None" (case-insensitive; default "Lax")
 #   hostOnly: bool (overrides what domain/url imply)
-#   partitionKey: a cookie whose partitionKey is present and not None is
-#       skipped: browsers send partitioned (CHIPS) cookies only in a
-#       third-party context, never with top-level requests.
+#   partitionKey: str | dict | None, the CHIPS partition key: Playwright's
+#       top-level site ("https://example.com") or CDP's {"topLevelSite": str,
+#       "hasCrossSiteAncestor": bool}. A cookie partitioned under its own
+#       site (such as Cloudflare's cf_clearance) is imported, the others are
+#       skipped: browsers send those only to frames embedded in another
+#       site, never with a top-level request.
+#   _crHasCrossSiteAncestor: bool (Playwright's flag for a partition key
+#       with a cross-site ancestor; True skips the cookie)
 #   partitionKeyOpaque: bool (CDP's flag for an opaque partition key; True
-#       skips the cookie like a partitionKey)
+#       skips the cookie)
 # The dicts returned by `cookies()` have name, value, domain (with a leading
 # dot for domain cookies), path, expires, httpOnly, secure, sameSite and
 # hostOnly, and feed straight back into `set_cookies()`.
@@ -277,9 +282,9 @@ class Koon:
 
         Every valid cookie is imported. The others (an invalid name, value,
         domain, path or ``expires``, a ``url`` together with ``domain``, a
-        partitioned cookie, ...) are skipped and returned as dicts with
-        ``index`` (position in ``cookies``, 0-based), ``name`` and
-        ``reason``, so one odd cookie does not cost a whole browser export;
+        cookie partitioned under another site, ...) are skipped and returned
+        as dicts with ``index`` (position in ``cookies``, 0-based), ``name``
+        and ``reason``, so one odd cookie does not cost a whole browser export;
         an empty list means all were imported. Raises ``KoonError`` with code
         ``COOKIE_JAR_DISABLED`` for a client created with
         ``cookie_jar=False``, and ``KoonInvalidArgument`` for an element that
