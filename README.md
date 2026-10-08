@@ -131,7 +131,7 @@ Match the language to the IP as well. koon asks for English pages unless you set
 | Browser | Versions | Platforms | Profiles |
 |---------|----------|-----------|----------|
 | Chrome | 131-155 | Windows, macOS, Linux, Android | 100 |
-| Firefox | 135-157 | Windows, macOS, Linux, Android | 92 |
+| Firefox | 135-158 | Windows, macOS, Linux, Android | 96 |
 | Safari | 15.6-27.0 | macOS, iOS | 41 |
 | Edge | 131-154 | Windows, macOS, Android | 72 |
 | Opera | 124-136 | Windows, macOS, Linux | 39 |
@@ -140,7 +140,7 @@ Match the language to the IP as well. koon asks for English pages unless you set
 | Samsung Internet | 29-30 | Android | 2 |
 | OkHttp | 4, 5 | Android | 2 |
 
-**357 profiles** total. `koon --list-browsers`, `Koon.browsers()` (Node), `koon.browsers()` (Python) and `koon_browsers()` (R) list them all.
+**361 profiles** total. `koon --list-browsers`, `Koon.browsers()` (Node), `koon.browsers()` (Python) and `koon_browsers()` (R) list them all.
 
 ### Profile naming
 
@@ -151,7 +151,7 @@ Format: `{browser}{version}{-os}`. All parts but the browser name are optional, 
 | Chrome, Firefox, Opera | `chrome155`, `-windows`, `-macos`, `-linux` |
 | Edge, Brave | `edge154`, `-windows`, `-macos` (Brave also `-linux`) |
 | Safari | `safari270-macos` |
-| Chrome/Firefox/Edge/Brave Mobile (Android) | `chrome-mobile155`, `firefox-mobile157`, `edge-mobile154`, `brave-mobile154` |
+| Chrome/Firefox/Edge/Brave Mobile (Android) | `chrome-mobile155`, `firefox-mobile158`, `edge-mobile154`, `brave-mobile154` |
 | Safari Mobile (iOS) | `safari-mobile270` |
 | Samsung Internet, Opera Mobile (Android) | `samsung30`, `opera-mobile102` |
 | OkHttp | `okhttp4`, `okhttp5` (`-android` suffix optional) |
@@ -718,9 +718,9 @@ field is compared with the value captured from the real browser.
 
 ```
 $ koon verify -b firefox
-firefox -> firefox157-windows: match
-  reference    firefox-156: Firefox 156-157 (without ffdhe groups): real Firefox 156.0.1 captures; 157 from the 157.0 beta (ClientHello capture and tls.browserleaks.com)
-  reference    firefox-quic: QUIC JA4 of real Firefox 155.0.1 and 157.0 beta QUIC ClientHellos (157 also from quic.browserleaks.com)
+firefox -> firefox158-windows: match
+  reference    firefox-156: Firefox 156-158 (without ffdhe groups): real Firefox 156.0.1 captures; 157 and 158 from the 157.0 and 158.0b5 betas (ClientHello capture and tls.browserleaks.com)
+  reference    firefox-quic: QUIC JA4 of real Firefox 155.0.1, 157.0 beta and 158.0b5 QUIC ClientHellos (157 and 158 also from quic.browserleaks.com)
   service      https://tls.browserleaks.com/json
   http3        https://quic.browserleaks.com/?minify=1
   ja4          match        t13d1517h2_8daaf6152771_3cbfd9057e0d

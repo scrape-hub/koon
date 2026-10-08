@@ -26,7 +26,7 @@ impl Firefox {
     pub const MIN_VERSION: u32 = 135;
 
     /// Newest supported Firefox major version.
-    pub const LATEST_VERSION: u32 = 157;
+    pub const LATEST_VERSION: u32 = 158;
 
     /// Operating systems Firefox profiles exist for.
     pub const PLATFORMS: &'static [Os] = &[Os::Windows, Os::MacOS, Os::Linux, Os::Android];

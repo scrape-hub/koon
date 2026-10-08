@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Firefox** 158 (`firefox158`) on Windows, macOS, Linux and Android. Its
+  TLS, HTTP/2 and HTTP/3 fingerprints are those of Firefox 157. koon now
+  ships 361 profiles.
+
 ## [1.1.0] - 2026-09-30
 
 ### Added

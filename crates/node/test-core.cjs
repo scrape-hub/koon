@@ -31,12 +31,12 @@ async function testLatestProfiles() {
   console.log('latest profile of every browser resolves to the current core version');
   const expected = [
     ['chrome', 'Chrome/155'],
-    ['firefox', 'Firefox/157'],
+    ['firefox', 'Firefox/158'],
     ['edge', 'Edg/154'],
     ['opera', 'OPR/136'],
     ['safari', 'Version/27.0'],
     ['chrome-mobile', 'Chrome/155'],
-    ['firefox-mobile', 'Firefox/157'],
+    ['firefox-mobile', 'Firefox/158'],
     ['safari-mobile', 'Version/27.0'],
     ['okhttp', 'okhttp/5'],
   ];

@@ -230,11 +230,11 @@ const FIREFOX_154: Reference = Reference {
     ..Reference::EMPTY
 };
 
-/// Firefox 156 and 157: no finite-field groups.
+/// Firefox 156 to 158: no finite-field groups.
 const FIREFOX_156: Reference = Reference {
     id: "firefox-156",
-    source: "Firefox 156-157 (without ffdhe groups): real Firefox 156.0.1 captures; 157 from \
-             the 157.0 beta (ClientHello capture and tls.browserleaks.com)",
+    source: "Firefox 156-158 (without ffdhe groups): real Firefox 156.0.1 captures; 157 and 158 \
+             from the 157.0 and 158.0b5 betas (ClientHello capture and tls.browserleaks.com)",
     ja4: Some("t13d1517h2_8daaf6152771_3cbfd9057e0d"),
     ja3n_hash: Some("f9c6a2c424206e61efb6c1a6325596b5"),
     ja3_hash: Some("9d42e90b0225e779f03141ddcd699df2"),
@@ -243,12 +243,12 @@ const FIREFOX_156: Reference = Reference {
     ..Reference::EMPTY
 };
 
-/// Firefox's QUIC `ClientHello` without ML-DSA (155, 157; on Android 146 to 155 and 157).
+/// Firefox's QUIC `ClientHello` without ML-DSA (155, 157, 158; on Android 146 to 155, 157 and 158).
 const FIREFOX_QUIC: Reference = Reference {
     id: "firefox-quic",
-    source: "QUIC JA4 of real Firefox 155.0.1 and 157.0 beta QUIC ClientHellos (157 also \
-             from quic.browserleaks.com); on Android from the 146.0b9, 147.0b9, 150.0b10, 151.0b10, \
-             153.0b13, 154.0b10, 155.0b5 and 157.0b5 betas (quic.browserleaks.com)",
+    source: "QUIC JA4 of real Firefox 155.0.1, 157.0 beta and 158.0b5 QUIC ClientHellos (157 and \
+             158 also from quic.browserleaks.com); on Android from the 146.0b9, 147.0b9, 150.0b10, \
+             151.0b10, 153.0b13, 154.0b10, 155.0b5, 157.0b5 and 158.0b5 betas (quic.browserleaks.com)",
     quic_ja4: Some("q13d0315h3_55b375c5d22e_dc5437974b47"),
     ..Reference::EMPTY
 };
@@ -323,11 +323,11 @@ const FIREFOX_ANDROID_155: Reference = Reference {
     ..Reference::EMPTY
 };
 
-/// Firefox 156 and 157 on Android: no finite-field groups, desktop Firefox 156's `ClientHello`.
+/// Firefox 156 to 158 on Android: no finite-field groups, desktop Firefox 156's `ClientHello`.
 const FIREFOX_ANDROID_156: Reference = Reference {
     id: "firefox-android-156",
-    source: "Firefox 156-157 on Android (without ffdhe groups): real 156.0.1, 156.0b5 and \
-             157.0b5 on Android 17 (tls.browserleaks.com and ClientHello captures)",
+    source: "Firefox 156-158 on Android (without ffdhe groups): real 156.0.1, 156.0b5, 157.0b5 \
+             and 158.0b5 on Android 17 (tls.browserleaks.com and ClientHello captures)",
     ja4: Some("t13d1517h2_8daaf6152771_3cbfd9057e0d"),
     ja3n_hash: Some("f9c6a2c424206e61efb6c1a6325596b5"),
     ja3_hash: Some("9d42e90b0225e779f03141ddcd699df2"),
@@ -605,7 +605,7 @@ const COVERAGE: &[Coverage] = &[
     covers(Browser::Firefox, (151, 0), (153, 0), DESKTOP, &FIREFOX_151),
     covers(Browser::Firefox, (154, 0), (155, 0), DESKTOP, &FIREFOX_154),
     covers(Browser::Firefox, (155, 0), (155, 0), DESKTOP, &FIREFOX_QUIC),
-    covers(Browser::Firefox, (156, 0), (157, 0), DESKTOP, &FIREFOX_156),
+    covers(Browser::Firefox, (156, 0), (158, 0), DESKTOP, &FIREFOX_156),
     covers(
         Browser::Firefox,
         (156, 0),
@@ -613,7 +613,7 @@ const COVERAGE: &[Coverage] = &[
         DESKTOP,
         &FIREFOX_156_QUIC,
     ),
-    covers(Browser::Firefox, (157, 0), (157, 0), DESKTOP, &FIREFOX_QUIC),
+    covers(Browser::Firefox, (157, 0), (158, 0), DESKTOP, &FIREFOX_QUIC),
     covers(
         Browser::Firefox,
         (146, 0),
@@ -645,7 +645,7 @@ const COVERAGE: &[Coverage] = &[
     covers(
         Browser::Firefox,
         (156, 0),
-        (157, 0),
+        (158, 0),
         &[Os::Android],
         &FIREFOX_ANDROID_156,
     ),
@@ -666,7 +666,7 @@ const COVERAGE: &[Coverage] = &[
     covers(
         Browser::Firefox,
         (157, 0),
-        (157, 0),
+        (158, 0),
         &[Os::Android],
         &FIREFOX_QUIC,
     ),
@@ -806,6 +806,7 @@ pub const CHECKPOINTS: &[&str] = &[
     "firefox155-windows",
     "firefox156-windows",
     "firefox157-windows",
+    "firefox158-windows",
     "firefox146-android",
     "firefox150-android",
     "firefox151-android",
@@ -814,6 +815,7 @@ pub const CHECKPOINTS: &[&str] = &[
     "firefox155-android",
     "firefox156-android",
     "firefox157-android",
+    "firefox158-android",
     "safari15.6-macos",
     "safari16.0-macos",
     "safari16.1-macos",
