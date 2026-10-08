@@ -15,6 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `locale` sets the Accept-Language the browser itself sends for that language.
+  Before, koon built `de-AT,de;q=0.9,en-US;q=0.8,en;q=0.7` for every browser, a
+  list no desktop browser sends. Now `de-AT` gives
+  `de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7` in Chrome (the list of its German
+  UI), `de,de-DE;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6` in Edge,
+  `de,en-US;q=0.9,en;q=0.8` in Firefox and `de-DE,de;q=0.9` in Safari. Edge on
+  macOS and the Android browsers also put the system language first, as the
+  real ones do. OkHttp sends the language as given. In Rust, the profile's
+  `language_source` says how a browser builds the header.
+- Samsung Internet sends its Accept-Language without q values (`en-US,en`),
+  Firefox for Android only the device language (`en-US`).
 - Cookies imported from a browser (`setCookies()`, `set_cookies()`) keep the
   partitioned cookies a site set for itself, such as Cloudflare's
   `cf_clearance`. Only cookies of another site's partition are skipped, which

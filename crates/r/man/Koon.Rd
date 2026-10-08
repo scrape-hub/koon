@@ -49,8 +49,10 @@ follows it. An error it raises fails the request.}
 \item{\code{retries}}{Number of automatic retries on transport errors
 (default 0). Requests that may already have reached the server are
 only retried for idempotent methods.}
-\item{\code{locale}}{Locale such as \code{"fr-FR"} or \code{"de"}, used for a matching
-\code{Accept-Language} header (e.g. for the proxy's geography).}
+\item{\code{locale}}{The user's language, such as \code{"de-AT"}, to match the
+proxy's country. The \code{Accept-Language} header becomes what the profile's
+browser sends for it: Chrome the list of the UI language it picks
+(\code{de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7}), Safari \code{de-DE,de;q=0.9}.}
 \item{\code{proxy_headers}}{Headers for the HTTP CONNECT request to the proxy
 (session IDs, geo-targeting), in the same forms as \code{headers}.}
 \item{\code{ip_version}}{\code{4} or \code{6} to resolve hosts to IPv4 or IPv6 only.}

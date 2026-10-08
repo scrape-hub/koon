@@ -79,7 +79,7 @@ use crate::dns::DohResolver;
 use crate::error::Error;
 use crate::multipart::Multipart;
 use crate::pool::ConnectionPool;
-use crate::profile::{BrowserProfile, FIREFOX_WEIGHTED_ACCEPT_LANGUAGE_VERSION};
+use crate::profile::BrowserProfile;
 use crate::proxy::{ProxyConfig, ProxyRotation};
 use crate::quic::transport::QuicSetup;
 use crate::tls::{SessionCache, TlsConnector};
@@ -346,9 +346,11 @@ impl ClientBuilder {
         self
     }
 
-    /// Sets the Accept-Language header from a locale such as `"fr-FR"` or `"de"`: the locale, its
-    /// base language and English, weighted as the profile's browser does
-    /// (`fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7` for Chromium).
+    /// Sets the Accept-Language header the profile's browser sends for the user's language, a BCP 47
+    /// tag such as `"de-AT"`: Chromium browsers the list of the UI locale that language selects
+    /// (`de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7` from Chrome, `de,de-DE;q=0.9,en;q=0.8,...` from
+    /// Edge), Firefox that of its app locale, Safari the language as the OS maps it
+    /// (`de-DE,de;q=0.9`); see [`LanguageSource`](crate::LanguageSource).
     #[must_use]
     pub fn locale(mut self, locale: &str) -> Self {
         self.locale = Some(locale.to_string());
@@ -462,7 +464,9 @@ impl ClientBuilder {
         execute::validate_headers(&self.proxy_headers)?;
 
         if let Some(ref locale) = self.locale {
-            let accept_lang = build_accept_language(locale, accept_language_style(&self.profile));
+            // Checked as given: a browser that maps the language to a UI locale would hide it.
+            execute::validate_headers(&[("accept-language".to_string(), locale.clone())])?;
+            let accept_lang = crate::profile::accept_language(&self.profile, locale);
             if let Some(pos) = self
                 .profile
                 .headers
@@ -968,72 +972,6 @@ impl Client {
     }
 }
 
-/// How a browser weights the languages of its Accept-Language header.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum AcceptLanguageStyle {
-    /// Chromium, Safari and Firefox 147+: 0.9, 0.8, … down to 0.1.
-    Decrement,
-    /// Firefox up to 146: the weights divide 1.0 evenly (`en-US,en;q=0.5`).
-    EvenSplit,
-    /// Brave: the locale and its base language only, without weights; the q value is added per
-    /// request (`BrowserProfile::farble_accept_language`).
-    Farbled,
-}
-
-fn accept_language_style(profile: &BrowserProfile) -> AcceptLanguageStyle {
-    if profile.farble_accept_language {
-        return AcceptLanguageStyle::Farbled;
-    }
-    let firefox_major = headers::header_value(&profile.headers, "user-agent")
-        .and_then(|ua| ua.split("Firefox/").nth(1))
-        .and_then(|v| v.split('.').next())
-        .and_then(|v| v.parse::<u32>().ok());
-    match firefox_major {
-        Some(major) if major < FIREFOX_WEIGHTED_ACCEPT_LANGUAGE_VERSION => {
-            AcceptLanguageStyle::EvenSplit
-        }
-        _ => AcceptLanguageStyle::Decrement,
-    }
-}
-
-/// The Accept-Language value for a locale: the locale, its base language, then English (`"de"` ->
-/// de, en-US, en; `"en-US"` -> en-US, en), weighted as `"fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7"`
-/// (Chromium, Firefox 147+) or `"fr-FR,fr;q=0.8,en-US;q=0.5,en;q=0.3"` (Firefox ≤146).
-fn build_accept_language(locale: &str, style: AcceptLanguageStyle) -> String {
-    let lang = locale.split('-').next().unwrap_or(locale);
-    let mut languages: Vec<&str> = vec![locale];
-    if locale.contains('-') {
-        languages.push(lang);
-    }
-    if style == AcceptLanguageStyle::Farbled {
-        return languages.join(",");
-    }
-    if !lang.eq_ignore_ascii_case("en") {
-        languages.extend(["en-US", "en"]);
-    }
-
-    let n = languages.len();
-    languages
-        .iter()
-        .enumerate()
-        .map(|(i, language)| {
-            if i == 0 {
-                return language.to_string();
-            }
-            let q = match style {
-                AcceptLanguageStyle::Decrement => (10 - i.min(9)) as f64 / 10.0,
-                // Firefox ≤146: q = 1 - i/n, rounded to one decimal.
-                AcceptLanguageStyle::EvenSplit => {
-                    ((1.0 - i as f64 / n as f64) * 10.0).round() / 10.0
-                }
-                AcceptLanguageStyle::Farbled => unreachable!("returned above"),
-            };
-            format!("{language};q={q:.1}")
-        })
-        .collect::<Vec<_>>()
-        .join(",")
-}
-
 /// Split a curl `--resolve` entry, `host:port:addr[,addr...]`, into its host, port and addresses
 /// (see [`ClientBuilder::resolve_entry`]).
 fn parse_resolve_entry(entry: &str) -> Result<(&str, u16, Vec<IpAddr>), Error> {
@@ -1079,25 +1017,6 @@ impl Drop for Client {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_accept_language_decrement() {
-        let s = AcceptLanguageStyle::Decrement;
-        assert_eq!(build_accept_language("en-US", s), "en-US,en;q=0.9");
-        assert_eq!(build_accept_language("en", s), "en");
-        assert_eq!(build_accept_language("de", s), "de,en-US;q=0.9,en;q=0.8");
-        assert_eq!(
-            build_accept_language("fr-FR", s),
-            "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7"
-        );
-    }
-
-    #[test]
-    fn test_accept_language_even_split_firefox_146() {
-        let s = AcceptLanguageStyle::EvenSplit;
-        assert_eq!(build_accept_language("en-US", s), "en-US,en;q=0.5");
-        assert_eq!(build_accept_language("de", s), "de,en-US;q=0.7,en;q=0.3");
-    }
 
     #[test]
     fn resolve_entries_parse_like_curl() {

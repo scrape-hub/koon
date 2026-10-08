@@ -10,7 +10,7 @@ use crate::verify::{
     SAFARI_MACOS_12_13, SAFARI_MACOS_14, SAFARI_QUIC, SAFARI_QUIC_SHA1,
 };
 
-use super::{BrowserProfile, HeaderFamily, Os, check_platform};
+use super::{BrowserProfile, HeaderFamily, LanguageSource, Os, check_platform};
 
 mod headers;
 mod http2;
@@ -934,6 +934,7 @@ fn safari_profile(entry: &SafariVersion, ios: bool) -> BrowserProfile {
     };
     BrowserProfile {
         farble_accept_language: false,
+        language_source: Some(LanguageSource::Apple { ios }),
         header_family: Some(HeaderFamily::Safari),
         ua_client_hints: None,
         tls: safari_tls(release.tls),

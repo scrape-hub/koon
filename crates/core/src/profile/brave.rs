@@ -4,7 +4,7 @@ use super::chrome::{
     ChromiumHeaders, chrome_http2, chromium_headers, chromium_quic, chromium_tls,
     chromium_ua_client_hints, set_header,
 };
-use super::{BrowserProfile, HeaderFamily, Os, table_version};
+use super::{BrowserProfile, HeaderFamily, LanguageSource, Os, UiTable, table_version};
 
 /// Brave browser profile factory.
 ///
@@ -102,6 +102,10 @@ fn brave_profile(major: u32, os: Os) -> BrowserProfile {
     );
     BrowserProfile {
         farble_accept_language: true,
+        language_source: Some(match os {
+            Os::Android => LanguageSource::DeviceThenTable(UiTable::ChromiumAndroid),
+            _ => LanguageSource::UiTable(UiTable::Chromium),
+        }),
         header_family: Some(HeaderFamily::Chromium),
         ua_client_hints: Some(hints),
         quic: Some(chromium_quic(&tls)),

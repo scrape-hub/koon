@@ -132,7 +132,11 @@ export interface KoonOptions {
   onRedirect?: OnRedirectHook;
   /** Number of automatic retries on transport errors (a whole number). With proxy rotation, each retry uses the next proxy. Default: 0. */
   retries?: number;
-  /** Locale for Accept-Language header generation. Overrides the profile's Accept-Language to match proxy geography. Examples: "fr-FR", "de", "ja-JP". */
+  /**
+   * The user's language, such as "de-AT", to match the proxy's country. The Accept-Language
+   * header becomes what the profile's browser sends for it: Chrome the list of the UI language
+   * it picks ("de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7"), Safari "de-DE,de;q=0.9".
+   */
   locale?: string;
   /** Custom headers to send in the HTTP CONNECT tunnel request, in order. Useful for proxy session IDs, geo-targeting, or authentication. */
   proxyHeaders?: KoonHeadersInit;
@@ -604,7 +608,7 @@ export interface KoonProxyOptions {
   localAddress?: string;
   /** Automatic retries of forwarded requests on transport errors (a whole number). Default: 0. */
   retries?: number;
-  /** Locale for the Accept-Language header the profile sends (e.g. "de-DE"); in impersonate mode the client's own is dropped. */
+  /** The user's language for the Accept-Language header the profile sends (e.g. "de-AT", see `KoonOptions.locale`); in impersonate mode the client's own is dropped. */
   locale?: string;
   /** Restrict DNS resolution to IPv4 (4) or IPv6 (6). */
   ipVersion?: 4 | 6;

@@ -301,7 +301,7 @@ struct ConnectionArgs {
     #[arg(long, default_value = "0")]
     retries: u32,
 
-    /// Locale for Accept-Language header (e.g. "de-DE", "fr-FR", "ja-JP")
+    /// The user's language (e.g. "de-AT"); Accept-Language becomes what the browser sends for it
     #[arg(long)]
     locale: Option<String>,
 

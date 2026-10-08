@@ -52,6 +52,7 @@ fn okhttp_profile(major: u32) -> BrowserProfile {
     let release = if major == 4 { "4.12.0" } else { "5.5.0" };
     BrowserProfile {
         farble_accept_language: false,
+        language_source: None,
         header_family: Some(HeaderFamily::OkHttp),
         ua_client_hints: None,
         tls: okhttp_tls(major),

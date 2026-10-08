@@ -5,7 +5,7 @@ use super::chrome::{
     chrome_http2, chromium_headers, chromium_quic, chromium_tls, chromium_ua_client_hints_on,
     set_header,
 };
-use super::{BrowserProfile, HeaderFamily, Os, last_row, table_version};
+use super::{BrowserProfile, HeaderFamily, LanguageSource, Os, last_row, table_version};
 
 /// Opera for Android profile factory.
 ///
@@ -118,6 +118,7 @@ fn opera_mobile_profile(
     http2.max_concurrent_streams = Some(1000);
     BrowserProfile {
         farble_accept_language: false,
+        language_source: Some(LanguageSource::OperaAndroid),
         header_family: Some(HeaderFamily::Chromium),
         ua_client_hints: Some(hints),
         quic: Some(chromium_quic(&tls)),

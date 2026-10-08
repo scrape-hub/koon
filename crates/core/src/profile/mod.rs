@@ -1,3 +1,4 @@
+mod accept_language;
 mod brave;
 mod chrome;
 mod edge;
@@ -8,6 +9,8 @@ mod opera_mobile;
 mod safari;
 mod samsung;
 
+pub(crate) use accept_language::accept_language;
+pub use accept_language::{LanguageSource, UiTable};
 pub use brave::Brave;
 pub use chrome::Chrome;
 pub use edge::Edge;
@@ -72,6 +75,12 @@ pub struct BrowserProfile {
     /// (`FarbleAcceptLanguageHeader`).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub farble_accept_language: bool,
+
+    /// How the browser derives its Accept-Language header from the language
+    /// [`ClientBuilder::locale`](crate::ClientBuilder::locale) sets. `None` (`OkHttp`, whose apps
+    /// set the header themselves) sends that language as given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language_source: Option<LanguageSource>,
 }
 
 /// The high-entropy User-Agent client hints and device hints of a Chromium browser, sent only to

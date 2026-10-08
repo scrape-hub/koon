@@ -5,7 +5,7 @@ use super::chrome::{
     ChromiumHeaders, chrome_http2, chromium_headers, chromium_quic, chromium_tls,
     chromium_trust_anchor_ids, chromium_ua_client_hints,
 };
-use super::{BrowserProfile, HeaderFamily, Os, last_row, table_version};
+use super::{BrowserProfile, HeaderFamily, LanguageSource, Os, UiTable, last_row, table_version};
 
 /// Opera browser profile factory.
 ///
@@ -79,6 +79,7 @@ fn opera_profile(
     let tls = chromium_tls(chromium, trust_anchor_ids);
     BrowserProfile {
         farble_accept_language: false,
+        language_source: Some(LanguageSource::UiTable(UiTable::Opera)),
         header_family: Some(HeaderFamily::Chromium),
         ua_client_hints: Some(chromium_ua_client_hints(
             os,

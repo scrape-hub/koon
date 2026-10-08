@@ -11,7 +11,7 @@ use crate::tls::config::{
     TrustAnchorOrder,
 };
 
-use super::{BrowserProfile, HeaderFamily, Os, check_platform, check_version};
+use super::{BrowserProfile, HeaderFamily, LanguageSource, Os, check_platform, check_version};
 
 /// Firefox browser profile factory.
 ///
@@ -54,6 +54,7 @@ fn firefox_profile(major: u32, os: Os) -> BrowserProfile {
         let tls = firefox_tls_android(major);
         return BrowserProfile {
             farble_accept_language: false,
+            language_source: Some(LanguageSource::Device),
             header_family: Some(HeaderFamily::Firefox),
             ua_client_hints: None,
             quic: Some(firefox_quic(&tls, major)),
@@ -70,6 +71,7 @@ fn firefox_profile(major: u32, os: Os) -> BrowserProfile {
     quic.https_rr_doh_only = os == Os::MacOS && major <= 150;
     BrowserProfile {
         farble_accept_language: false,
+        language_source: Some(LanguageSource::Firefox { version: major }),
         header_family: Some(HeaderFamily::Firefox),
         ua_client_hints: None,
         quic: Some(quic),
@@ -533,7 +535,9 @@ fn firefox_headers(major: u32, os: Os) -> Vec<(String, String)> {
         Os::Ios => unreachable!("no Firefox profile for iOS"),
     };
 
-    let accept_language = if major >= FIREFOX_WEIGHTED_ACCEPT_LANGUAGE_VERSION {
+    let accept_language = if os == Os::Android {
+        "en-US"
+    } else if major >= FIREFOX_WEIGHTED_ACCEPT_LANGUAGE_VERSION {
         "en-US,en;q=0.9"
     } else {
         "en-US,en;q=0.5"

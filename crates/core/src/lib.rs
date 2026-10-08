@@ -35,8 +35,8 @@ pub use error::Error;
 pub use multipart::{BoundaryStyle, Multipart, Part};
 pub use profile::{
     Brave, Browser, BrowserProfile, Chrome, DEFAULT_OS, Edge, Firefox, HeaderFamily,
-    NetworkQuality, OkHttp, Opera, OperaMobile, Os, ProfileName, SAFARI_VERSIONS, Safari,
-    SafariVersion, Samsung, ServerPadding, UaClientHints,
+    LanguageSource, NetworkQuality, OkHttp, Opera, OperaMobile, Os, ProfileName, SAFARI_VERSIONS,
+    Safari, SafariVersion, Samsung, ServerPadding, UaClientHints, UiTable,
 };
 #[cfg(feature = "test-util")]
 pub use proxy::CertAuthority;

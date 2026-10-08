@@ -124,7 +124,7 @@ koon does not run JavaScript. A site that puts a JavaScript challenge first (Aka
 
 Pick proxies whose operating system matches the profile. Bot protection compares the TCP/IP fingerprint of a connection (TTL, TCP window size and options) with the OS the browser claims; that layer comes from the kernel of the machine or proxy that opens the TCP connection, not from koon. A Windows Chrome profile through a Linux datacenter proxy is a mismatch no HTTP client can hide.
 
-Match the language to the IP as well. koon asks for English pages unless you set `locale`, and some sites turn away a request whose language does not fit the country of its IP.
+Match the language to the IP as well. koon asks for English pages unless you set `locale`, and some sites turn away a request whose language does not fit the country of its IP. `locale` is the user's language, such as `de-AT`, and koon sends what the browser itself sends for it: Chrome `de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7`, Edge `de,de-DE;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6`, Safari `de-DE,de;q=0.9`.
 
 ## Supported browsers
 

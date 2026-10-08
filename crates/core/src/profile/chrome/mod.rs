@@ -13,7 +13,7 @@ mod tls;
 use crate::Error;
 use crate::tls::config::{TrustAnchorId, TrustAnchorOrder};
 
-use super::{BrowserProfile, HeaderFamily, Os, last_row, table_version};
+use super::{BrowserProfile, HeaderFamily, LanguageSource, Os, UiTable, last_row, table_version};
 pub(super) use client_hints::{
     ANDROID_DEVICE, ChromiumUaClientHints, Device, MACOS_DEVICE, WINDOWS_DEVICE,
     chromium_ua_client_hints, chromium_ua_client_hints_on,
@@ -104,6 +104,10 @@ fn chrome_profile(
     let full = full_version_for_os(versions, os);
     BrowserProfile {
         farble_accept_language: false,
+        language_source: Some(match os {
+            Os::Android => LanguageSource::DeviceThenTable(UiTable::ChromiumAndroid),
+            _ => LanguageSource::UiTable(UiTable::Chromium),
+        }),
         header_family: Some(HeaderFamily::Chromium),
         ua_client_hints: Some(chromium_ua_client_hints(
             os,

@@ -225,7 +225,10 @@ class Koon:
                 Return ``False`` to stop redirecting; any other return value (including
                 ``None``) continues. An exception it raises fails the request.
             retries: Number of automatic retries on transport errors. With proxy rotation, each retry uses the next proxy.
-            locale: Locale for Accept-Language header generation (e.g. ``"fr-FR"``, ``"de"``).
+            locale: The user's language, such as ``"de-AT"``, to match the proxy's
+                country. The Accept-Language header becomes what the profile's
+                browser sends for it: Chrome the list of the UI language it picks
+                (``de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7``), Safari ``de-DE,de;q=0.9``.
             proxy_headers: Custom headers for the HTTP CONNECT tunnel request (e.g. session IDs, geo-targeting).
             ip_version: Restrict DNS resolution to IPv4 (4) or IPv6 (6).
             resolve: Entries in curl's ``--resolve`` format,
@@ -773,8 +776,9 @@ class KoonProxy:
             doh: DNS-over-HTTPS provider (``"cloudflare"`` or ``"google"``, any case).
             local_address: Bind outgoing connections to a specific local IP address.
             retries: Automatic retries of forwarded requests on transport errors.
-            locale: Locale for the Accept-Language header the profile sends
-                (e.g. ``"de-DE"``); in impersonate mode the client's own is dropped.
+            locale: The user's language for the Accept-Language header the profile
+                sends (e.g. ``"de-AT"``, see ``Koon``); in impersonate mode the
+                client's own is dropped.
             proxy_headers: Headers for the CONNECT request to the upstream proxy.
             ip_version: Restrict DNS resolution to IPv4 (4) or IPv6 (6).
             resolve: Entries in curl's ``--resolve`` format, see ``Koon.__init__``.

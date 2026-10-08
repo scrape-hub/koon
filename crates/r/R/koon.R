@@ -48,8 +48,10 @@ NULL
 #'   \item{`retries`}{Number of automatic retries on transport errors
 #'     (default 0). Requests that may already have reached the server are
 #'     only retried for idempotent methods.}
-#'   \item{`locale`}{Locale such as `"fr-FR"` or `"de"`, used for a matching
-#'     `Accept-Language` header (e.g. for the proxy's geography).}
+#'   \item{`locale`}{The user's language, such as `"de-AT"`, to match the
+#'     proxy's country. The `Accept-Language` header becomes what the profile's
+#'     browser sends for it: Chrome the list of the UI language it picks
+#'     (`de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7`), Safari `de-DE,de;q=0.9`.}
 #'   \item{`proxy_headers`}{Headers for the HTTP CONNECT request to the proxy
 #'     (session IDs, geo-targeting), in the same forms as `headers`.}
 #'   \item{`ip_version`}{`4` or `6` to resolve hosts to IPv4 or IPv6 only.}

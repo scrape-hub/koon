@@ -4,7 +4,7 @@ use super::chrome::{
     ChromiumHeaders, ChromiumUaClientHints, Device, MACOS_DEVICE, WINDOWS_DEVICE, chrome_http2,
     chromium_headers, chromium_quic, chromium_tls, chromium_ua_client_hints_on,
 };
-use super::{BrowserProfile, HeaderFamily, Os, last_row, table_version};
+use super::{BrowserProfile, HeaderFamily, LanguageSource, Os, UiTable, last_row, table_version};
 
 /// Edge browser profile factory.
 ///
@@ -111,6 +111,11 @@ fn edge_profile(row: (u32, &'static str, &'static str), os: Os) -> BrowserProfil
     };
     BrowserProfile {
         farble_accept_language: false,
+        language_source: Some(match os {
+            Os::MacOS => LanguageSource::LanguageThenTable(UiTable::Edge),
+            Os::Android => LanguageSource::DeviceThenTable(UiTable::Edge),
+            _ => LanguageSource::UiTable(UiTable::Edge),
+        }),
         header_family: Some(HeaderFamily::Chromium),
         // Edge's own full version for its brand, the Chromium one it builds on for the Chromium
         // brand (captured). On www.google.com Edge presents itself as Chrome, which koon does not

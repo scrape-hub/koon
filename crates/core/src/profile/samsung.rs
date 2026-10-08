@@ -5,7 +5,9 @@ use super::chrome::{
     ChromiumUaClientHints, chrome_http2, chromium_brand_list, chromium_headers, chromium_tls,
     chromium_ua_client_hints_on, set_header,
 };
-use super::{BrowserProfile, HeaderFamily, NetworkQuality, Os, last_row, table_version};
+use super::{
+    BrowserProfile, HeaderFamily, LanguageSource, NetworkQuality, Os, last_row, table_version,
+};
 
 /// Samsung Internet for Android profile factory.
 ///
@@ -112,6 +114,7 @@ fn samsung_profile(row: (u32, u32, &'static str, &'static str)) -> BrowserProfil
         "accept-encoding",
         CHROMIUM_ACCEPT_ENCODING_NO_ZSTD,
     );
+    set_header(&mut headers, "accept-language", "en-US,en");
     let mut hints = chromium_ua_client_hints_on(ChromiumUaClientHints {
         os: Os::Android,
         chromium_major: chromium,
@@ -130,6 +133,7 @@ fn samsung_profile(row: (u32, u32, &'static str, &'static str)) -> BrowserProfil
     hints.network_quality = Some(SAMSUNG_NETWORK_QUALITY);
     BrowserProfile {
         farble_accept_language: false,
+        language_source: Some(LanguageSource::Samsung),
         header_family: Some(HeaderFamily::Chromium),
         ua_client_hints: Some(hints),
         quic: None,
