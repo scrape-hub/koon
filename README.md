@@ -28,8 +28,8 @@ pip install "koon[requests]"   # with the requests adapter's dependency
 **R**
 ```r
 # Windows, or macOS on Apple silicon, with R 4.6: the prebuilt package of the release
-install.packages("https://github.com/scrape-hub/koon/releases/download/v1.1.0/koon_1.1.0.zip", repos = NULL)  # Windows
-install.packages("https://github.com/scrape-hub/koon/releases/download/v1.1.0/koon_1.1.0.tgz", repos = NULL)  # macOS
+install.packages("https://github.com/scrape-hub/koon/releases/download/v1.2.0/koon_1.2.0.zip", repos = NULL)  # Windows
+install.packages("https://github.com/scrape-hub/koon/releases/download/v1.2.0/koon_1.2.0.tgz", repos = NULL)  # macOS
 
 # Other platforms and R versions build from source: Rust 1.85+ and CMake, on
 # Windows also Rtools, LLVM and `rustup target add x86_64-pc-windows-gnu`
