@@ -763,6 +763,29 @@ async fn a_redirect_to_an_unsupported_scheme_is_not_retried() {
     assert_eq!(posts(&server), 1);
 }
 
+#[tokio::test]
+async fn a_host_that_does_not_resolve_is_a_dns_error() {
+    let client = Client::new(Chrome::latest()).unwrap();
+    let err = client.get("http://koon.invalid/").await.unwrap_err();
+    assert_eq!(err.code(), "DNS_ERROR", "{err}");
+    assert!(err.to_string().contains("resolving koon.invalid"), "{err}");
+    assert!(err.is_connection_error() && err.is_pre_send() && err.is_retryable());
+
+    let refused = client
+        .get(&format!("http://127.0.0.1:{}/", free_port()))
+        .await
+        .unwrap_err();
+    assert_eq!(refused.code(), "CONNECTION_FAILED", "{refused}");
+
+    let proxied = Client::builder(Chrome::latest())
+        .proxy("http://koon.invalid:8080")
+        .unwrap()
+        .build()
+        .unwrap();
+    let err = proxied.get("http://example.test/").await.unwrap_err();
+    assert_eq!(err.code(), "PROXY_ERROR", "{err}");
+}
+
 /// A stream of `parts`, as a request body.
 fn parts(
     parts: &[&'static str],

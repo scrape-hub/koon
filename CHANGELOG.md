@@ -13,6 +13,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   TLS, HTTP/2 and HTTP/3 fingerprints are those of Firefox 157. koon now
   ships 361 profiles.
 
+### Changed
+
+- A host name that does not resolve fails with `DNS_ERROR` instead of
+  `CONNECTION_FAILED`, as with DNS-over-HTTPS before
+  ([#7](https://github.com/scrape-hub/koon/issues/7)), so a mistyped host can be
+  told from a refused connection. The CLI exits with 6, as curl does. A proxy
+  whose host does not resolve still gives `PROXY_ERROR`. In Rust, `Error::Dns`
+  no longer needs the `doh` feature, and `is_connection_error()` covers it.
+
 ### Fixed
 
 - `locale` sets the Accept-Language the browser itself sends for that language.

@@ -52,7 +52,7 @@ only retried for idempotent methods.}
 \item{\code{locale}}{The user's language, such as \code{"de-AT"}, to match the
 proxy's country. The \code{Accept-Language} header becomes what the profile's
 browser sends for it: Chrome the list of the UI language it picks
-(\code{de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7}), Safari \code{de-DE,de;q=0.9}.}
+(\verb{de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7}), Safari \verb{de-DE,de;q=0.9}.}
 \item{\code{proxy_headers}}{Headers for the HTTP CONNECT request to the proxy
 (session IDs, geo-targeting), in the same forms as \code{headers}.}
 \item{\code{ip_version}}{\code{4} or \code{6} to resolve hosts to IPv4 or IPv6 only.}
@@ -126,7 +126,7 @@ or CDP's key object (a list with \code{topLevelSite} and
 \code{hasCrossSiteAncestor}, or a row of the nested data frame
 \code{jsonlite::fromJSON()} makes of those). Cookies of another site's
 partition, with a cross-site ancestor (\code{hasCrossSiteAncestor} or
-Playwright's \code{_crHasCrossSiteAncestor}) or with
+Playwright's \verb{_crHasCrossSiteAncestor}) or with
 \code{partitionKeyOpaque = TRUE} are skipped: browsers send those only to
 embedded frames. Returns the skipped cookies invisibly,
 as a data frame with \code{index} (their row or element in \code{cookies}),
@@ -186,7 +186,7 @@ itself. A plain error status gives \code{NULL}.}
 \section{Errors and interrupts}{
 
 Failures raise conditions of class \code{c("koon_<code>", "koon_error", "error", "condition")}, where \verb{<code>} is the lower-case error code, which
-is also in the condition's \code{code} field: \code{"TIMEOUT"},
+is also in the condition's \code{code} field: \code{"TIMEOUT"}, \code{"DNS_ERROR"},
 \code{"CONNECTION_FAILED"}, \code{"TLS_ERROR"}, \code{"PROXY_ERROR"}, \code{"INVALID_URL"},
 \code{"TOO_MANY_REDIRECTS"}, \code{"INVALID_ARGUMENT"}, \code{"INVALID_COOKIE"},
 \code{"JSON_ERROR"}, ... An error raised by a callback fails the request and is

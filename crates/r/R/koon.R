@@ -182,7 +182,7 @@ NULL
 #' @section Errors and interrupts:
 #' Failures raise conditions of class `c("koon_<code>", "koon_error",
 #' "error", "condition")`, where `<code>` is the lower-case error code, which
-#' is also in the condition's `code` field: `"TIMEOUT"`,
+#' is also in the condition's `code` field: `"TIMEOUT"`, `"DNS_ERROR"`,
 #' `"CONNECTION_FAILED"`, `"TLS_ERROR"`, `"PROXY_ERROR"`, `"INVALID_URL"`,
 #' `"TOO_MANY_REDIRECTS"`, `"INVALID_ARGUMENT"`, `"INVALID_COOKIE"`,
 #' `"JSON_ERROR"`, ... An error raised by a callback fails the request and is

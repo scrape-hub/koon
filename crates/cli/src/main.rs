@@ -51,7 +51,7 @@ Exit codes (curl's, where one fits):
   1   other error                  22  HTTP error with --fail
   2   invalid option or value      28  timeout
   3   invalid URL                  35  TLS error
-  6   DNS-over-HTTPS lookup failed 47  too many redirects
+  6   could not resolve host       47  too many redirects
   7   connection failed            56  network I/O error
   8   malformed HTTP response      95  HTTP/3 or QUIC error
   16  HTTP/2 error                 97  proxy error";
@@ -1230,6 +1230,8 @@ mod tests {
     #[test]
     fn maps_error_codes_to_curl_exit_codes() {
         assert_eq!(exit_code(koon_core::Error::Timeout.code()), 28);
+        let unresolved = koon_core::Error::Dns("example.invalid: not found".into(), None);
+        assert_eq!(exit_code(unresolved.code()), 6);
         let refused = koon_core::Error::ConnectionFailed("refused".into(), None);
         assert_eq!(exit_code(refused.code()), 7);
         let bad_url = koon_core::Error::UnsupportedScheme("ftp".into());

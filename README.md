@@ -633,8 +633,8 @@ koon verify --proxy http://user:pass@proxy.example:8080
 curl's `-L`, `-s`, `-S` and `--compressed` are accepted and change nothing, so
 copied curl command lines run: koon follows redirects unless `--no-follow`,
 shows no progress meter and always decompresses. Exit codes are curl's where
-one fits (7 connection failed, 22 HTTP error with `--fail`, 28 timeout, 35 TLS
-error, 97 proxy error, and more), plus 20 for a fingerprint mismatch in `koon verify`;
+one fits (6 host not resolved, 7 connection failed, 22 HTTP error with
+`--fail`, 28 timeout, 35 TLS error, 97 proxy error, and more), plus 20 for a fingerprint mismatch in `koon verify`;
 `koon --help` lists them all.
 
 ### Rust

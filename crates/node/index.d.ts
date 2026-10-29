@@ -188,6 +188,7 @@ export type KoonErrorCode =
   | 'PROTOCOL_ERROR'
   | 'JSON_ERROR'
   | 'WEBSOCKET_ERROR'
+  /** A host name did not resolve (a proxy's host gives `PROXY_ERROR`). */
   | 'DNS_ERROR'
   | 'CONFIG_ERROR'
   | 'TIMEOUT'

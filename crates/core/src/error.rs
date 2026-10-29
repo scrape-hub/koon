@@ -47,7 +47,7 @@ pub enum Error {
     /// (a redirect other than 303 of a request with a stream body).
     #[error("Request body error: {0}")]
     Body(String, #[source] Option<Source>),
-    /// TCP connection failed (DNS resolution, refused, etc.).
+    /// TCP connection failed (refused, unreachable, etc.).
     #[error("Connection failed: {0}")]
     ConnectionFailed(String, #[source] Option<Source>),
     /// The server sent a malformed HTTP message (bad framing, invalid chunk size, conflicting
@@ -60,8 +60,7 @@ pub enum Error {
     /// WebSocket protocol error.
     #[error("WebSocket error: {0}")]
     WebSocket(Box<tungstenite::error::Error>),
-    /// DNS-over-HTTPS resolution error.
-    #[cfg(feature = "doh")]
+    /// Resolving a host name failed, through the system resolver or DNS-over-HTTPS.
     #[error("DNS error: {0}")]
     Dns(String, #[source] Option<Source>),
     /// Invalid browser profile configuration (unknown cipher, curve, or signature algorithm name).
@@ -114,7 +113,6 @@ impl Error {
             Self::Protocol(..) => "PROTOCOL_ERROR",
             Self::Json(_) => "JSON_ERROR",
             Self::WebSocket(_) => "WEBSOCKET_ERROR",
-            #[cfg(feature = "doh")]
             Self::Dns(..) => "DNS_ERROR",
             Self::Config(..) => "CONFIG_ERROR",
             Self::Timeout => "TIMEOUT",
@@ -141,9 +139,9 @@ impl Error {
         matches!(self, Self::Tls(_) | Self::TlsStack(_))
     }
 
-    /// Check if this is a connection error.
+    /// Check if this is a connection error: the host did not resolve or the connection failed.
     pub const fn is_connection_error(&self) -> bool {
-        matches!(self, Self::ConnectionFailed(..))
+        matches!(self, Self::Dns(..) | Self::ConnectionFailed(..))
     }
 
     /// Check if this error is an HTTP/2 GOAWAY from the remote peer.
@@ -159,19 +157,24 @@ impl Error {
     pub const fn is_pre_send(&self) -> bool {
         matches!(
             self,
-            Self::ConnectionFailed(..) | Self::Tls(_) | Self::TlsStack(_) | Self::Proxy(..)
+            Self::Dns(..)
+                | Self::ConnectionFailed(..)
+                | Self::Tls(_)
+                | Self::TlsStack(_)
+                | Self::Proxy(..)
         )
     }
 
-    /// Whether this is a retryable transport-level failure (connection, TLS, I/O, HTTP/2 GOAWAY,
-    /// timeout, proxy, protocol, QUIC/H3 errors). Unless [`is_pre_send`](Self::is_pre_send), only
-    /// idempotent requests retry.
+    /// Whether this is a retryable transport-level failure (DNS, connection, TLS, I/O, HTTP/2
+    /// GOAWAY, timeout, proxy, protocol, QUIC/H3 errors). Unless
+    /// [`is_pre_send`](Self::is_pre_send), only idempotent requests retry.
     pub fn is_retryable(&self) -> bool {
         match self {
             Self::Http2(e) => e.is_io() || e.is_go_away(),
             _ => matches!(
                 self,
-                Self::ConnectionFailed(..)
+                Self::Dns(..)
+                    | Self::ConnectionFailed(..)
                     | Self::Tls(_)
                     | Self::TlsStack(_)
                     | Self::Io(_)
@@ -192,15 +195,9 @@ mod tests {
     #[test]
     fn connection_failed_source_is_populated_from_the_wrapped_error() {
         let io_err = std::io::Error::other("boom");
-        let err = Error::ConnectionFailed(
-            format!("DNS lookup for example.com: {io_err}"),
-            boxed(io_err),
-        );
+        let err = Error::ConnectionFailed(format!("connect failed: {io_err}"), boxed(io_err));
 
-        assert_eq!(
-            err.to_string(),
-            "Connection failed: DNS lookup for example.com: boom"
-        );
+        assert_eq!(err.to_string(), "Connection failed: connect failed: boom");
         let source = std::error::Error::source(&err).expect("source must be populated");
         assert_eq!(source.to_string(), "boom");
     }

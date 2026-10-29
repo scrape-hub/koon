@@ -164,12 +164,7 @@ impl super::Client {
             Some(resolver) => resolver.resolve(host).await?,
             _ => tokio::net::lookup_host((host, 0))
                 .await
-                .map_err(|e| {
-                    Error::ConnectionFailed(
-                        format!("DNS lookup for {host}: {e}"),
-                        crate::error::boxed(e),
-                    )
-                })?
+                .map_err(|e| Error::Dns(format!("resolving {host}: {e}"), crate::error::boxed(e)))?
                 .map(|addr| addr.ip())
                 .collect(),
         };
@@ -316,7 +311,7 @@ impl super::Client {
                 .lookup(proxy.host(), false)
                 .await
                 .map_err(|e| match e {
-                    Error::ConnectionFailed(msg, source) => {
+                    Error::Dns(msg, source) => {
                         Error::Proxy(format!("cannot resolve proxy: {msg}"), source)
                     }
                     e => e,
