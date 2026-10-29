@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `cf_clearance`. Only cookies of another site's partition are skipped, which
   browsers send just to frames embedded in that site. In Rust,
   `CookieParams::partitioned` is now `partition_key` (a `PartitionKey`).
+- `koonFetch()` follows the client's `followRedirects` when a request gives no
+  `redirect` mode ([#6](https://github.com/scrape-hub/koon/issues/6)). Before,
+  it followed redirects even for a client created with `followRedirects: false`.
 
 ## [1.1.0] - 2026-09-30
 

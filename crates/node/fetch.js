@@ -152,8 +152,10 @@ async function resolveRequest(client, input, init) {
   if (FORBIDDEN_METHODS.has(upper)) throw new TypeError(`'${method}' HTTP method is unsupported.`);
   if (NORMALIZED_METHODS.has(upper)) method = upper;
 
-  const redirect = init.redirect !== undefined ? init.redirect : request ? request.redirect : 'follow';
-  if (!REDIRECT_MODES.has(redirect)) throw new TypeError(`'${redirect}' is not a valid redirect mode`);
+  // Unset, or a Request's default 'follow': the client's followRedirects decides.
+  const requestRedirect = request && request.redirect !== 'follow' ? request.redirect : undefined;
+  const redirect = init.redirect !== undefined ? init.redirect : requestRedirect;
+  if (redirect !== undefined && !REDIRECT_MODES.has(redirect)) throw new TypeError(`'${redirect}' is not a valid redirect mode`);
   const signal = init.signal !== undefined ? init.signal : request ? request.signal : null;
 
   const headers = headerList(init.headers !== undefined ? init.headers : request ? request.headers : undefined);
@@ -178,7 +180,8 @@ async function sendAndRaceAbort(client, method, url, data, headers, redirect, si
   if (signal && signal.aborted) throw signal.reason;
   let pending;
   try {
-    pending = client._fetch(method, url.href, data, { headers, followRedirects: redirect === 'follow' });
+    const followRedirects = redirect === undefined ? undefined : redirect === 'follow';
+    pending = client._fetch(method, url.href, data, { headers, followRedirects });
   } catch (err) {
     // An argument koon refuses, such as an invalid method: a TypeError, as fetch() throws.
     throw new TypeError(err.message, { cause: err });
@@ -285,7 +288,7 @@ async function send(client, input, init = {}) {
   const finalUrl = new URL(head.url).href;
   return describe(response, {
     url: finalUrl,
-    redirected: redirect === 'follow' && finalUrl !== url.href,
+    redirected: finalUrl !== url.href,
     status: inRange ? undefined : status,
   });
 }

@@ -140,6 +140,15 @@ async function testKoonFetch() {
     check("redirect 'manual' returns the 3xx", manual.status === 302 && manual.headers.get('location') === '/target' && !manual.redirected);
     const error = await caught(() => fetch(`${base}/redirect`, { redirect: 'error' }));
     check("redirect 'error' rejects", error instanceof TypeError && error.message === 'fetch failed', error && error.message);
+    const noFollow = koonFetch({ followRedirects: false });
+    const kept = await noFollow(`${base}/redirect`);
+    check("without redirect, the client's followRedirects: false applies", kept.status === 302 && !kept.redirected, kept.status);
+    const forced = await noFollow(`${base}/redirect`, { redirect: 'follow' });
+    check("redirect 'follow' overrides the client's followRedirects", forced.status === 200 && forced.redirected, forced.status);
+    const keptRequest = await noFollow(new Request(`${base}/redirect`));
+    check("a Request in its default mode leaves it to the client's followRedirects", keptRequest.status === 302, keptRequest.status);
+    const requestError = await caught(() => fetch(new Request(`${base}/redirect`, { redirect: 'error' })));
+    check("a Request's own redirect 'error' applies", requestError instanceof TypeError && requestError.message === 'fetch failed', requestError && requestError.message);
 
     // Cookies: the client's jar, as a browser keeps them.
     const jarFetch = koonFetch();

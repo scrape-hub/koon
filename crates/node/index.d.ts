@@ -666,9 +666,10 @@ export interface KoonFetch {
  * - Bodies: a string, `URLSearchParams`, `Blob`, `ArrayBuffer`, typed array or `DataView`,
  *   a `FormData` (multipart with the boundary of the profile's browser), a `ReadableStream`
  *   or another async iterable. Bodies are read into memory and sent with their length.
- * - Redirects: `redirect: 'follow'` (default) lets koon follow them (the client's
- *   `maxRedirects` and `onRedirect` apply); `'manual'` resolves to the 3xx response as it
- *   is, as Node's fetch does; `'error'` rejects.
+ * - Redirects: `redirect: 'follow'` lets koon follow them (the client's `maxRedirects` and
+ *   `onRedirect` apply); `'manual'` resolves to the 3xx response as it is, as Node's fetch
+ *   does; `'error'` rejects. Without `redirect`, the client's `followRedirects` decides
+ *   (default: follow), also for a `Request` in its default mode `'follow'`.
  * - Cookies: the client's cookie jar, which keeps them as a browser does.
  *   `credentials: 'omit'` rejects: create the client with `cookieJar: false` instead.
  * - Response: the body is read from koon as it is consumed (`body` stream, `text()`,
