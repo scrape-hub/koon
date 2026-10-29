@@ -7,53 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Breaking changes
+
+Rust only:
+
+- `CookieParams::partitioned` is now `partition_key` (`Option<PartitionKey>`).
+- `Error::Dns` exists without the `doh` feature, so a `match` on `Error`
+  without a catch-all arm needs a `Dns` arm.
+
 ### Added
 
-- **Firefox** 158 (`firefox158`) on Windows, macOS, Linux and Android. Its
-  TLS, HTTP/2 and HTTP/3 fingerprints are those of Firefox 157. koon now
-  ships 361 profiles.
+- Firefox 158 (`firefox158`) on Windows, macOS, Linux and Android.
+- Rust: `language_source` on profiles, how a browser builds its
+  Accept-Language.
 
 ### Changed
 
-- A host name that does not resolve fails with `DNS_ERROR` instead of
-  `CONNECTION_FAILED`, as with DNS-over-HTTPS before
-  ([#7](https://github.com/scrape-hub/koon/issues/7)), so a mistyped host can be
-  told from a refused connection. The CLI exits with 6, as curl does. A proxy
-  whose host does not resolve still gives `PROXY_ERROR`. In Rust, `Error::Dns`
-  no longer needs the `doh` feature, and `is_connection_error()` covers it.
+- A host that does not resolve fails with `DNS_ERROR` instead of
+  `CONNECTION_FAILED` ([#7](https://github.com/scrape-hub/koon/issues/7)). The
+  CLI exits with 6, as curl does. In Rust, `is_connection_error()` includes it.
 
 ### Fixed
 
-- `locale` sets the Accept-Language the browser itself sends for that language.
-  Before, koon built `de-AT,de;q=0.9,en-US;q=0.8,en;q=0.7` for every browser, a
-  list no desktop browser sends. Now `de-AT` gives
-  `de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7` in Chrome (the list of its German
-  UI), `de,de-DE;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6` in Edge,
-  `de,en-US;q=0.9,en;q=0.8` in Firefox and `de-DE,de;q=0.9` in Safari. Edge on
-  macOS and the Android browsers also put the system language first, as the
-  real ones do. OkHttp sends the language as given. In Rust, the profile's
-  `language_source` says how a browser builds the header.
-- Samsung Internet sends its Accept-Language without q values (`en-US,en`),
-  Firefox for Android only the device language (`en-US`).
-- Cookies imported from a browser (`setCookies()`, `set_cookies()`) keep the
-  partitioned cookies a site set for itself, such as Cloudflare's
-  `cf_clearance`. Only cookies of another site's partition are skipped, which
-  browsers send just to frames embedded in that site. In Rust,
-  `CookieParams::partitioned` is now `partition_key` (a `PartitionKey`).
-- Cookie import (`setCookies()`, `set_cookies()`) skips a cookie whose
-  `domain` is not a host name, such as `bad domain`
+- `locale` sets the Accept-Language each browser sends for that language
+  (for `de-AT`, Chrome sends `de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7`) instead of
+  one list for every browser.
+- `koonFetch()` respects the client's `followRedirects: false` when a request
+  sets no `redirect` mode ([#6](https://github.com/scrape-hub/koon/issues/6)).
+- Cookie import keeps cookies a site partitioned under itself, such as
+  Cloudflare's `cf_clearance`.
+- Cookie import skips a cookie whose `domain` is not a valid host
   ([#8](https://github.com/scrape-hub/koon/issues/8)), and in Node, Python and
-  R also one with an empty domain or a path not starting with `/`, which only
-  the Rust import checked before. A domain is stored as browsers store it, an
-  internationalized one as punycode (`bücher.de` as `xn--bcher-kva.de`), so
-  its cookies are sent.
-- The Node, Python and R docs of `setCookies()`/`set_cookies()` say that a
-  cookie whose `expires` is in the past deletes the stored cookie with the same
-  name, domain and path, as in browsers
-  ([#9](https://github.com/scrape-hub/koon/issues/9)).
-- `koonFetch()` follows the client's `followRedirects` when a request gives no
-  `redirect` mode ([#6](https://github.com/scrape-hub/koon/issues/6)). Before,
-  it followed redirects even for a client created with `followRedirects: false`.
+  R also one with an empty domain or a path not starting with `/`.
+  Internationalized domains are stored as punycode, so their cookies are sent.
+- The `setCookies()`/`set_cookies()` docs say that a past `expires` deletes
+  the stored cookie ([#9](https://github.com/scrape-hub/koon/issues/9)).
 
 ## [1.1.0] - 2026-09-30
 
