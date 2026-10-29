@@ -129,8 +129,11 @@ NULL
 #'     `partitionKeyOpaque = TRUE` are skipped: browsers send those only to
 #'     embedded frames. Returns the skipped cookies invisibly,
 #'     as a data frame with `index` (their row or element in `cookies`),
-#'     `name` and `reason`, with no rows when all were imported. A field of
-#'     the wrong type (e.g. a non-numeric `expires`) is an error.}
+#'     `name` and `reason`, with no rows when all were imported. A cookie
+#'     whose `expires` is in the past deletes the stored cookie with the same
+#'     `name`, `domain` and `path` instead, as in browsers; it is not reported
+#'     as skipped. A field of the wrong type (e.g. a non-numeric `expires`) is
+#'     an error.}
 #'   \item{`$clear_cookies()`}{Remove all cookies.}
 #'   \item{`$export_profile()`}{The browser profile as a JSON string.}
 #'   \item{`$user_agent()`}{The profile's User-Agent, or `NULL`.}

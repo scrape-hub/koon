@@ -288,7 +288,10 @@ class Koon:
         cookie partitioned under another site, ...) are skipped and returned
         as dicts with ``index`` (position in ``cookies``, 0-based), ``name``
         and ``reason``, so one odd cookie does not cost a whole browser export;
-        an empty list means all were imported. Raises ``KoonError`` with code
+        an empty list means all were imported. A cookie whose ``expires`` is in
+        the past deletes the stored cookie with the same ``name``, ``domain``
+        and ``path`` instead, as in browsers; it is not reported as skipped.
+        Raises ``KoonError`` with code
         ``COOKIE_JAR_DISABLED`` for a client created with
         ``cookie_jar=False``, and ``KoonInvalidArgument`` for an element that
         is not a cookie dict (e.g. one without ``name``).

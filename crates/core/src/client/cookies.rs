@@ -29,9 +29,10 @@ impl Client {
     }
 
     /// [`set_cookies`](Self::set_cookies) from the Playwright/CDP shape (see [`CookieParams`]), with
-    /// the same checks; a cookie whose fields don't convert (e.g. both `url` and `domain`) is
-    /// skipped too, and so is a partitioned (CHIPS) one from another site's partition, which
-    /// browsers send only to embedded frames. Fails as `set_cookies` does.
+    /// the same checks and the same deletion by a past `expires`; a cookie whose fields don't
+    /// convert (e.g. both `url` and `domain`) is skipped too, and so is a partitioned (CHIPS) one
+    /// from another site's partition, which browsers send only to embedded frames. Fails as
+    /// `set_cookies` does.
     pub fn set_cookie_params(
         &self,
         cookies: Vec<CookieParams>,

@@ -696,7 +696,8 @@ impl NativeClient {
 
     /// Insert or replace cookies from a list of Playwright/CDP-style dicts.
     /// Imports the valid ones; returns the skipped ones as dicts with
-    /// `index`, `name` and `reason`.
+    /// `index`, `name` and `reason`. A cookie whose `expires` is in the past
+    /// deletes the stored one with the same name, domain and path instead.
     fn set_cookies(&self, cookies: Vec<Bound<'_, PyAny>>) -> PyResult<Vec<SkippedCookieDict>> {
         let cookies = extract_dicts::<CookieDict>(cookies, "cookie")?;
         let skipped = self

@@ -130,8 +130,11 @@ Playwright's \verb{_crHasCrossSiteAncestor}) or with
 \code{partitionKeyOpaque = TRUE} are skipped: browsers send those only to
 embedded frames. Returns the skipped cookies invisibly,
 as a data frame with \code{index} (their row or element in \code{cookies}),
-\code{name} and \code{reason}, with no rows when all were imported. A field of
-the wrong type (e.g. a non-numeric \code{expires}) is an error.}
+\code{name} and \code{reason}, with no rows when all were imported. A cookie
+whose \code{expires} is in the past deletes the stored cookie with the same
+\code{name}, \code{domain} and \code{path} instead, as in browsers; it is not reported
+as skipped. A field of the wrong type (e.g. a non-numeric \code{expires}) is
+an error.}
 \item{\verb{$clear_cookies()}}{Remove all cookies.}
 \item{\verb{$export_profile()}}{The browser profile as a JSON string.}
 \item{\verb{$user_agent()}}{The profile's User-Agent, or \code{NULL}.}

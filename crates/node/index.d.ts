@@ -462,6 +462,9 @@ export class Koon {
    * is imported; the others, e.g. one with an invalid value or domain or
    * one partitioned under another site, are skipped and returned, so one odd
    * cookie does not cost a whole browser export. An empty array means all were imported.
+   * A cookie whose `expires` is in the past deletes the stored cookie with the
+   * same `name`, `domain` and `path` instead, as in browsers (Playwright's
+   * `clearCookies()` deletes this way too); it is not reported as skipped.
    * Throws `COOKIE_JAR_DISABLED` if the client was created with
    * `cookieJar: false`, and `INVALID_ARGUMENT` for an array element that is
    * not a cookie object (e.g. one without `name`, or with a `partitionKey`

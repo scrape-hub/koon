@@ -47,6 +47,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the Rust import checked before. A domain is stored as browsers store it, an
   internationalized one as punycode (`bücher.de` as `xn--bcher-kva.de`), so
   its cookies are sent.
+- The Node, Python and R docs of `setCookies()`/`set_cookies()` say that a
+  cookie whose `expires` is in the past deletes the stored cookie with the same
+  name, domain and path, as in browsers
+  ([#9](https://github.com/scrape-hub/koon/issues/9)).
 - `koonFetch()` follows the client's `followRedirects` when a request gives no
   `redirect` mode ([#6](https://github.com/scrape-hub/koon/issues/6)). Before,
   it followed redirects even for a client created with `followRedirects: false`.
