@@ -40,6 +40,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `cf_clearance`. Only cookies of another site's partition are skipped, which
   browsers send just to frames embedded in that site. In Rust,
   `CookieParams::partitioned` is now `partition_key` (a `PartitionKey`).
+- Cookie import (`setCookies()`, `set_cookies()`) skips a cookie whose
+  `domain` is not a host name, such as `bad domain`
+  ([#8](https://github.com/scrape-hub/koon/issues/8)), and in Node, Python and
+  R also one with an empty domain or a path not starting with `/`, which only
+  the Rust import checked before. A domain is stored as browsers store it, an
+  internationalized one as punycode (`bücher.de` as `xn--bcher-kva.de`), so
+  its cookies are sent.
 - `koonFetch()` follows the client's `followRedirects` when a request gives no
   `redirect` mode ([#6](https://github.com/scrape-hub/koon/issues/6)). Before,
   it followed redirects even for a client created with `followRedirects: false`.

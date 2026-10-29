@@ -479,40 +479,19 @@ impl CookieParams {
                 let url_path = url.path();
                 let path = url_path.rfind('/').map_or("/", |last| &url_path[..=last]);
                 (
-                    host.to_ascii_lowercase(),
+                    host.to_string(),
                     path.to_string(),
                     true,
                     url.scheme() == "https",
                 )
             }
-            (None, Some(domain)) => (
-                normalize_domain(&domain),
-                self.path.unwrap_or_else(|| "/".to_string()),
-                !domain.starts_with('.'),
-                self.secure,
-            ),
+            (None, Some(domain)) => {
+                let host_only = !domain.starts_with('.');
+                let path = self.path.unwrap_or_else(|| "/".to_string());
+                (domain, path, host_only, self.secure)
+            }
             (None, None) => return Err("a cookie needs a url or a domain".into()),
         };
-        let host_only = self.host_only.unwrap_or(default_host_only);
-        if let Some(key) = self
-            .partition_key
-            .as_ref()
-            .filter(|key| !key.is_first_party_of(&domain))
-        {
-            return Err(format!(
-                "partitioned under {key}: browsers send it only to embedded frames, never on a \
-                 top-level request"
-            ));
-        }
-
-        // The same acceptance rules every other path into the jar applies (`parse_set_cookie`,
-        // and `client/cookies.rs`'s import path for a raw `Cookie`): name/value shape and the
-        // `__Secure-`/`__Host-` prefixes, not just the shape checked above.
-        validate_name_value(&self.name, &self.value)?;
-        prefix_ok(&self.name, &self.value, secure, host_only, path == "/")?;
-        if !host_only && is_public_suffix(&domain) {
-            return Err("domain cannot be a public suffix unless host_only".into());
-        }
 
         let expires = match self.expires {
             None | Some(-1.0) => None,
@@ -532,7 +511,7 @@ impl CookieParams {
             }
         };
 
-        Ok(Cookie {
+        let mut cookie = Cookie {
             name: self.name,
             value: self.value,
             domain,
@@ -541,9 +520,20 @@ impl CookieParams {
             http_only: self.http_only,
             expires,
             same_site,
-            host_only,
+            host_only: self.host_only.unwrap_or(default_host_only),
             creation_time: SystemTime::now(),
-        })
+        };
+        validate_imported(&mut cookie)?;
+        if let Some(key) = self
+            .partition_key
+            .filter(|key| !key.is_first_party_of(&cookie.domain))
+        {
+            return Err(format!(
+                "partitioned under {key}: browsers send it only to embedded frames, never on a \
+                 top-level request"
+            ));
+        }
+        Ok(cookie)
     }
 }
 
@@ -595,6 +585,31 @@ const fn is_control_except_htab(b: u8) -> bool {
 /// Lowercase a cookie domain and strip its leading dots.
 pub(crate) fn normalize_domain(domain: &str) -> String {
     domain.trim_start_matches('.').to_ascii_lowercase()
+}
+
+/// The checks an imported cookie passes, the ones `parse_set_cookie` applies to a response's; its
+/// `domain` becomes the host as the URL parser writes it (lowercase, IDNA as punycode), the form
+/// request hosts are compared in.
+pub(crate) fn validate_imported(cookie: &mut Cookie) -> Result<(), &'static str> {
+    validate_name_value(&cookie.name, &cookie.value)?;
+    cookie.domain = match url::Host::parse(cookie.domain.trim_start_matches('.')) {
+        Ok(host) => host.to_string(),
+        Err(url::ParseError::EmptyHost) => return Err("domain cannot be empty"),
+        Err(_) => return Err("domain is not a valid host name"),
+    };
+    if !cookie.path.starts_with('/') {
+        return Err("path must start with '/'");
+    }
+    if !cookie.host_only && is_public_suffix(&cookie.domain) {
+        return Err("domain cannot be a public suffix unless host_only");
+    }
+    prefix_ok(
+        &cookie.name,
+        &cookie.value,
+        cookie.secure,
+        cookie.host_only,
+        cookie.path == "/",
+    )
 }
 
 /// The name/value rules shared by `Set-Cookie` parsing and imported cookies: not both empty, no

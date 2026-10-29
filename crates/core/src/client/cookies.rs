@@ -1,10 +1,7 @@
 //! Import/export API for the cookie jar: lets a caller seed the jar from an external source (e.g. a
 //! browser's cookies via Playwright/CDP) and read it back out for export.
 
-use crate::cookie::{
-    Cookie, CookieParams, SkippedCookie, is_public_suffix, normalize_domain, prefix_ok,
-    validate_name_value,
-};
+use crate::cookie::{Cookie, CookieParams, SkippedCookie, validate_imported};
 use crate::error::Error;
 
 use super::Client;
@@ -15,26 +12,26 @@ impl Client {
     /// the whole import; returns the skipped ones with their position in `cookies` (0-based), name
     /// and reason. A cookie whose `expires` is already in the past deletes the matching stored
     /// cookie instead, as a live `Set-Cookie` response would. Validation shares its name/value and
-    /// prefix rules with the jar's own `Set-Cookie` parser (see [`crate::cookie`]).
+    /// prefix rules with the jar's own `Set-Cookie` parser (see [`crate::cookie`]); `domain` must be
+    /// a host name and is stored as the URL parser writes it (lowercase, IDNA as punycode).
     ///
     /// # Errors
     /// [`Error::CookieJarDisabled`] for a client built without a jar.
     pub fn set_cookies(&self, cookies: Vec<Cookie>) -> Result<Vec<SkippedCookie>, Error> {
-        // A raw `Cookie` never went through `CookieParams::into_cookie`'s validation, unlike
-        // `set_cookie_params` below: this is the one place it gets checked.
+        // A raw `Cookie` never went through `CookieParams::into_cookie`, which runs the same
+        // checks for `set_cookie_params` below.
         self.import_cookies(cookies.into_iter().map(|mut cookie| {
-            match validate_and_normalize(&mut cookie) {
+            match validate_imported(&mut cookie) {
                 Ok(()) => Ok(cookie),
                 Err(reason) => Err((cookie.name, reason.to_string())),
             }
         }))
     }
 
-    /// [`set_cookies`](Self::set_cookies) from the Playwright/CDP shape (see [`CookieParams`]); a
-    /// cookie whose fields don't convert (e.g. both `url` and `domain`), whose name/value or
-    /// `__Secure-`/`__Host-` prefix is invalid, or that names a public-suffix domain without
-    /// `host_only`, is skipped too, and so is a partitioned (CHIPS) one from another site's
-    /// partition, which browsers send only to embedded frames. Fails as `set_cookies` does.
+    /// [`set_cookies`](Self::set_cookies) from the Playwright/CDP shape (see [`CookieParams`]), with
+    /// the same checks; a cookie whose fields don't convert (e.g. both `url` and `domain`) is
+    /// skipped too, and so is a partitioned (CHIPS) one from another site's partition, which
+    /// browsers send only to embedded frames. Fails as `set_cookies` does.
     pub fn set_cookie_params(
         &self,
         cookies: Vec<CookieParams>,
@@ -103,29 +100,6 @@ impl Client {
             None => Vec::new(),
         }
     }
-}
-
-/// Validate an imported cookie and normalize its `domain` in place. See [`Client::set_cookies`] for
-/// the exact rules.
-fn validate_and_normalize(cookie: &mut Cookie) -> Result<(), &'static str> {
-    validate_name_value(&cookie.name, &cookie.value)?;
-    cookie.domain = normalize_domain(&cookie.domain);
-    if cookie.domain.is_empty() {
-        return Err("domain cannot be empty");
-    }
-    if !cookie.path.starts_with('/') {
-        return Err("path must start with '/'");
-    }
-    if !cookie.host_only && is_public_suffix(&cookie.domain) {
-        return Err("domain cannot be a public suffix unless host_only");
-    }
-    prefix_ok(
-        &cookie.name,
-        &cookie.value,
-        cookie.secure,
-        cookie.host_only,
-        cookie.path == "/",
-    )
 }
 
 #[cfg(test)]
@@ -432,9 +406,7 @@ mod tests {
         assert_eq!(names, ["good"]);
     }
 
-    /// Both import paths reject a CRLF-injected name or value: `set_cookies`' own
-    /// `validate_and_normalize` for a raw `Cookie`, `CookieParams::into_cookie`'s validation for
-    /// `set_cookie_params`: each exactly once, not the other's job too.
+    /// Both import paths reject a CRLF-injected name or value.
     #[test]
     fn both_import_paths_reject_crlf_in_name_or_value() {
         let client = Client::new(Chrome::latest()).unwrap();
@@ -496,5 +468,48 @@ mod tests {
             .unwrap();
         assert_eq!(skipped.len(), 1, "{skipped:?}");
         assert!(client.cookies().is_empty());
+    }
+
+    #[test]
+    fn both_import_paths_check_domain_and_path() {
+        let client = Client::new(Chrome::latest()).unwrap();
+        for domain in ["bad domain", ".", "a/b", "ex%20ample.com"] {
+            let reason = skip_reason(&client, imported("a", "1", domain, true));
+            assert!(reason.is_some_and(|r| r.contains("domain")), "{domain}");
+        }
+
+        let params = |name: &str, domain: &str, path: &str| CookieParams {
+            name: name.to_string(),
+            value: "1".to_string(),
+            domain: Some(domain.to_string()),
+            path: Some(path.to_string()),
+            ..CookieParams::default()
+        };
+        let skipped = client
+            .set_cookie_params(vec![
+                params("a", "bad domain", "/"),
+                params("a", ".", "/"),
+                params("a", "example.com", "x"),
+            ])
+            .unwrap();
+        let reasons: Vec<&str> = skipped.iter().map(|s| s.reason.as_str()).collect();
+        assert_eq!(
+            reasons,
+            [
+                "domain is not a valid host name",
+                "domain cannot be empty",
+                "path must start with '/'"
+            ]
+        );
+        assert!(client.cookies().is_empty());
+
+        client
+            .set_cookies(vec![imported("raw", "1", "Bücher.de", true)])
+            .unwrap();
+        client
+            .set_cookie_params(vec![params("params", ".BÜCHER.de", "/")])
+            .unwrap();
+        let domains: Vec<String> = client.cookies().into_iter().map(|c| c.domain).collect();
+        assert_eq!(domains, ["xn--bcher-kva.de", "xn--bcher-kva.de"]);
     }
 }
