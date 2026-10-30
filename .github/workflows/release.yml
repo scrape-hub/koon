@@ -237,9 +237,18 @@ jobs:
         with:
           go-version: stable
 
+      # Every version requires-python admits: --find-interpreter builds for
+      # the interpreters installed here, not for the runner image's.
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: |
+            3.9
+            3.10
+            3.11
+            3.12
+            3.13
+            3.14
+            3.15
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
@@ -310,9 +319,18 @@ jobs:
         with:
           go-version: stable
 
+      # Every version requires-python admits: --find-interpreter builds for
+      # the interpreters installed here, not for the runner image's.
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: |
+            3.9
+            3.10
+            3.11
+            3.12
+            3.13
+            3.14
+            3.15
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
@@ -346,9 +364,18 @@ jobs:
         with:
           go-version: stable
 
+      # Every version requires-python admits: --find-interpreter builds for
+      # the interpreters installed here, not for the runner image's.
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: |
+            3.9
+            3.10
+            3.11
+            3.12
+            3.13
+            3.14
+            3.15
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1

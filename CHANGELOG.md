@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Deprecated
+
+- Python 3.9 and 3.10. The next minor release requires Python 3.11.
+
 ## [1.2.0] - 2026-10-30
 
 ### Breaking changes
