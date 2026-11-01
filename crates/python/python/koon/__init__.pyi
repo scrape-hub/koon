@@ -10,6 +10,7 @@ from typing import (
     Literal,
     Mapping,
     Optional,
+    Protocol,
     Sequence,
     Tuple,
     Type,
@@ -125,6 +126,28 @@ def verify(browser: str = "chrome", proxy: Optional[str] = None) -> Dict[str, An
     and the seen ``actual``) and ``errors`` (services that failed:
     ``service``, ``code``, ``message``). An unknown profile raises
     ``KoonInvalidArgument``; unreachable services are part of the report."""
+    ...
+
+class ResponseHead(Protocol):
+    """What ``blocked_by`` reads from a response: koon's own responses and
+    those of httpx and requests have it."""
+
+    @property
+    def status_code(self) -> int: ...
+    @property
+    def headers(self) -> HeaderInput: ...
+    @property
+    def url(self) -> object: ...
+
+def blocked_by(
+    response: ResponseHead, body: Union[str, bytes, bytearray, memoryview]
+) -> Optional[BlockedBy]:
+    """``KoonResponse.blocked_by`` for a response whose body the caller
+    reads: a streaming response (``collect()``, the chunks read), or one of
+    the ``koon.httpx`` and ``koon.requests`` transports (``content``,
+    ``text``). ``body`` is the decoded body or its first 400 KB, which are
+    all that is looked at; with an empty one only the headers and the URL
+    count."""
     ...
 
 class Koon:

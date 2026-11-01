@@ -961,3 +961,33 @@ def test_blocked_by_names_the_bot_protection(base_url):
     with koon.KoonSync("chrome") as client:
         assert client.get(f"{base_url}/challenge").blocked_by == "cloudflare"
         assert client.get(f"{base_url}/echo").blocked_by is None
+
+
+def test_blocked_by_reads_a_streamed_body(base_url):
+    with KoonSync("chrome") as client:
+        with client.request_streaming("GET", f"{base_url}/challenge-page") as stream:
+            body = stream.collect()
+        assert koon.blocked_by(stream, body) == "cloudflare"
+        assert koon.blocked_by(stream, body.decode()) == "cloudflare"
+        assert koon.blocked_by(stream, bytearray(body)) == "cloudflare"
+        assert koon.blocked_by(stream, b"") is None
+        whole = client.get(f"{base_url}/challenge-page")
+        assert koon.blocked_by(whole, whole.body) == whole.blocked_by == "cloudflare"
+
+    async def streamed():
+        async with Koon("chrome") as client:
+            async with await client.request_streaming("GET", f"{base_url}/challenge-page") as s:
+                return koon.blocked_by(s, await s.collect())
+
+    assert run(streamed()) == "cloudflare"
+
+
+def test_blocked_by_takes_headers_as_a_mapping_or_pairs():
+    def head(headers, url="https://example.com/"):
+        return types.SimpleNamespace(status_code=403, headers=headers, url=url)
+
+    assert koon.blocked_by(head({"CF-Mitigated": "challenge"}), b"") == "cloudflare"
+    assert koon.blocked_by(head([("cf-mitigated", "challenge")]), b"") == "cloudflare"
+    assert koon.blocked_by(head([], "https://consent.google.com/ml?x=1"), b"") == "consent"
+    with pytest.raises(TypeError):
+        koon.blocked_by(head([]), 42)

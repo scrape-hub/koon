@@ -12,7 +12,7 @@ requests = pytest.importorskip("requests")
 
 from conftest import GZIP_TEXT, dropped, free_port  # noqa: E402
 
-from koon import KoonError, KoonSync  # noqa: E402
+from koon import KoonError, KoonSync, blocked_by  # noqa: E402
 from koon.requests import KoonAdapter, Session  # noqa: E402
 
 
@@ -128,6 +128,14 @@ def test_a_compressed_body_is_decoded_once(session, adapter_server, coding):
     r = session.get(adapter_server.url + "/" + coding, stream=True)
     assert r.raw.read() == GZIP_TEXT
 
+
+
+def test_blocked_by_reads_a_requests_response(session, adapter_server):
+    r = session.get(adapter_server.url + "/challenge-page")
+    assert blocked_by(r, r.content) == "cloudflare"
+    assert blocked_by(session.get(adapter_server.url + "/challenge"), b"") == "cloudflare"
+    r = session.get(adapter_server.url + "/echo")
+    assert blocked_by(r, r.content) is None
 
 def test_stream_reads_the_body_as_it_arrives(session, adapter_server):
     adapter_server.gate.clear()

@@ -680,7 +680,7 @@ export interface KoonFetch {
  *   `json()`, `arrayBuffer()`, ...) and arrives decoded, so the response has no
  *   Content-Encoding and Content-Length. `url` is the final URL and `redirected` whether it
  *   differs from the one requested; a status outside 200-599 (e.g. 999) is kept, with
- *   `ok` false.
+ *   `ok` false. `blockedBy(response, body)` names the bot protection that answered.
  * - `signal`: an abort before the response head cancels the request, one during the body
  *   drops the rest of it and errors the stream; both with the signal's reason.
  * - Timeout: the client's `timeout` (default 30 s, `0` for none), up to the response head
@@ -694,3 +694,18 @@ export interface KoonFetch {
  *   cache and keeps connections alive anyway.
  */
 export function koonFetch(options?: KoonOptions | Koon): KoonFetch;
+
+/**
+ * `KoonResponse.blockedBy` for a response whose body the caller reads: a `Response` from
+ * `koonFetch()` or a `KoonStreamingResponse`. `body` is the decoded body as read (`text()`,
+ * `arrayBuffer()`, `collect()`, ...) or its first 400 KB, which are all that is looked at;
+ * with an empty one only the headers and the URL count.
+ */
+export function blockedBy(
+  response: {
+    readonly status: number;
+    readonly headers: KoonHeadersInit | KoonHeaderEntry[];
+    readonly url: string;
+  },
+  body: string | ArrayBuffer | ArrayBufferView
+): KoonBlockedBy | null;

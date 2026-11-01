@@ -16,6 +16,7 @@ from koon._native import (
     KoonWebSocket,
     _Client,
     _Mode,
+    _blocked_by,
     _verify,
     __version__,
     browsers,
@@ -31,6 +32,7 @@ __all__ = [
     "KoonProxy",
     "KoonError",
     "KoonInvalidArgument",
+    "blocked_by",
     "browsers",
     "verify",
 ]
@@ -45,6 +47,19 @@ def verify(browser="chrome", proxy=None):
     """Check that koon still produces the real browser's fingerprint for the
     profile ``browser``; returns the report as a dict (blocking)."""
     return _json.loads(_verify(browser, proxy))
+
+
+def blocked_by(response, body):
+    """``KoonResponse.blocked_by`` for a response whose body the caller
+    reads: a streaming response, or one of the httpx and requests
+    transports. ``body`` is the decoded body or its first 400 KB."""
+    headers = response.headers
+    pairs = list(headers.items() if hasattr(headers, "items") else headers)
+    if isinstance(body, str):
+        body = body.encode()
+    elif not isinstance(body, bytes):
+        body = bytes(memoryview(body))
+    return _blocked_by(response.status_code, pairs, body, str(response.url))
 
 
 # The verbs forward their keyword arguments to `_request`, whose

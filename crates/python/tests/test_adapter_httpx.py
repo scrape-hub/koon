@@ -13,7 +13,7 @@ httpx = pytest.importorskip("httpx")
 
 from conftest import GZIP_TEXT, dropped, free_port  # noqa: E402
 
-from koon import KoonError, KoonSync  # noqa: E402
+from koon import KoonError, KoonSync, blocked_by  # noqa: E402
 from koon.httpx import AsyncKoonTransport, KoonTransport  # noqa: E402
 
 
@@ -123,6 +123,15 @@ def test_a_compressed_body_is_decoded_once(client, adapter_server, coding):
     assert r.content == GZIP_TEXT
     assert "content-encoding" not in r.headers and "content-length" not in r.headers
 
+
+
+def test_blocked_by_reads_an_httpx_response(client, adapter_server):
+    r = client.get(adapter_server.url + "/challenge-page")
+    assert blocked_by(r, r.content) == "cloudflare"
+    assert blocked_by(r, r.text) == "cloudflare"
+    assert blocked_by(client.get(adapter_server.url + "/challenge"), b"") == "cloudflare"
+    r = client.get(adapter_server.url + "/echo")
+    assert blocked_by(r, r.content) is None
 
 def test_stream_reads_the_body_as_it_arrives(client, adapter_server):
     adapter_server.gate.clear()

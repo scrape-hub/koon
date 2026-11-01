@@ -307,6 +307,21 @@ KoonProxy.start = function start(options) {
   return callWithErrorCode(nativeProxyStart, undefined, [prepareOptions(options)]);
 };
 
+// `KoonResponse.blockedBy` for a response whose body the caller reads (a
+// koonFetch Response, a KoonStreamingResponse): fetch Headers and koon's
+// { name, value } entries become pairs, a string body its UTF-8 bytes.
+function blockedBy(response, body) {
+  let { headers } = response;
+  if (headers !== null && typeof headers === 'object' && typeof headers[Symbol.iterator] === 'function') {
+    headers = Array.from(headers, (entry) => (Array.isArray(entry) ? entry : [entry.name, entry.value]));
+  }
+  let bytes = body;
+  if (typeof body === 'string') bytes = Buffer.from(body);
+  else if (body instanceof ArrayBuffer) bytes = Buffer.from(body);
+  else if (ArrayBuffer.isView(body)) bytes = Buffer.from(body.buffer, body.byteOffset, body.byteLength);
+  return callWithErrorCode(native.blockedBy, undefined, [response.status, headers, bytes, response.url]);
+}
+
 // Literal `module.exports.X = ...` assignments (not a loop over a list, and
 // not `module.exports = native` alone) so cjs-module-lexer can statically
 // detect these as named exports: that's what lets ESM do
@@ -318,3 +333,4 @@ module.exports.KoonStreamingResponse = native.KoonStreamingResponse;
 module.exports.KoonWebSocket = native.KoonWebSocket;
 // fetch() with koon's fingerprint, resolving to a standard Response (fetch.js).
 module.exports.koonFetch = require('./fetch.js').createKoonFetch(Koon);
+module.exports.blockedBy = blockedBy;

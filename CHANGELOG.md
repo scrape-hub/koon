@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `blockedBy(response, body)` in Node and `koon.blocked_by(response, body)`
+  in Python name the bot protection that answered, like `blockedBy` on a
+  response, for responses whose body you read yourself: from `koonFetch()`,
+  streaming requests and the httpx and requests transports
+  ([#10](https://github.com/scrape-hub/koon/issues/10)).
+
 ### Deprecated
 
 - Python 3.9 and 3.10. The next minor release requires Python 3.11.

@@ -95,6 +95,14 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(page)))
             self.end_headers()
             self.wfile.write(page)
+        elif path == "/challenge-page":
+            # A challenge known by its body alone
+            page = b"<html><script>window._cf_chl_opt={}</script></html>"
+            self.send_response(403)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(page)))
+            self.end_headers()
+            self.wfile.write(page)
         else:
             self.send_response(404)
             self.send_header("Content-Length", "0")

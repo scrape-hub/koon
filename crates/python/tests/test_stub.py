@@ -14,8 +14,8 @@ import koon
 STUB = ast.parse(Path(koon.__file__).with_suffix(".pyi").read_text(encoding="utf-8"))
 
 
-def is_typed_dict(node):
-    return any(isinstance(b, ast.Name) and b.id == "TypedDict" for b in node.bases)
+def has_base(node, name):
+    return any(isinstance(b, ast.Name) and b.id == name for b in node.bases)
 
 
 def typed_dict_keys(node):
@@ -23,11 +23,15 @@ def typed_dict_keys(node):
 
 
 ALL_STUB_CLASSES = {node.name: node for node in STUB.body if isinstance(node, ast.ClassDef)}
-# TypedDicts describe `**options` shapes, not runtime classes: kept apart so
-# they are not expected in `koon.__all__`.
-STUB_TYPEDDICTS = {name: node for name, node in ALL_STUB_CLASSES.items() if is_typed_dict(node)}
+# TypedDicts describe `**options` shapes and Protocols argument shapes, not
+# runtime classes: kept apart so they are not expected in `koon.__all__`.
+STUB_TYPEDDICTS = {
+    name: node for name, node in ALL_STUB_CLASSES.items() if has_base(node, "TypedDict")
+}
 STUB_CLASSES = {
-    name: node for name, node in ALL_STUB_CLASSES.items() if name not in STUB_TYPEDDICTS
+    name: node
+    for name, node in ALL_STUB_CLASSES.items()
+    if name not in STUB_TYPEDDICTS and not has_base(node, "Protocol")
 }
 FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
 STUB_FUNCTIONS = {node.name for node in STUB.body if isinstance(node, FUNCTIONS)}

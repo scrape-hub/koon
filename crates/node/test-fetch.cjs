@@ -1,10 +1,11 @@
 // Offline test: koonFetch, a fetch() with the fingerprint, resolving to a
-// standard Response.
+// standard Response, and blockedBy() for the responses whose body the caller
+// reads.
 const zlib = require('node:zlib');
 const http = require('node:http');
 
-const { INDEX, check, withTimeout, caught, closedPort, listen, close, startHttpServer } = require('./test-helpers.cjs');
-const { Koon, koonFetch } = require(INDEX);
+const { INDEX, check, expectThrows, withTimeout, caught, closedPort, listen, close, startHttpServer } = require('./test-helpers.cjs');
+const { Koon, koonFetch, blockedBy } = require(INDEX);
 
 // A server for koonFetch: echoes requests like startHttpServer, plus a gzip
 // body, a body held back until `gate()` is called, a redirect that sets a
@@ -212,8 +213,50 @@ async function testKoonFetch() {
   }
 }
 
+// /challenge is a Cloudflare challenge known by its body alone.
+const CHALLENGE = '<html><script>window._cf_chl_opt={}</script></html>';
+
+async function testBlockedBy() {
+  console.log('blockedBy(): bot protection pages of responses whose body the caller reads');
+  const server = http.createServer((req, res) => {
+    res.writeHead(req.url === '/challenge' ? 403 : 200, { 'content-type': 'text/html' });
+    res.end(req.url === '/challenge' ? CHALLENGE : '<html><title>Example Domain</title></html>');
+  });
+  const port = await listen(server);
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    const client = new Koon();
+    const fetch = koonFetch(client);
+    const fetched = await fetch(`${base}/challenge`);
+    check('a koonFetch Response with its text()', blockedBy(fetched, await fetched.text()) === 'cloudflare');
+    const bytes = await (await fetch(`${base}/challenge`)).arrayBuffer();
+    check('a koonFetch Response with its arrayBuffer()', blockedBy(fetched, bytes) === 'cloudflare');
+    check('a typed array body', blockedBy(fetched, new Uint8Array(bytes)) === 'cloudflare');
+    check('an empty body leaves the headers and the URL', blockedBy(fetched, '') === null);
+    const page = await fetch(`${base}/page`);
+    check('a real page', blockedBy(page, await page.text()) === null);
+
+    const stream = await client.requestStreaming('GET', `${base}/challenge`);
+    check('a KoonStreamingResponse with collect()', blockedBy(stream, await stream.collect()) === 'cloudflare');
+    const whole = await client.get(`${base}/challenge`);
+    check('a KoonResponse agrees with its blockedBy', blockedBy(whole, whole.body) === whole.blockedBy && whole.blockedBy === 'cloudflare');
+
+    const head = { status: 403, url: 'https://example.com/' };
+    check('headers as an object', blockedBy({ ...head, headers: { 'CF-Mitigated': 'challenge' } }, '') === 'cloudflare');
+    check('headers as pairs', blockedBy({ ...head, headers: [['cf-mitigated', 'challenge']] }, '') === 'cloudflare');
+    check('headers as a Map', blockedBy({ ...head, headers: new Map([['cf-mitigated', 'challenge']]) }, '') === 'cloudflare');
+    const consent = { status: 200, headers: [], url: 'https://consent.google.com/ml?continue=x' };
+    check('the URL counts', blockedBy(consent, '') === 'consent');
+    await expectThrows(() => blockedBy({ ...head, headers: [] }, 42), 'a body of another type', 'INVALID_ARGUMENT');
+    await expectThrows(() => blockedBy({ headers: [], url: '' }, ''), 'a response without status', 'INVALID_ARGUMENT');
+  } finally {
+    await close(server);
+  }
+}
+
 async function run() {
   await testKoonFetch();
+  await testBlockedBy();
 }
 
 module.exports = { run };

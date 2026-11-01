@@ -1544,11 +1544,24 @@ fn _verify(py: Python<'_>, browser: &str, proxy: Option<&str>) -> PyResult<Strin
         .map_err(to_koon_err)
 }
 
+/// `koon_core::blocked_by` for `koon.blocked_by`, which takes the status,
+/// headers and URL from the response it is given.
+#[pyfunction]
+fn _blocked_by(
+    status: u16,
+    headers: Vec<(String, String)>,
+    body: &[u8],
+    url: &str,
+) -> Option<&'static str> {
+    koon_core::blocked_by(status, &headers, body, url)
+}
+
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add_function(wrap_pyfunction!(browsers, m)?)?;
     m.add_function(wrap_pyfunction!(_verify, m)?)?;
+    m.add_function(wrap_pyfunction!(_blocked_by, m)?)?;
     m.add_class::<NativeClient>()?;
     m.add_class::<Mode>()?;
     m.add_class::<KoonResponse>()?;

@@ -1584,3 +1584,10 @@ pub async fn verify_json(browser: String, proxy: Option<String>) -> Result<Strin
         .map(|report| report.to_json())
         .map_err(koon_napi_error)
 }
+
+/// `koon_core::blocked_by` for `blockedBy()` in index.js, which takes the
+/// status, headers and URL from the response it is given.
+#[napi]
+pub fn blocked_by(status: u16, headers: Headers, body: Buffer, url: String) -> Option<String> {
+    koon_core::blocked_by(status, &headers.0, &body, &url).map(str::to_owned)
+}

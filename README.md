@@ -177,7 +177,7 @@ Chrome Mobile and Firefox Mobile send their desktop counterpart's fingerprint wi
 - **Per-request options**: headers, timeout, proxy and redirect following without touching the client
 - **Response body cap**: 100 MiB by default, decompression bombs included
 - **Request headers on every response**: exactly what was sent, HTTP/2 and HTTP/3 pseudo-headers included
-- **Bot protection named**: `blockedBy` (`blocked_by` in Python, R and Rust) names the bot protection that answered instead of the page (Cloudflare, Akamai, DataDome, ...), which the status code alone does not tell
+- **Bot protection named**: `blockedBy` (`blocked_by` in Python, R and Rust) names the bot protection that answered instead of the page (Cloudflare, Akamai, DataDome, ...), which the status code alone does not tell; as a function also for fetch(), streamed and httpx/requests responses
 - **Plain HTTP**: `http://` with the header set browsers use for insecure origins
 - **Network options**: local address binding, IPv4 or IPv6 only, host pinning like curl's `--resolve`, `locale` for an Accept-Language that matches the proxy's country
 - **Key logging**: `SSLKEYLOGFILE` writes the TLS secrets (TCP, QUIC and DoH) for Wireshark
@@ -282,7 +282,8 @@ console.log(stream.status);
 for await (const chunk of stream) process.stdout.write(chunk);  // or nextChunk() / collect()
 // The body arrives decoded (gzip, br, ...); { decode: false } in the options
 // gives the bytes as sent. cancel() drops the rest of the body; leaving for
-// await early does too.
+// await early does too. blockedBy(stream, body) names a bot protection page
+// from the body read (its first 400 KB suffice).
 
 // Multipart upload
 await client.postMultipart('https://httpbin.org/post', [
@@ -316,7 +317,7 @@ client and resolves to a standard `Response`, so fetch-based code only swaps
 the function:
 
 ```javascript
-import { koonFetch } from 'koonjs';
+import { koonFetch, blockedBy } from 'koonjs';
 
 const fetch = koonFetch({ browser: 'chrome', proxy: 'http://user:pass@proxy:8080' });
 const resp = await fetch('https://httpbin.org/post', {
@@ -326,6 +327,8 @@ const resp = await fetch('https://httpbin.org/post', {
 });
 console.log(resp.status, await resp.json());
 for await (const chunk of (await fetch('https://example.com/large')).body) {}  // streamed
+const page = await fetch('https://example.com/');
+console.log(blockedBy(page, await page.text()));  // null, or e.g. 'cloudflare'
 ```
 
 Only the headers you set are added to the browser's, where the browser puts
@@ -405,6 +408,8 @@ with KoonSync("chrome",                          # latest Chrome on Windows
     with client.request_streaming("GET", "https://example.com/large") as stream:
         for chunk in stream:  # or next_chunk() / collect()
             ...
+    # koon.blocked_by(stream, body) names a bot protection page from the body
+    # read (its first 400 KB suffice)
 
 # An exception a hook raises is what the request raises; a raising
 # on_request stops the request before it is sent.
@@ -481,7 +486,8 @@ koon's client options, the proxy included, to the transport or adapter, and
 `verify=False` to skip certificate checks. Unsupported options raise instead
 of being ignored, and errors are the library's (`httpx.ConnectError`,
 `requests.exceptions.SSLError` and the like) with the `KoonError` as
-`__cause__`. The full rules are in `koon/httpx.pyi` and `koon/requests.pyi`.
+`__cause__`. `koon.blocked_by(r, r.content)` names a bot protection page.
+The full rules are in `koon/httpx.pyi` and `koon/requests.pyi`.
 
 ### R
 
