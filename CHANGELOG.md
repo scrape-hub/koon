@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   streaming requests and the httpx and requests transports
   ([#10](https://github.com/scrape-hub/koon/issues/10)).
 
+### Fixed
+
+- Node: the types of `koonFetch()` used `RequestInfo`, which only the DOM
+  library of TypeScript has, so a project without it (and without
+  `skipLibCheck`) failed to compile against `index.d.ts`.
+
 ### Deprecated
 
 - Python 3.9 and 3.10. The next minor release requires Python 3.11.

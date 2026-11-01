@@ -649,14 +649,14 @@ export class KoonProxy {
 
 /** A `fetch()` that sends through a koon client, as `koonFetch()` returns it. */
 export interface KoonFetch {
-  (input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
+  (input: string | URL | Request, init?: RequestInit): Promise<Response>;
   /** The client that sends the requests: its cookies, `userAgent`, `shutdown()`, ... */
   readonly client: Koon;
 }
 
 /**
  * A `fetch()` with koon's fingerprint: `const fetch = koonFetch({ browser: 'chrome' })`
- * takes what the global `fetch()` takes (`RequestInfo | URL`, `RequestInit`) and resolves
+ * takes what the global `fetch()` takes (`string | URL | Request`, `RequestInit`) and resolves
  * to a standard `Response`. The options are a `Koon` client's; a `Koon` client itself works
  * too and is then shared.
  *
