@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-01
+
 ### Added
 
 - `blockedBy(response, body)` in Node and `koon.blocked_by(response, body)`
