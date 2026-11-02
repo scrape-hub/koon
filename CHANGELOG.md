@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-11-02
+
 ### Fixed
 
 - Node: HTTP/2 and HTTP/3 errors have `err.code` `HTTP2_ERROR` or
