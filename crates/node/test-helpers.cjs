@@ -16,6 +16,27 @@ const LOCAL_BINARIES = {
 };
 const BINARY = path.join(__dirname, LOCAL_BINARIES[`${process.platform}-${process.arch}`] || '');
 
+// A self-signed certificate for 127.0.0.1 and localhost (P-256, valid until
+// 2126) for the local TLS servers.
+const TEST_CERT = `-----BEGIN CERTIFICATE-----
+MIIBpzCCAU2gAwIBAgIUTT+1Q/UeQCoCj9+GTVjktiVQ7NAwCgYIKoZIzj0EAwIw
+GjEYMBYGA1UEAwwPa29vbiB0ZXN0IHByb3h5MCAXDTI2MDkyMzIxMzAzNFoYDzIx
+MjYwODMwMjEzMDM0WjAaMRgwFgYDVQQDDA9rb29uIHRlc3QgcHJveHkwWTATBgcq
+hkjOPQIBBggqhkjOPQMBBwNCAATPkRI3WI8c7+qaKXL70r52fX/rC1Rk9fVUzAww
+YWSHRaT/Wd5KpkYuy8RPNNIt05FR6O0P09zHaeAv3+pyvvswo28wbTAdBgNVHQ4E
+FgQUGwZLCfYZbin9FDavBNJSG5DnSbkwHwYDVR0jBBgwFoAUGwZLCfYZbin9FDav
+BNJSG5DnSbkwDwYDVR0TAQH/BAUwAwEB/zAaBgNVHREEEzARhwR/AAABgglsb2Nh
+bGhvc3QwCgYIKoZIzj0EAwIDSAAwRQIhALFwL3gr3T3UQeApA+A8k2xyqyaCtcMx
+gq52rAWcGvWpAiBDGDHXckJ1xNL33TII0Ff6mUws376mH49GIX3eEQ0Lag==
+-----END CERTIFICATE-----
+`;
+const TEST_KEY = `-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQguMLKO1ivNEiVSl0C
+Uy7cZMPy8VPlFlhacX4F8dvpAWuhRANCAATPkRI3WI8c7+qaKXL70r52fX/rC1Rk
+9fVUzAwwYWSHRaT/Wd5KpkYuy8RPNNIt05FR6O0P09zHaeAv3+pyvvsw
+-----END PRIVATE KEY-----
+`;
+
 // Shared across every test file that requires this module (the require
 // cache gives them the same object), so the runner can total the count
 // after running each one.
@@ -192,6 +213,8 @@ function startWsServer() {
 module.exports = {
   INDEX,
   BINARY,
+  TEST_CERT,
+  TEST_KEY,
   stats,
   check,
   expectThrows,

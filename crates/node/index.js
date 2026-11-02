@@ -150,7 +150,7 @@ const NAPI_ARGUMENT_STATUS = /^(InvalidArg|[A-Za-z]+Expected)$/;
 
 function attachErrorCode(err) {
   if (err instanceof Error) {
-    const match = /^\[([A-Z_]+)\] /.exec(err.message);
+    const match = /^\[([A-Z0-9_]+)\] /.exec(err.message);
     if (match) {
       err.code = match[1];
     } else if (NAPI_ARGUMENT_STATUS.test(err.code)) {

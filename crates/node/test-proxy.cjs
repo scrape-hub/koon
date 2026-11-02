@@ -7,7 +7,7 @@ const path = require('node:path');
 const http = require('node:http');
 const https = require('node:https');
 
-const { INDEX, check, expectThrows, caught, listen, close, startHttpServer } = require('./test-helpers.cjs');
+const { INDEX, TEST_CERT, TEST_KEY, check, expectThrows, caught, listen, close, startHttpServer } = require('./test-helpers.cjs');
 const { Koon, KoonProxy } = require(INDEX);
 
 async function testProxy() {
@@ -81,33 +81,12 @@ async function testProxyUpstream() {
   await expectThrows(() => KoonProxy.start({ proxy: 'nonsense' }), 'invalid upstream proxy', 'PROXY_ERROR');
 }
 
-// A self-signed certificate for 127.0.0.1 and localhost (P-256, valid until
-// 2126) for the local TLS proxy.
-const PROXY_CERT = `-----BEGIN CERTIFICATE-----
-MIIBpzCCAU2gAwIBAgIUTT+1Q/UeQCoCj9+GTVjktiVQ7NAwCgYIKoZIzj0EAwIw
-GjEYMBYGA1UEAwwPa29vbiB0ZXN0IHByb3h5MCAXDTI2MDkyMzIxMzAzNFoYDzIx
-MjYwODMwMjEzMDM0WjAaMRgwFgYDVQQDDA9rb29uIHRlc3QgcHJveHkwWTATBgcq
-hkjOPQIBBggqhkjOPQMBBwNCAATPkRI3WI8c7+qaKXL70r52fX/rC1Rk9fVUzAww
-YWSHRaT/Wd5KpkYuy8RPNNIt05FR6O0P09zHaeAv3+pyvvswo28wbTAdBgNVHQ4E
-FgQUGwZLCfYZbin9FDavBNJSG5DnSbkwHwYDVR0jBBgwFoAUGwZLCfYZbin9FDav
-BNJSG5DnSbkwDwYDVR0TAQH/BAUwAwEB/zAaBgNVHREEEzARhwR/AAABgglsb2Nh
-bGhvc3QwCgYIKoZIzj0EAwIDSAAwRQIhALFwL3gr3T3UQeApA+A8k2xyqyaCtcMx
-gq52rAWcGvWpAiBDGDHXckJ1xNL33TII0Ff6mUws376mH49GIX3eEQ0Lag==
------END CERTIFICATE-----
-`;
-const PROXY_KEY = `-----BEGIN PRIVATE KEY-----
-MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQguMLKO1ivNEiVSl0C
-Uy7cZMPy8VPlFlhacX4F8dvpAWuhRANCAATPkRI3WI8c7+qaKXL70r52fX/rC1Rk
-9fVUzAwwYWSHRaT/Wd5KpkYuy8RPNNIt05FR6O0P09zHaeAv3+pyvvsw
------END PRIVATE KEY-----
-`;
-
 async function testHttpsProxy() {
   console.log('https:// proxies: certificate verification, proxyCaCerts, ignoreProxyTlsErrors');
   // koon sends http:// URLs to an HTTP(S) proxy in absolute form: the proxy
   // answers them itself.
   const lines = [];
-  const tlsProxy = https.createServer({ cert: PROXY_CERT, key: PROXY_KEY }, (req, res) => {
+  const tlsProxy = https.createServer({ cert: TEST_CERT, key: TEST_KEY }, (req, res) => {
     lines.push(`${req.method} ${req.url}`);
     res.end('proxied');
   });
@@ -125,9 +104,9 @@ async function testHttpsProxy() {
     check('ignoreTlsErrors does not cover the proxy', err && err.code === 'PROXY_ERROR', err && err.message);
     check('no request reached the untrusted proxy', lines.length === 0, JSON.stringify(lines));
 
-    let resp = await new Koon({ proxy, proxyCaCerts: PROXY_CERT }).get('http://example.test/a');
+    let resp = await new Koon({ proxy, proxyCaCerts: TEST_CERT }).get('http://example.test/a');
     check('proxyCaCerts as a string', resp.text() === 'proxied' && lines.pop() === 'GET http://example.test/a');
-    resp = await new Koon({ proxy, proxyCaCerts: Buffer.from(PROXY_CERT) }).get('http://example.test/b');
+    resp = await new Koon({ proxy, proxyCaCerts: Buffer.from(TEST_CERT) }).get('http://example.test/b');
     check('proxyCaCerts as a Buffer', resp.text() === 'proxied' && lines.pop() === 'GET http://example.test/b');
     resp = await new Koon({ proxy, ignoreProxyTlsErrors: true }).get('http://example.test/c');
     check('ignoreProxyTlsErrors', resp.text() === 'proxied' && lines.pop() === 'GET http://example.test/c');

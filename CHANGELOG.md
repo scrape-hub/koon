@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Node: HTTP/2 and HTTP/3 errors have `err.code` `HTTP2_ERROR` or
+  `HTTP3_ERROR`, not napi's `GenericFailure`
+  ([#11](https://github.com/scrape-hub/koon/issues/11)).
+
 ## [1.2.1] - 2026-11-01
 
 ### Added

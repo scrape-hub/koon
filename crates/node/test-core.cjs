@@ -1,11 +1,14 @@
 // Offline tests: the plain request/response path, profile resolution, error
 // codes, cookies, hooks and shutdown.
 const os = require('node:os');
+const http2 = require('node:http2');
 const { pathToFileURL } = require('node:url');
 
 const {
   INDEX,
   BINARY,
+  TEST_CERT,
+  TEST_KEY,
   check,
   expectThrows,
   withTimeout,
@@ -92,6 +95,25 @@ async function testErrorCodes() {
 
   const profile = client.exportProfile();
   check('exportProfile round-trips', new Koon({ profileJson: profile }).userAgent === client.userAgent);
+}
+
+// HTTP2_ERROR and HTTP3_ERROR are the only codes with a digit.
+async function testHttp2ErrorCode() {
+  console.log('err.code of an HTTP/2 stream the server resets is HTTP2_ERROR');
+  const server = http2.createSecureServer({ cert: TEST_CERT, key: TEST_KEY });
+  const sessions = new Set();
+  server.on('session', (session) => sessions.add(session));
+  server.on('stream', (stream) => {
+    stream.on('error', () => {});
+    stream.close(http2.constants.NGHTTP2_INTERNAL_ERROR);
+  });
+  const url = `https://127.0.0.1:${await listen(server)}/`;
+  try {
+    await expectThrows(() => new Koon({ ignoreTlsErrors: true }).get(url), 'RST_STREAM', 'HTTP2_ERROR');
+  } finally {
+    for (const session of sessions) session.destroy();
+    await new Promise((resolve) => server.close(resolve));
+  }
 }
 
 async function testNumericOptions() {
@@ -608,6 +630,7 @@ async function run() {
   await testEsmNamedImport();
   await testLatestProfiles();
   await testErrorCodes();
+  await testHttp2ErrorCode();
   await testNumericOptions();
   await testCookies();
   await testLocalHttp();
