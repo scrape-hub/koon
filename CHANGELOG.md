@@ -32,6 +32,7 @@ Rust only:
 - Cookies without SameSite count as Lax for Chromium profiles, as None for
   Firefox and Safari.
 - Cookies from an IP address host are host-only.
+- `load_session()` skips the cookies `set_cookies()` skips.
 
 **Requests and connections**
 

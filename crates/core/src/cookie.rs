@@ -419,13 +419,12 @@ impl CookieJar {
         Ok(Self::from_cookies(serde_json::from_str(json)?))
     }
 
-    /// Create a `CookieJar` holding `cookies`, with their domains normalized (lowercase, no leading
-    /// dot) like every other way into the jar.
+    /// Create a `CookieJar` holding `cookies` that pass the checks every other way into the jar
+    /// applies (name and value, host name, path, no public suffix as a domain, the `__Host-` and
+    /// `__Secure-` prefixes), with their domains normalized; the others are left out.
     #[must_use]
     pub fn from_cookies(mut cookies: Vec<Cookie>) -> Self {
-        for cookie in &mut cookies {
-            cookie.domain = normalize_domain(&cookie.domain);
-        }
+        cookies.retain_mut(|cookie| validate_imported(cookie).is_ok());
         Self { cookies }
     }
 }
@@ -1299,6 +1298,15 @@ mod tests {
             jar.cookie_header(&uri("http://127.0.0.1/")).as_deref(),
             Some("own=1")
         );
+    }
+
+    #[test]
+    fn a_loaded_jar_skips_cookies_the_jar_would_refuse() {
+        let public_suffix = test_cookie("wide", "com", "/", false);
+        let fine = test_cookie("ok", ".Example.com", "/", false);
+        let jar = CookieJar::from_cookies(vec![public_suffix, fine]);
+        assert_eq!(jar.cookies().len(), 1);
+        assert_eq!(jar.cookies()[0].domain, "example.com");
     }
 
     #[test]

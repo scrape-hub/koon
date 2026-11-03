@@ -861,14 +861,12 @@ impl Client {
 
     /// Loads a session saved with [`save_session`](Self::save_session): its cookies replace the
     /// jar's, its TLS sessions are added. Parts the client has disabled are skipped, and so are
-    /// cookies whose name or value breaks the `Set-Cookie` rules (control characters, `;`).
+    /// cookies [`CookieJar::from_cookies`] leaves out (such as one for a public suffix).
     /// [`Error::Json`] if `json` is not a saved session.
     pub fn load_session(&self, json: &str) -> Result<(), Error> {
         let export: SessionExport = serde_json::from_str(json).map_err(Error::Json)?;
 
-        if let (Some(mut cookies), Some(jar)) = (export.cookies, &self.cookie_jar) {
-            // The Cookie header carries them verbatim.
-            cookies.retain(|c| crate::cookie::validate_name_value(&c.name, &c.value).is_ok());
+        if let (Some(cookies), Some(jar)) = (export.cookies, &self.cookie_jar) {
             *crate::util::lock_recover(jar) = CookieJar::from_cookies(cookies);
         }
 
