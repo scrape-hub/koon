@@ -31,8 +31,8 @@ pip install "koon[requests]"   # with the requests adapter's dependency
 install.packages("https://github.com/scrape-hub/koon/releases/download/v1.2.2/koon_1.2.2.zip", repos = NULL)  # Windows
 install.packages("https://github.com/scrape-hub/koon/releases/download/v1.2.2/koon_1.2.2.tgz", repos = NULL)  # macOS
 
-# Other platforms and R versions build from source: Rust 1.85+ and CMake, on
-# Windows also Rtools, LLVM and `rustup target add x86_64-pc-windows-gnu`
+# Other platforms and R versions build from source: Rust 1.85+, CMake, libclang and
+# git, on Windows also Rtools, LLVM and `rustup target add x86_64-pc-windows-gnu`
 remotes::install_github("scrape-hub/koon", subdir = "crates/r")
 ```
 
@@ -852,8 +852,14 @@ Only needed if you want to build koon yourself instead of using the published pa
 **Requirements:**
 - Rust 1.85+
 - CMake
+- libclang, for the BoringSSL bindings: `libclang-dev` (Debian, Ubuntu), `clang-devel` (Fedora,
+  RHEL), LLVM (Windows), Xcode's command line tools (macOS)
+- git, which applies koon's BoringSSL patches
 - NASM (Windows, optional: without it BoringSSL is built from portable C, which is slower)
 - C compiler: MSVC (Windows), GCC or Clang (Linux/macOS)
+
+The same applies to `pip install koon` on a platform without a prebuilt wheel, which builds from
+the source distribution.
 
 ```bash
 # Core library

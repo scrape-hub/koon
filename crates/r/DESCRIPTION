@@ -9,7 +9,8 @@ Description: HTTP client that connects like a real browser: the TLS, HTTP/2
     Samsung Internet and OkHttp, on desktop and mobile, checked against
     captures from the real browsers.
 License: MIT + file LICENSE
-SystemRequirements: Cargo (Rust's package manager), rustc >= 1.85, GNU make
+SystemRequirements: Cargo (Rust's package manager), rustc >= 1.85, CMake,
+    libclang, git, GNU make
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Suggests: jsonlite, knitr, processx, rmarkdown, testthat (>= 3.0.0), withr
