@@ -14,18 +14,7 @@ use super::{BrowserProfile, HeaderFamily, LanguageSource, Os, last_row, table_ve
 /// apart from desktop Opera (profiles are named `opera-mobile102`); Android only.
 pub struct OperaMobile;
 
-/// Every supported Opera for Android release: its major version, the Chromium major it builds on,
-/// the desktop Opera major its `Opera` brand reports, and the full versions its client hints report
-/// for `OperaMobile`, Opera and Chromium. Only the captured release: the brand list is Opera's own,
-/// with no known rule to derive other releases' from.
-pub(super) const OPERA_MOBILE_CHROMIUM: &[(u32, u32, u32, &str, &str, &str)] = &[(
-    102,
-    152,
-    137,
-    "102.1.5206.90382",
-    "137.0.6010.1",
-    "152.0.7977.82",
-)];
+pub(super) use super::releases::OPERA_MOBILE_CHROMIUM;
 
 /// The page's viewport: its hints reported 980 on navigations and subresources alike. The height
 /// was not captured; derived from Chrome's layout viewport of the same device.

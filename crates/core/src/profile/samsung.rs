@@ -16,13 +16,7 @@ use super::{
 /// report a Galaxy A33 5G, not the Pixel of the other Android profiles.
 pub struct Samsung;
 
-/// Every supported Samsung Internet release: its major version, the Chromium major it builds on,
-/// and the full versions its client hints report for both. 30.0.2.61 is not used: it would not
-/// install on the capture device.
-pub(super) const SAMSUNG_CHROMIUM: &[(u32, u32, &str, &str)] = &[
-    (29, 136, "29.0.5.3", "136.0.7103.127"),
-    (30, 143, "30.0.2.30", "143.0.7499.194"),
-];
+pub(super) use super::releases::SAMSUNG_CHROMIUM;
 
 /// The device of the Samsung Internet profiles: a Galaxy A33 5G (SM-A336B) on Android 15 (One UI
 /// 7), not the Pixel of the other Android profiles. The User-Agent stays reduced (`Android 10; K`).

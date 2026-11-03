@@ -1,0 +1,342 @@
+# The release tables of the browser profiles: one row per supported major version, oldest first.
+# crates/core/tests/generated.rs writes src/profile/releases.rs and src/profile/safari/versions.rs
+# from this file (KOON_BLESS=1). `updated` is the day a table last changed.
+
+[chrome]
+source = "Chromium Dash fetch_releases?channel=Stable&platform=...: the last release of each milestone, per platform"
+updated = 2026-09-28
+releases = [
+  { major = 131, windows = "131.0.6778.267", macos = "131.0.6778.267", linux = "131.0.6778.264", android = "131.0.6778.261" },
+  { major = 132, windows = "132.0.6834.197", macos = "132.0.6834.162", linux = "132.0.6834.159", android = "132.0.6834.165" },
+  { major = 133, windows = "133.0.6943.143", macos = "133.0.6943.143", linux = "133.0.6943.141", android = "133.0.6943.138" },
+  { major = 134, windows = "134.0.6998.179", macos = "134.0.6998.167", linux = "134.0.6998.165", android = "134.0.6998.136" },
+  { major = 135, windows = "135.0.7049.117", macos = "135.0.7049.117", linux = "135.0.7049.114", android = "135.0.7049.113" },
+  { major = 136, windows = "136.0.7103.116", macos = "136.0.7103.116", linux = "136.0.7103.113", android = "136.0.7103.127" },
+  { major = 137, windows = "137.0.7151.122", macos = "137.0.7151.122", linux = "137.0.7151.119", android = "137.0.7151.117" },
+  { major = 138, windows = "138.0.7204.185", macos = "138.0.7204.185", linux = "138.0.7204.183", android = "138.0.7204.180" },
+  { major = 139, windows = "139.0.7258.157", macos = "139.0.7258.157", linux = "139.0.7258.154", android = "139.0.7258.160" },
+  { major = 140, windows = "140.0.7339.210", macos = "140.0.7339.215", linux = "140.0.7339.207", android = "140.0.7339.208" },
+  { major = 141, windows = "141.0.7390.125", macos = "141.0.7390.124", linux = "141.0.7390.122", android = "141.0.7390.123" },
+  { major = 142, windows = "142.0.7444.177", macos = "142.0.7444.177", linux = "142.0.7444.175", android = "142.0.7444.173" },
+  { major = 143, windows = "143.0.7499.194", macos = "143.0.7499.194", linux = "143.0.7499.192", android = "143.0.7499.194" },
+  { major = 144, windows = "144.0.7559.135", macos = "144.0.7559.135", linux = "144.0.7559.132", android = "144.0.7559.133" },
+  { major = 145, windows = "145.0.7632.162", macos = "145.0.7632.162", linux = "145.0.7632.159", android = "145.0.7632.161" },
+  { major = 146, windows = "146.0.7680.180", macos = "146.0.7680.180", linux = "146.0.7680.177", android = "146.0.7680.178" },
+  { major = 147, windows = "147.0.7727.139", macos = "147.0.7727.139", linux = "147.0.7727.137", android = "147.0.7727.138" },
+  { major = 148, windows = "148.0.7778.218", macos = "148.0.7778.217", linux = "148.0.7778.215", android = "148.0.7778.217" },
+  { major = 149, windows = "149.0.7827.201", macos = "149.0.7827.201", linux = "149.0.7827.200", android = "149.0.7827.201" },
+  { major = 150, windows = "150.0.7871.189", macos = "150.0.7871.189", linux = "150.0.7871.186", android = "150.0.7871.189" },
+  { major = 151, windows = "151.0.7922.176", macos = "151.0.7922.176", linux = "151.0.7922.173", android = "151.0.7922.175" },
+  { major = 152, windows = "152.0.7977.85", macos = "152.0.7977.85", linux = "152.0.7977.82", android = "152.0.7977.84" },
+  { major = 153, windows = "153.0.8010.55", macos = "153.0.8010.55", linux = "153.0.8010.52", android = "153.0.8010.53" },
+  { major = 154, windows = "154.0.8037.58", macos = "154.0.8037.58", linux = "154.0.8037.57", android = "154.0.8037.58" },
+  { major = 155, windows = "155.0.8059.12", macos = "155.0.8059.12", linux = "155.0.8059.12", android = "155.0.8059.16" },
+]
+
+# Edge's full version (Windows and macOS alike) and the Chromium full version it reports for the
+# Chromium brand of Sec-CH-UA-Full-Version-List.
+[edge]
+source = "edgeupdates.microsoft.com/api/products: the last Stable release of each major; Chromium version from a capture"
+updated = 2026-09-28
+releases = [
+  { major = 131, full = "131.0.2903.147", chromium = "131.0.6778.266" },
+  { major = 132, full = "132.0.2957.178", chromium = "132.0.6834.197" },
+  { major = 133, full = "133.0.3065.92", chromium = "133.0.6943.143" },
+  { major = 134, full = "134.0.3124.129", chromium = "134.0.6998.179" },
+  { major = 135, full = "135.0.3179.98", chromium = "135.0.7049.116" },
+  { major = 136, full = "136.0.3240.131", chromium = "136.0.7103.116" },
+  { major = 137, full = "137.0.3296.93", chromium = "137.0.7151.121" },
+  { major = 138, full = "138.0.3351.151", chromium = "138.0.7204.185" },
+  { major = 139, full = "139.0.3405.125", chromium = "139.0.7258.156" },
+  { major = 140, full = "140.0.3485.130", chromium = "140.0.7339.210" },
+  { major = 141, full = "141.0.3537.99", chromium = "141.0.7390.124" },
+  { major = 142, full = "142.0.3595.157", chromium = "142.0.7444.177" },
+  { major = 143, full = "143.0.3650.139", chromium = "143.0.7499.194" },
+  { major = 144, full = "144.0.3719.162", chromium = "144.0.7559.135" },
+  { major = 145, full = "145.0.3800.97", chromium = "145.0.7632.161" },
+  { major = 146, full = "146.0.3856.152", chromium = "146.0.7680.180" },
+  { major = 147, full = "147.0.3912.98", chromium = "147.0.7727.139" },
+  { major = 148, full = "148.0.3967.137", chromium = "148.0.7778.218" },
+  { major = 149, full = "149.0.4022.98", chromium = "149.0.7827.201" },
+  { major = 150, full = "150.0.4078.144", chromium = "150.0.7871.189" },
+  { major = 151, full = "151.0.4129.107", chromium = "151.0.7922.174" },
+  { major = 152, full = "152.0.4191.96", chromium = "152.0.7977.85" },
+  { major = 153, full = "153.0.4234.48", chromium = "153.0.8010.53" },
+  { major = 154, full = "154.0.4258.37", chromium = "154.0.8037.58" },
+]
+
+# Opera's major, the Chromium major it builds on, and the full versions its client hints report for
+# both.
+[opera]
+source = "get.geo.opera.com/pub/opera/desktop/: the last Stable release of each major; Chromium from Opera's changelog"
+updated = 2026-09-28
+releases = [
+  { major = 124, chromium = 140, full = "124.0.5705.65", chromium_full = "140.0.7339.249" },
+  { major = 125, chromium = 141, full = "125.0.5729.49", chromium_full = "141.0.7390.125" },
+  { major = 126, chromium = 142, full = "126.0.5750.124", chromium_full = "142.0.7444.243" },
+  { major = 127, chromium = 143, full = "127.0.5778.125", chromium_full = "143.0.7499.194" },
+  { major = 128, chromium = 144, full = "128.0.5807.77", chromium_full = "144.0.7559.173" },
+  { major = 129, chromium = 145, full = "129.0.5823.65", chromium_full = "145.0.7632.117" },
+  { major = 130, chromium = 146, full = "130.0.5847.92", chromium_full = "146.0.7680.178" },
+  { major = 131, chromium = 147, full = "131.0.5877.116", chromium_full = "147.0.7727.138" },
+  { major = 132, chromium = 148, full = "132.0.5905.114", chromium_full = "148.0.7778.271" },
+  { major = 133, chromium = 149, full = "133.0.5932.85", chromium_full = "149.0.7827.201" },
+  { major = 134, chromium = 150, full = "134.0.5954.66", chromium_full = "150.0.7871.212" },
+  { major = 135, chromium = 151, full = "135.0.5973.142", chromium_full = "151.0.7922.170" },
+  { major = 136, chromium = 152, full = "136.0.6008.52", chromium_full = "152.0.7977.130" },
+]
+
+# Opera for Android's major, its Chromium major, the desktop Opera major its Opera brand reports, and
+# the full versions of OperaMobile, Opera and Chromium. Only captured releases: its brand list
+# follows no known rule.
+[opera_mobile]
+source = "a capture of the release on Android"
+updated = 2026-09-28
+releases = [
+  { major = 102, chromium = 152, opera = 137, full = "102.1.5206.90382", opera_full = "137.0.6010.1", chromium_full = "152.0.7977.82" },
+]
+
+# Brave profiles are named by the Chromium major; Brave reduces every full version to
+# {major}.0.0.0 on the wire, so the last Brave release on the major and its Chromium full version are
+# provenance.
+[brave]
+source = "GitHub brave/brave-browser release titles (Release v1.96.59 (Chromium 154.0.8037.58))"
+updated = 2026-09-28
+releases = [
+  { chromium = 153, brave = "1.95.104", chromium_full = "153.0.8010.53" },
+  { chromium = 154, brave = "1.96.59", chromium_full = "154.0.8037.58" },
+]
+
+# Samsung Internet's major, the Chromium major it builds on, and the full versions its client hints
+# report. 30.0.2.61 is not used: it would not install on the capture device.
+[samsung]
+source = "a capture of the release on a Galaxy A33 5G; Chromium version from libterrace.so"
+updated = 2026-09-28
+releases = [
+  { major = 29, chromium = 136, full = "29.0.5.3", chromium_full = "136.0.7103.127" },
+  { major = 30, chromium = 143, full = "30.0.2.30", chromium_full = "143.0.7499.194" },
+]
+
+[firefox]
+source = "product-details.mozilla.org/1.0/firefox_versions.json (LATEST_FIREFOX_VERSION)"
+updated = 2026-10-08
+min = 135
+latest = 158
+
+[okhttp]
+source = "square.github.io/okhttp/changelogs (major versions)"
+updated = 2026-09-28
+min = 4
+latest = 5
+
+# Every supported Safari version, oldest first. `macos` and `ios` name the network stack of the OS
+# release the version ships with (a `Release` of src/profile/safari/mod.rs, or `derived(...)` of
+# one for a release without a capture of its own); `ios_ua_os` is the OS version the iOS
+# User-Agent reports. Safari 17.0 on macOS takes the capture of macOS 14.7 (the same TLS and
+# HTTP/2 as macOS 14.8.9); iOS 17.0.1 and 17.5 show that stack unchanged within 17.
+
+# macOS 12 Monterey; no iOS profile.
+[[safari]]
+tag = "156"
+version = "15.6"
+macos_ua_version = "15.6"
+fetch_metadata = false
+macos = "MACOS_12"
+
+# Safari 16.0 shipped as an update for macOS 12.6 Monterey (Ventura came with 16.1), iOS 16.0.
+# Captured directly: the real Safari16.0MontereyAuto.pkg (Apple code signature verified,
+# chaining to Apple Root CA) installed on the macOS 12.6 capture VM sends the same TLS/HTTP-2
+# layer and header order as the Safari 15.6.1 that ships on that image (`MACOS_12`, not
+# `derived`).
+[[safari]]
+tag = "160"
+version = "16.0"
+macos_ua_version = "16.0"
+fetch_metadata = false
+macos = "MACOS_12"
+ios_ua_os = "16_0"
+ios = "IOS_16"
+
+# macOS 13 Ventura, iOS 16.1.
+[[safari]]
+tag = "161"
+version = "16.1"
+macos_ua_version = "16.1"
+fetch_metadata = false
+macos = "MACOS_13"
+ios_ua_os = "16_1"
+ios = "IOS_16"
+
+# Safari 16.6 shipped as an update for macOS 13.6 Ventura; no iOS capture yet (16.5/16.6
+# simulators are no longer downloadable), so its profile takes the values of the nearest
+# captured iOS release (iOS 16.4).
+[[safari]]
+tag = "166"
+version = "16.6"
+macos_ua_version = "16.6"
+fetch_metadata = true
+macos = "MACOS_13_6"
+ios_ua_os = "16_6"
+ios = "derived(IOS_16_4)"
+
+# macOS 14 Sonoma, iOS 17.
+[[safari]]
+tag = "170"
+version = "17.0"
+macos_ua_version = "17.0"
+fetch_metadata = true
+macos = "MACOS_14"
+ios_ua_os = "17_0"
+ios = "IOS_17"
+
+# Safari 17.6, the last Safari 17: captured on macOS 14.6, sending exactly the stack of
+# macOS 14.7. No iOS 17.6 capture; iOS 17.0.1 and 17.5 already showed the stack unchanged
+# within 17.
+[[safari]]
+tag = "176"
+version = "17.6"
+macos_ua_version = "17.6"
+fetch_metadata = true
+macos = "MACOS_14"
+ios_ua_os = "17_6"
+ios = "derived(IOS_17)"
+
+# macOS 15 Sequoia, iOS 18.
+[[safari]]
+tag = "180"
+version = "18.0"
+macos_ua_version = "18.0"
+fetch_metadata = true
+macos = "MACOS_15_0"
+ios_ua_os = "18_0"
+ios = "IOS_18_0"
+
+[[safari]]
+tag = "181"
+version = "18.1"
+macos_ua_version = "18.1.1"
+fetch_metadata = true
+macos = "MACOS_15_1"
+ios_ua_os = "18_1"
+ios = "IOS_18_1"
+
+[[safari]]
+tag = "182"
+version = "18.2"
+macos_ua_version = "18.2"
+fetch_metadata = true
+macos = "MACOS_15_2"
+ios_ua_os = "18_2"
+ios = "IOS_18_2"
+
+[[safari]]
+tag = "183"
+version = "18.3"
+macos_ua_version = "18.3"
+fetch_metadata = true
+macos = "MACOS_15_3"
+ios_ua_os = "18_3"
+ios = "IOS_18_3"
+
+[[safari]]
+tag = "184"
+version = "18.4"
+macos_ua_version = "18.4"
+fetch_metadata = true
+macos = "MACOS_15_4"
+ios_ua_os = "18_4"
+ios = "IOS_18_4"
+
+[[safari]]
+tag = "185"
+version = "18.5"
+macos_ua_version = "18.5"
+fetch_metadata = true
+macos = "MACOS_15_5"
+ios_ua_os = "18_5"
+ios = "IOS_18_5"
+
+# Safari 18.6, the long-lived last Safari 18: captured on macOS 15.6.1, sending exactly the
+# stack of 18.5 (same JA4, HTTP/2 SETTINGS and QUIC transport parameters). No iOS capture yet.
+[[safari]]
+tag = "186"
+version = "18.6"
+macos_ua_version = "18.6"
+fetch_metadata = true
+macos = "MACOS_15_5"
+ios_ua_os = "18_6"
+ios = "derived(IOS_18_5)"
+
+# macOS 26 Tahoe, iOS 26.
+[[safari]]
+tag = "260"
+version = "26.0"
+macos_ua_version = "26.0"
+fetch_metadata = true
+macos = "MACOS_26_0"
+ios_ua_os = "18_6"
+ios = "IOS_26_0"
+
+[[safari]]
+tag = "261"
+version = "26.1"
+macos_ua_version = "26.1"
+fetch_metadata = true
+macos = "MACOS_26_1"
+ios_ua_os = "18_7"
+ios = "IOS_26_1"
+
+[[safari]]
+tag = "262"
+version = "26.2"
+macos_ua_version = "26.2"
+fetch_metadata = true
+macos = "MACOS_26_2"
+ios_ua_os = "18_7"
+ios = "IOS_26_2"
+
+[[safari]]
+tag = "263"
+version = "26.3"
+macos_ua_version = "26.3"
+fetch_metadata = true
+macos = "MACOS_26_3"
+ios_ua_os = "18_7"
+ios = "IOS_26_3"
+
+[[safari]]
+tag = "264"
+version = "26.4"
+macos_ua_version = "26.4"
+fetch_metadata = true
+macos = "MACOS_26_4"
+ios_ua_os = "18_7"
+ios = "IOS_26_4"
+
+[[safari]]
+tag = "265"
+version = "26.5"
+macos_ua_version = "26.5"
+fetch_metadata = true
+macos = "MACOS_26_5"
+ios_ua_os = "18_7"
+ios = "IOS_26_5"
+
+[[safari]]
+tag = "266"
+version = "26.6"
+macos_ua_version = "26.6.2"
+fetch_metadata = true
+macos = "MACOS_26"
+ios_ua_os = "18_7"
+ios = "derived(MACOS_26)"
+
+# macOS 27, iOS 27.
+[[safari]]
+tag = "270"
+version = "27.0"
+macos_ua_version = "27.0"
+fetch_metadata = true
+macos = "MACOS_27"
+ios_ua_os = "18_7"
+ios = "IOS_27"

@@ -23,10 +23,10 @@ pub struct Firefox;
 
 impl Firefox {
     /// Oldest supported Firefox major version.
-    pub const MIN_VERSION: u32 = 135;
+    pub const MIN_VERSION: u32 = super::releases::FIREFOX_VERSIONS.0;
 
     /// Newest supported Firefox major version.
-    pub const LATEST_VERSION: u32 = 158;
+    pub const LATEST_VERSION: u32 = super::releases::FIREFOX_VERSIONS.1;
 
     /// Operating systems Firefox profiles exist for.
     pub const PLATFORMS: &'static [Os] = &[Os::Windows, Os::MacOS, Os::Linux, Os::Android];

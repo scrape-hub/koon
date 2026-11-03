@@ -15,14 +15,7 @@ use super::{BrowserProfile, HeaderFamily, LanguageSource, Os, UiTable, table_ver
 /// is Brave 1.96).
 pub struct Brave;
 
-/// Every supported Brave release: the Chromium major it builds on (the profile's version), the last
-/// Brave release on it and its Chromium full version. Only the major is read: Brave reduces every
-/// full version to `{major}.0.0.0` on the wire; the other two columns are release-note provenance,
-/// kept so the exact Brave build this profile was captured from stays on record.
-pub(super) const BRAVE_CHROMIUM: &[(u32, &str, &str)] = &[
-    (153, "1.95.104", "153.0.8010.53"),
-    (154, "1.96.59", "154.0.8037.58"),
-];
+pub(super) use super::releases::BRAVE_CHROMIUM;
 
 /// The client hints Brave sends when an origin asks for them: the User-Agent ones without
 /// `Sec-CH-UA-Full-Version` and `Sec-CH-UA-Form-Factors`; no device, network or preference hints.

@@ -6,6 +6,8 @@ mod firefox;
 mod okhttp;
 mod opera;
 mod opera_mobile;
+#[rustfmt::skip]
+mod releases;
 mod safari;
 mod samsung;
 

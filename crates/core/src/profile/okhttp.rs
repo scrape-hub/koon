@@ -18,10 +18,10 @@ pub struct OkHttp;
 
 impl OkHttp {
     /// Oldest supported `OkHttp` major version.
-    pub const MIN_VERSION: u32 = 4;
+    pub const MIN_VERSION: u32 = super::releases::OKHTTP_VERSIONS.0;
 
     /// Newest supported `OkHttp` major version.
-    pub const LATEST_VERSION: u32 = 5;
+    pub const LATEST_VERSION: u32 = super::releases::OKHTTP_VERSIONS.1;
 
     /// Operating systems `OkHttp` profiles exist for: `OkHttp` impersonates Android apps.
     pub const PLATFORMS: &'static [Os] = &[Os::Android];

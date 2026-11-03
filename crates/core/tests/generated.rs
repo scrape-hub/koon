@@ -1,5 +1,6 @@
-//! The option docs and types of the bindings, generated from `koon_core::options::OPTIONS`.
-//! The test fails when a generated part is out of date; `KOON_BLESS=1` rewrites it.
+//! The option docs and types of the bindings, generated from `koon_core::options::OPTIONS`, and
+//! the release tables of the profiles, generated from `data/releases.toml`. The test fails when a
+//! generated part is out of date; `KOON_BLESS=1` rewrites it.
 
 use std::path::{Path, PathBuf};
 
@@ -679,9 +680,335 @@ fn r() -> Result<(), String> {
     )
 }
 
+// --- Release tables -----------------------------------------------------------------------------
+
+const RELEASES: &str = "crates/core/data/releases.toml";
+const GENERATED_FROM_RELEASES: &str = "// Generated from crates/core/data/releases.toml by \
+                                       crates/core/tests/generated.rs (KOON_BLESS=1); edit that \
+                                       file.\n";
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Releases {
+    chrome: Table<ChromeRow>,
+    edge: Table<EdgeRow>,
+    opera: Table<OperaRow>,
+    opera_mobile: Table<OperaMobileRow>,
+    brave: Table<BraveRow>,
+    samsung: Table<SamsungRow>,
+    firefox: Range,
+    okhttp: Range,
+    safari: Vec<SafariRow>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Table<T> {
+    source: String,
+    updated: toml::value::Datetime,
+    releases: Vec<T>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Range {
+    source: String,
+    updated: toml::value::Datetime,
+    min: u32,
+    latest: u32,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ChromeRow {
+    major: u32,
+    windows: String,
+    macos: String,
+    linux: String,
+    android: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EdgeRow {
+    major: u32,
+    full: String,
+    chromium: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OperaRow {
+    major: u32,
+    chromium: u32,
+    full: String,
+    chromium_full: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OperaMobileRow {
+    major: u32,
+    chromium: u32,
+    opera: u32,
+    full: String,
+    opera_full: String,
+    chromium_full: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BraveRow {
+    chromium: u32,
+    brave: String,
+    chromium_full: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SamsungRow {
+    major: u32,
+    chromium: u32,
+    full: String,
+    chromium_full: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SafariRow {
+    tag: String,
+    version: String,
+    macos_ua_version: String,
+    fetch_metadata: bool,
+    macos: String,
+    ios_ua_os: Option<String>,
+    ios: Option<String>,
+}
+
+/// Replaces the whole of `path` with `generated`; the error names the file when it differs and
+/// `KOON_BLESS` is not set.
+fn write_file(path: &str, generated: &str) -> Result<(), String> {
+    let file = repo().join(path);
+    let text = std::fs::read_to_string(&file).unwrap_or_default();
+    if text == generated {
+        return Ok(());
+    }
+    if std::env::var_os("KOON_BLESS").is_some() {
+        std::fs::write(&file, generated).map_err(|e| format!("{path}: {e}"))?;
+        return Ok(());
+    }
+    Err(format!("{path} is out of date"))
+}
+
+/// The versions of a table must ascend: the resolver takes the first and the last as the range.
+fn ascending(name: &str, versions: impl IntoIterator<Item = u32>) -> Result<(), String> {
+    let versions: Vec<u32> = versions.into_iter().collect();
+    if versions.is_empty() || versions.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err(format!("{RELEASES}: [{name}] must list ascending versions"));
+    }
+    Ok(())
+}
+
+fn table_doc(what: &str, source: &str, updated: &toml::value::Datetime) -> String {
+    format!("/// {what}. Source: {source}; updated {updated}.\n")
+}
+
+/// A release of `src/profile/safari/mod.rs`, or `derived(...)` of one.
+fn safari_release(value: &str) -> Result<(String, &str), String> {
+    let name = value
+        .strip_prefix("derived(")
+        .and_then(|rest| rest.strip_suffix(')'))
+        .unwrap_or(value);
+    let valid = !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_');
+    if !valid {
+        return Err(format!("{RELEASES}: '{value}' is no Safari release"));
+    }
+    Ok((value.to_string(), name))
+}
+
+fn releases() -> Result<(), String> {
+    let text =
+        std::fs::read_to_string(repo().join(RELEASES)).map_err(|e| format!("{RELEASES}: {e}"))?;
+    let data: Releases = toml::from_str(&text).map_err(|e| format!("{RELEASES}: {e}"))?;
+    ascending("chrome", data.chrome.releases.iter().map(|r| r.major))?;
+    ascending("edge", data.edge.releases.iter().map(|r| r.major))?;
+    ascending("opera", data.opera.releases.iter().map(|r| r.major))?;
+    ascending(
+        "opera_mobile",
+        data.opera_mobile.releases.iter().map(|r| r.major),
+    )?;
+    ascending("brave", data.brave.releases.iter().map(|r| r.chromium))?;
+    ascending("samsung", data.samsung.releases.iter().map(|r| r.major))?;
+    ascending("firefox", [data.firefox.min, data.firefox.latest])?;
+    ascending("okhttp", [data.okhttp.min, data.okhttp.latest])?;
+
+    let mut out = String::from(GENERATED_FROM_RELEASES);
+    let t = &data.chrome;
+    out.push('\n');
+    out.push_str(&table_doc(
+        "Chrome: the last Stable release of each major on Windows, macOS, Linux and Android",
+        &t.source,
+        &t.updated,
+    ));
+    out.push_str("pub(crate) const CHROME_FULL_VERSIONS: &[(u32, [&str; 4])] = &[\n");
+    for r in &t.releases {
+        out.push_str(&format!(
+            "    ({}, [\"{}\", \"{}\", \"{}\", \"{}\"]),\n",
+            r.major, r.windows, r.macos, r.linux, r.android
+        ));
+    }
+    out.push_str("];\n\n");
+
+    let t = &data.edge;
+    out.push_str(&table_doc(
+        "Edge: the last Stable release of each major, and the Chromium version its Chromium brand \
+         reports",
+        &t.source,
+        &t.updated,
+    ));
+    out.push_str("pub(crate) const EDGE_FULL_VERSIONS: &[(u32, &str, &str)] = &[\n");
+    for r in &t.releases {
+        out.push_str(&format!(
+            "    ({}, \"{}\", \"{}\"),\n",
+            r.major, r.full, r.chromium
+        ));
+    }
+    out.push_str("];\n\n");
+
+    let t = &data.opera;
+    out.push_str(&table_doc(
+        "Opera: its major, the Chromium major it builds on, and the full versions of both",
+        &t.source,
+        &t.updated,
+    ));
+    out.push_str("pub(crate) const OPERA_CHROMIUM: &[(u32, u32, &str, &str)] = &[\n");
+    for r in &t.releases {
+        out.push_str(&format!(
+            "    ({}, {}, \"{}\", \"{}\"),\n",
+            r.major, r.chromium, r.full, r.chromium_full
+        ));
+    }
+    out.push_str("];\n\n");
+
+    let t = &data.opera_mobile;
+    out.push_str(&table_doc(
+        "Opera for Android: its major, its Chromium major, the desktop Opera major its Opera brand \
+         reports, and the full versions of OperaMobile, Opera and Chromium",
+        &t.source,
+        &t.updated,
+    ));
+    out.push_str(
+        "pub(crate) const OPERA_MOBILE_CHROMIUM: &[(u32, u32, u32, &str, &str, &str)] = &[\n",
+    );
+    for r in &t.releases {
+        out.push_str(&format!(
+            "    ({}, {}, {}, \"{}\", \"{}\", \"{}\"),\n",
+            r.major, r.chromium, r.opera, r.full, r.opera_full, r.chromium_full
+        ));
+    }
+    out.push_str("];\n\n");
+
+    let t = &data.brave;
+    out.push_str(&table_doc(
+        "Brave: the Chromium major (the profile's version), the last Brave release on it and its \
+         Chromium full version",
+        &t.source,
+        &t.updated,
+    ));
+    out.push_str("pub(crate) const BRAVE_CHROMIUM: &[(u32, &str, &str)] = &[\n");
+    for r in &t.releases {
+        out.push_str(&format!(
+            "    ({}, \"{}\", \"{}\"),\n",
+            r.chromium, r.brave, r.chromium_full
+        ));
+    }
+    out.push_str("];\n\n");
+
+    let t = &data.samsung;
+    out.push_str(&table_doc(
+        "Samsung Internet: its major, the Chromium major it builds on, and the full versions of both",
+        &t.source,
+        &t.updated,
+    ));
+    out.push_str("pub(crate) const SAMSUNG_CHROMIUM: &[(u32, u32, &str, &str)] = &[\n");
+    for r in &t.releases {
+        out.push_str(&format!(
+            "    ({}, {}, \"{}\", \"{}\"),\n",
+            r.major, r.chromium, r.full, r.chromium_full
+        ));
+    }
+    out.push_str("];\n\n");
+
+    for (name, what, range) in [
+        (
+            "FIREFOX_VERSIONS",
+            "Firefox: the oldest and the newest major",
+            &data.firefox,
+        ),
+        (
+            "OKHTTP_VERSIONS",
+            "OkHttp: the oldest and the newest major",
+            &data.okhttp,
+        ),
+    ] {
+        out.push_str(&table_doc(what, &range.source, &range.updated));
+        out.push_str(&format!(
+            "pub(crate) const {name}: (u32, u32) = ({}, {});\n",
+            range.min, range.latest
+        ));
+    }
+    write_file("crates/core/src/profile/releases.rs", &out)?;
+
+    let mut names = std::collections::BTreeSet::new();
+    let mut entries = String::new();
+    let mut uses_derived = false;
+    for r in &data.safari {
+        let (macos, name) = safari_release(&r.macos)?;
+        names.insert(name.to_string());
+        uses_derived |= macos.starts_with("derived(");
+        let ios = match (&r.ios_ua_os, &r.ios) {
+            (Some(ua_os), Some(release)) => {
+                let (release, name) = safari_release(release)?;
+                names.insert(name.to_string());
+                uses_derived |= release.starts_with("derived(");
+                format!("Some(IosProfile {{ ua_os: \"{ua_os}\", release: {release} }})")
+            }
+            (None, None) => "None".to_string(),
+            _ => {
+                return Err(format!(
+                    "{RELEASES}: Safari {} needs both ios and ios_ua_os, or neither",
+                    r.version
+                ));
+            }
+        };
+        entries.push_str(&format!(
+            "    SafariVersion {{ tag: \"{}\", version: \"{}\", ios: {ios}, macos_ua_version: \"{}\", \
+             fetch_metadata: {}, macos: {macos} }},\n",
+            r.tag, r.version, r.macos_ua_version, r.fetch_metadata
+        ));
+    }
+    let mut imports: Vec<String> = vec!["IosProfile".into(), "SafariVersion".into()];
+    if uses_derived {
+        imports.push("derived".into());
+    }
+    imports.extend(names);
+    let mut safari = String::from(GENERATED_FROM_RELEASES);
+    safari.push_str(&format!("\nuse super::{{{}}};\n\n", imports.join(", ")));
+    safari.push_str(
+        "/// Every supported Safari version, oldest first: the resolver, its error messages and the \
+         CLI's profile listing read it.\npub const SAFARI_VERSIONS: &[SafariVersion] = &[\n",
+    );
+    safari.push_str(&entries);
+    safari.push_str("];\n");
+    write_file("crates/core/src/profile/safari/versions.rs", &safari)
+}
+
 #[test]
 fn generated_files_are_current() {
-    let stale: Vec<String> = [node(), python(), r()]
+    let stale: Vec<String> = [node(), python(), r(), releases()]
         .into_iter()
         .filter_map(Result::err)
         .collect();
