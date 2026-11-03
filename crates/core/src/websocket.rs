@@ -783,16 +783,22 @@ mod tests {
             ClosingBehavior::EndStreamWithClose
         );
         assert_eq!(chrome(155).close.linger, Duration::from_secs(2));
-        // Edge 153 and Opera run Chromium below 154.
+        // Edge 153 and Opera 136 run Chromium below 154, Opera 139 Chromium 155.
         assert_eq!(
             policy(&Edge::version(153, Os::Windows).unwrap())
                 .close
                 .behavior,
             ClosingBehavior::Wait
         );
-        let opera = policy(&Opera::latest());
+        let opera = policy(&Opera::version(136, Os::Windows).unwrap());
         assert_eq!(opera.over_h2, OverH2::ExistingConnection);
         assert_eq!(opera.close.behavior, ClosingBehavior::Wait);
+        assert_eq!(
+            policy(&Opera::version(139, Os::Windows).unwrap())
+                .close
+                .behavior,
+            ClosingBehavior::EndStreamWithClose
+        );
 
         let firefox = policy(&Firefox::latest());
         assert_eq!(firefox.over_h2, OverH2::OwnConnections);

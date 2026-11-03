@@ -66,6 +66,16 @@ const SOURCES: &[Source] = &[
         branch: "refs/branch-heads/8059",
         commit: "e24ae319d443797cc818accf6db294264d8c472b",
     },
+    Source {
+        chrome: 156,
+        branch: "refs/branch-heads/8078",
+        commit: "a62cf576ce2c9296130bb6dc22375f0199a26c55",
+    },
+    Source {
+        chrome: 157,
+        branch: "refs/branch-heads/8103",
+        commit: "fa6561b690e65baff66c7e62a612f106ba7dac0f",
+    },
 ];
 
 const STORE_DIR: &str = "net/data/ssl/chrome_root_store";

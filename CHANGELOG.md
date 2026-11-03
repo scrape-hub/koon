@@ -43,6 +43,8 @@ Rust only:
   `koon_verify()` and `koon_blocked_by()`, as in Node and Python.
 - Alpine Linux (musl, x64 and arm64) and Windows on arm64 packages for Node,
   Python and the CLI.
+- Profiles for Chrome 156 and 157, Firefox 159, Edge 155 and 156, Opera 137 to
+  139 and Brave on Chromium 155 and 156 (1.97, 1.98).
 
 ### Changed
 

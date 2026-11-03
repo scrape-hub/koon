@@ -42,44 +42,44 @@ covers = [
 [[reference]]
 id = "chromium-mldsa-trust-anchors"
 about = "Chrome 152+ and Opera 136+: ML-DSA signature algorithms and `trust_anchors`."
-source = "Chromium 152+ with trust_anchors (ML-DSA signature algorithms): real Chrome 153 and Opera 136 captures, Chrome 152 and 154 on Android; Chrome 155 from tls.browserleaks.com and a ClientHello capture"
-updated = 2026-09-28
+source = "Chromium 152+ with trust_anchors (ML-DSA signature algorithms): real Chrome 153 and Opera 136 captures, Chrome 152 and 154 on Android; Chrome 155 from tls.browserleaks.com and a ClientHello capture; Chrome 156.0.8078.80 on Windows and 156.0.8078.79 on Android, Opera 137-139 (Chromium 153-155) and Chrome for Testing 157.0.8103.15 without the field trial testing config (tls.browserleaks.com)"
+updated = 2026-11-03
 ja4 = "t13d1517h2_8daaf6152771_cb7bf5808d99"
 ja3n_hash = "bd4930bd9b000ee684830e44bab76fdf"
 akamai_hash = "52d84b11737d980aef856699f885ca86"
 akamai_text = "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p"
 server_padding = "chrome-server-padding"
 covers = [
-  { browser = "chrome", from = 152, to = 155, os = ["windows", "macos", "linux", "android"] },
-  { browser = "opera", from = 136, to = 136, os = ["windows", "macos", "linux"] },
+  { browser = "chrome", from = 152, to = 157, os = ["windows", "macos", "linux", "android"] },
+  { browser = "opera", from = 136, to = 139, os = ["windows", "macos", "linux"] },
 ]
 
 [[reference]]
 id = "chromium-mldsa"
 about = "Edge on Chromium 150+, Opera 134-135, Chrome 150-151 and Brave: ML-DSA without `trust_anchors`."
-source = "Chromium 150+ without trust_anchors (ML-DSA signature algorithms): real Opera 134-135 (JA4), Edge 152-154, Edge 153 and Chrome 150-151 on Android (JA4, JA3N, Akamai) captures; desktop Chrome 151 and Edge 151 stable (koon 0.8.1); Brave 1.95.104 and 1.96.59 on Windows, 1.96.59 on Android"
-updated = 2026-09-28
+source = "Chromium 150+ without trust_anchors (ML-DSA signature algorithms): real Opera 134-135 (JA4), Edge 152-154, Edge 153 and Chrome 150-151 on Android (JA4, JA3N, Akamai) captures; desktop Chrome 151 and Edge 151 stable (koon 0.8.1); Brave 1.95.104 and 1.96.59 on Windows, 1.96.59 on Android; Edge 156.0.4314.58, Brave 1.97.59 and 1.98.63 on Windows, 1.97.56 on Android (tls.browserleaks.com)"
+updated = 2026-11-03
 ja4 = "t13d1516h2_8daaf6152771_806a8c22fdea"
 ja3n_hash = "8e19337e7524d2573be54efb2b0784c9"
 akamai_hash = "52d84b11737d980aef856699f885ca86"
 akamai_text = "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p"
 covers = [
   { browser = "chrome", from = 150, to = 151, os = ["windows", "macos", "linux", "android"] },
-  { browser = "edge", from = 150, to = 154, os = ["windows", "macos", "android"] },
+  { browser = "edge", from = 150, to = 156, os = ["windows", "macos", "android"] },
   { browser = "opera", from = 134, to = 135, os = ["windows", "macos", "linux"] },
-  { browser = "brave", from = 153, to = 154, os = ["windows", "macos", "linux", "android"] },
+  { browser = "brave", from = 153, to = 156, os = ["windows", "macos", "linux", "android"] },
 ]
 
 [[reference]]
 id = "chrome-quic"
 about = "Chrome 153's QUIC `ClientHello`, also Opera 136's (Chromium 152)."
-source = "QUIC JA4 computed from the QUIC ClientHello of a real Chrome 153 (tests/quic_initial.rs); Chrome 154 only sorts its trust anchor IDs; Chrome 155 from quic.browserleaks.com and a QUIC capture; Chrome 154/155 and Opera 136.0.6008.52 on Linux and macOS from quic.browserleaks.com"
-updated = 2026-09-28
+source = "QUIC JA4 computed from the QUIC ClientHello of a real Chrome 153 (tests/quic_initial.rs); Chrome 154 only sorts its trust anchor IDs; Chrome 155 from quic.browserleaks.com and a QUIC capture; Chrome 154/155 and Opera 136.0.6008.52 on Linux and macOS from quic.browserleaks.com; Chrome 156 on Windows and Android, Opera 137-139 and Chrome for Testing 157.0.8103.15 from quic.browserleaks.com"
+updated = 2026-11-03
 quic_ja4 = "q13d0312h3_55b375c5d22e_178839b6cec1"
 server_padding = "chrome-quic-server-padding"
 covers = [
-  { browser = "chrome", from = 152, to = 155, os = ["windows", "macos", "linux", "android"] },
-  { browser = "opera", from = 136, to = 136, os = ["windows", "macos", "linux"] },
+  { browser = "chrome", from = 152, to = 157, os = ["windows", "macos", "linux", "android"] },
+  { browser = "opera", from = 136, to = 139, os = ["windows", "macos", "linux"] },
 ]
 
 [[reference]]
@@ -125,13 +125,13 @@ covers = [
 [[reference]]
 id = "chromium-quic-no-trust-anchors"
 about = "The QUIC `ClientHello` of Chromium 135+ without `trust_anchors`: Chrome 135-151, Edge, Brave and Opera for Android."
-source = "QUIC JA4 of the real Chrome 135, 140, 141, 149, 150 and 151 betas on Android 17, Edge 153 and 154 on Windows and macOS (154 also from quic.browserleaks.com), Edge 153 on Android and Brave 1.95.104 and 1.96.59 on Windows and 1.96.59 on Android; Opera for Android 102 sent it with pre_shared_key and early_data in its resumed hello (q13d0313h3_55b375c5d22e_226f3f127bbe), its full one was not captured"
-updated = 2026-09-28
+source = "QUIC JA4 of the real Chrome 135, 140, 141, 149, 150 and 151 betas on Android 17, Edge 153 and 154 on Windows and macOS (154 also from quic.browserleaks.com), Edge 153 on Android and Brave 1.95.104 and 1.96.59 on Windows and 1.96.59 on Android; Opera for Android 102 sent it with pre_shared_key and early_data in its resumed hello (q13d0313h3_55b375c5d22e_226f3f127bbe), its full one was not captured; Edge 156.0.4314.58, Brave 1.97.59 and 1.98.63 on Windows, 1.97.56 on Android (quic.browserleaks.com)"
+updated = 2026-11-03
 quic_ja4 = "q13d0311h3_55b375c5d22e_653d80c3fe9d"
 covers = [
   { browser = "chrome", from = 135, to = 151, os = ["windows", "macos", "linux", "android"] },
-  { browser = "edge", from = 153, to = 154, os = ["windows", "macos", "android"] },
-  { browser = "brave", from = 153, to = 154, os = ["windows", "macos", "linux", "android"] },
+  { browser = "edge", from = 153, to = 156, os = ["windows", "macos", "android"] },
+  { browser = "brave", from = 153, to = 156, os = ["windows", "macos", "linux", "android"] },
   { browser = "opera-mobile", from = 102, to = 102, os = ["android"] },
 ]
 
@@ -177,29 +177,29 @@ covers = [
 
 [[reference]]
 id = "firefox-156"
-about = "Firefox 156 to 158: no finite-field groups."
-source = "Firefox 156-158 (without ffdhe groups): real Firefox 156.0.1 captures; 157 and 158 from the 157.0 and 158.0b5 betas (ClientHello capture and tls.browserleaks.com)"
-updated = 2026-10-08
+about = "Firefox 156 to 159: no finite-field groups."
+source = "Firefox 156-159 (without ffdhe groups): real Firefox 156.0.1 and 159.0.1 captures; 157 and 158 from the 157.0 and 158.0b5 betas (ClientHello capture and tls.browserleaks.com)"
+updated = 2026-11-03
 ja4 = "t13d1517h2_8daaf6152771_3cbfd9057e0d"
 ja3n_hash = "f9c6a2c424206e61efb6c1a6325596b5"
 ja3_hash = "9d42e90b0225e779f03141ddcd699df2"
 akamai_hash = "6ea73faa8fc5aac76bded7bd238f6433"
 akamai_text = "1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s"
 covers = [
-  { browser = "firefox", from = 156, to = 158, os = ["windows", "macos", "linux"] },
+  { browser = "firefox", from = 156, to = 159, os = ["windows", "macos", "linux"] },
 ]
 
 [[reference]]
 id = "firefox-quic"
-about = "Firefox's QUIC `ClientHello` without ML-DSA (155, 157, 158; on Android 146 to 155, 157 and 158)."
-source = "QUIC JA4 of real Firefox 155.0.1, 157.0 beta and 158.0b5 QUIC ClientHellos (157 and 158 also from quic.browserleaks.com); on Android from the 146.0b9, 147.0b9, 150.0b10, 151.0b10, 153.0b13, 154.0b10, 155.0b5, 157.0b5 and 158.0b5 betas (quic.browserleaks.com)"
-updated = 2026-10-08
+about = "Firefox's QUIC `ClientHello` without ML-DSA (155, 157 to 159; on Android 146 to 155 and 157 to 159)."
+source = "QUIC JA4 of real Firefox 155.0.1, 157.0 beta, 158.0b5 and 159.0.1 QUIC ClientHellos (157 to 159 also from quic.browserleaks.com); on Android from the 146.0b9, 147.0b9, 150.0b10, 151.0b10, 153.0b13, 154.0b10, 155.0b5, 157.0b5 and 158.0b5 betas and 159.0 (quic.browserleaks.com)"
+updated = 2026-11-03
 quic_ja4 = "q13d0315h3_55b375c5d22e_dc5437974b47"
 covers = [
   { browser = "firefox", from = 155, to = 155, os = ["windows", "macos", "linux"] },
-  { browser = "firefox", from = 157, to = 158, os = ["windows", "macos", "linux"] },
+  { browser = "firefox", from = 157, to = 159, os = ["windows", "macos", "linux"] },
   { browser = "firefox", from = 146, to = 155, os = ["android"] },
-  { browser = "firefox", from = 157, to = 158, os = ["android"] },
+  { browser = "firefox", from = 157, to = 159, os = ["android"] },
 ]
 
 [[reference]]
@@ -271,16 +271,16 @@ covers = [
 
 [[reference]]
 id = "firefox-android-156"
-about = "Firefox 156 to 158 on Android: no finite-field groups, desktop Firefox 156's `ClientHello`."
-source = "Firefox 156-158 on Android (without ffdhe groups): real 156.0.1, 156.0b5, 157.0b5 and 158.0b5 on Android 17 (tls.browserleaks.com and ClientHello captures)"
-updated = 2026-10-08
+about = "Firefox 156 to 159 on Android: no finite-field groups, desktop Firefox 156's `ClientHello`."
+source = "Firefox 156-159 on Android (without ffdhe groups): real 156.0.1, 156.0b5, 157.0b5, 158.0b5 and 159.0 on Android 17 (tls.browserleaks.com and ClientHello captures)"
+updated = 2026-11-03
 ja4 = "t13d1517h2_8daaf6152771_3cbfd9057e0d"
 ja3n_hash = "f9c6a2c424206e61efb6c1a6325596b5"
 ja3_hash = "9d42e90b0225e779f03141ddcd699df2"
 akamai_hash = "41a06cadb1c6385e6d08c8d0dbbea818"
 akamai_text = "1:4096;2:0;4:32768;5:16384|12517377|0|m,p,a,s"
 covers = [
-  { browser = "firefox", from = 156, to = 158, os = ["android"] },
+  { browser = "firefox", from = 156, to = 159, os = ["android"] },
 ]
 
 [[reference]]

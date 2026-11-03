@@ -102,19 +102,49 @@ fn edge_profile(row: (u32, &'static str, &'static str), os: Os) -> BrowserProfil
         quic: Some(chromium_quic(&tls)),
         tls,
         http2: chrome_http2(),
-        headers: chromium_headers(ChromiumHeaders {
-            os,
-            chromium_major: major,
-            brand: "Microsoft Edge",
-            brand_major: major,
-            ua_product: &ua_product,
-        }),
+        headers: edge_headers(os, major, &ua_product),
     }
+}
+
+fn edge_headers(os: Os, major: u32, ua_product: &str) -> Vec<(String, String)> {
+    let mut headers = chromium_headers(ChromiumHeaders {
+        os,
+        chromium_major: major,
+        brand: "Microsoft Edge",
+        brand_major: major,
+        ua_product,
+    });
+    // Edge leaves JPEG XL off, which Chromium turns on from 155 (captured from Edge 156).
+    if let Some(accept) = headers.iter_mut().find(|(k, _)| k == "accept") {
+        accept.1 = accept.1.replace("image/jxl,", "");
+    }
+    headers
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Edge 156.0.4314.58 on Windows, captured: Chromium 156's Accept without `image/jxl`.
+    #[test]
+    fn edge_156_accepts_no_jpeg_xl() {
+        let accept = |profile: BrowserProfile| {
+            profile
+                .headers
+                .into_iter()
+                .find(|(k, _)| k == "accept")
+                .unwrap()
+                .1
+        };
+        assert_eq!(
+            accept(Edge::version(156, Os::Windows).unwrap()),
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+        );
+        assert!(
+            accept(crate::profile::Chrome::version(156, Os::Windows).unwrap())
+                .contains("image/jxl")
+        );
+    }
 
     /// Edge 153.0.4234.49 on Android (Pixel 9 Pro XL), captured.
     #[test]

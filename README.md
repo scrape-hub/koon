@@ -129,28 +129,28 @@ Match the language to the IP as well. koon asks for English pages unless you set
 
 | Browser | Versions | Platforms | Profiles |
 |---------|----------|-----------|----------|
-| Chrome | 131-155 | Windows, macOS, Linux, Android | 100 |
-| Firefox | 135-158 | Windows, macOS, Linux, Android | 96 |
+| Chrome | 131-157 | Windows, macOS, Linux, Android | 108 |
+| Firefox | 135-159 | Windows, macOS, Linux, Android | 100 |
 | Safari | 15.6-27.0 | macOS, iOS | 41 |
-| Edge | 131-154 | Windows, macOS, Android | 72 |
-| Opera | 124-136 | Windows, macOS, Linux | 39 |
+| Edge | 131-156 | Windows, macOS, Android | 78 |
+| Opera | 124-139 | Windows, macOS, Linux | 48 |
 | Opera Mobile | 102 | Android | 1 |
-| Brave | 153-154 (1.95, 1.96) | Windows, macOS, Linux, Android | 8 |
+| Brave | 153-156 (1.95 to 1.98) | Windows, macOS, Linux, Android | 16 |
 | Samsung Internet | 29-30 | Android | 2 |
 | OkHttp | 4, 5 | Android | 2 |
 
-**361 profiles** total. `koon --list-browsers`, `Koon.browsers()` (Node), `koon.browsers()` (Python) and `koon_browsers()` (R) list them all.
+**396 profiles** total. `koon --list-browsers`, `Koon.browsers()` (Node), `koon.browsers()` (Python) and `koon_browsers()` (R) list them all.
 
 ### Profile naming
 
-Format: `{browser}{version}{-os}`. All parts but the browser name are optional, dash included (`chrome154-macos` or `chrome154macos`). Omit the version for the latest of any browser. Without an OS, desktop browsers default to Windows except Safari (macOS); Brave is named by the Chromium version it reports (`brave154` = Brave 1.96).
+Format: `{browser}{version}{-os}`. All parts but the browser name are optional, dash included (`chrome154-macos` or `chrome154macos`). Omit the version for the latest of any browser. Without an OS, desktop browsers default to Windows except Safari (macOS); Brave is named by the Chromium version it reports (`brave156` = Brave 1.98).
 
 | Browser | Example profiles |
 |---------|-------------------|
-| Chrome, Firefox, Opera | `chrome155`, `-windows`, `-macos`, `-linux` |
-| Edge, Brave | `edge154`, `-windows`, `-macos` (Brave also `-linux`) |
+| Chrome, Firefox, Opera | `chrome157`, `-windows`, `-macos`, `-linux` |
+| Edge, Brave | `edge156`, `-windows`, `-macos` (Brave also `-linux`) |
 | Safari | `safari270-macos` |
-| Chrome/Firefox/Edge/Brave Mobile (Android) | `chrome-mobile155`, `firefox-mobile158`, `edge-mobile154`, `brave-mobile154` |
+| Chrome/Firefox/Edge/Brave Mobile (Android) | `chrome-mobile157`, `firefox-mobile159`, `edge-mobile156`, `brave-mobile156` |
 | Safari Mobile (iOS) | `safari-mobile270` |
 | Samsung Internet, Opera Mobile (Android) | `samsung30`, `opera-mobile102` |
 | OkHttp | `okhttp4`, `okhttp5` (`-android` suffix optional) |
@@ -745,8 +745,8 @@ async fn main() -> Result<(), koon_core::Error> {
 fingerprints of the real browsers. Each profile connects to
 [tls.browserleaks.com](https://tls.browserleaks.com/json) (tls.peet.ws if that
 fails), which reports the JA4, JA3N, JA3 and Akamai HTTP/2 fingerprint it sees.
-Where a QUIC reference exists (Chrome 134-155, Edge 153-154, Opera 136, Brave, Opera Mobile,
-Firefox 155-158 on the desktop and 146-158 on Android, and the Safari releases whose transport
+Where a QUIC reference exists (Chrome 134-157, Edge 153-156, Opera 136-139, Brave, Opera Mobile,
+Firefox 155-159 on the desktop and 146-159 on Android, and the Safari releases whose transport
 parameters were captured;
 Samsung Internet uses no HTTP/3), the
 check also goes over HTTP/3 to quic.browserleaks.com for the QUIC JA4. Every
@@ -754,9 +754,9 @@ field is compared with the value captured from the real browser.
 
 ```
 $ koon verify -b firefox
-firefox -> firefox158-windows: match
-  reference    firefox-156: Firefox 156-158 (without ffdhe groups): real Firefox 156.0.1 captures; 157 and 158 from the 157.0 and 158.0b5 betas (ClientHello capture and tls.browserleaks.com)
-  reference    firefox-quic: QUIC JA4 of real Firefox 155.0.1, 157.0 beta and 158.0b5 QUIC ClientHellos (157 and 158 also from quic.browserleaks.com)
+firefox -> firefox159-windows: match
+  reference    firefox-156: Firefox 156-159 (without ffdhe groups): real Firefox 156.0.1 and 159.0.1 captures; 157 and 158 from the 157.0 and 158.0b5 betas (ClientHello capture and tls.browserleaks.com)
+  reference    firefox-quic: QUIC JA4 of real Firefox 155.0.1, 157.0 beta, 158.0b5 and 159.0.1 QUIC ClientHellos (157 to 159 also from quic.browserleaks.com)
   service      https://tls.browserleaks.com/json
   http3        https://quic.browserleaks.com/?minify=1
   ja4          match        t13d1517h2_8daaf6152771_3cbfd9057e0d

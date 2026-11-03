@@ -27,9 +27,11 @@ pub(crate) const CHROME_FULL_VERSIONS: &[(u32, [&str; 4])] = &[
     (153, ["153.0.8010.55", "153.0.8010.55", "153.0.8010.52", "153.0.8010.53"]),
     (154, ["154.0.8037.100", "154.0.8037.100", "154.0.8037.97", "154.0.8037.127"]),
     (155, ["155.0.8059.86", "155.0.8059.86", "155.0.8059.84", "155.0.8059.88"]),
+    (156, ["156.0.8078.80", "156.0.8078.80", "156.0.8078.79", "156.0.8078.79"]),
+    (157, ["157.0.8103.27", "157.0.8103.26", "157.0.8103.15", "157.0.8103.30"]),
 ];
 
-/// Edge: the last Stable release of each major, and the Chromium version its Chromium brand reports. Source: edgeupdates.microsoft.com/api/products: the last Stable release of each major; Chromium version from a capture; updated 2026-09-28.
+/// Edge: the last Stable release of each major, and the Chromium version its Chromium brand reports. Source: edgeupdates.microsoft.com/api/products: the last Stable release of each major; Chromium version from a capture; updated 2026-11-03.
 pub(crate) const EDGE_FULL_VERSIONS: &[(u32, &str, &str)] = &[
     (131, "131.0.2903.147", "131.0.6778.266"),
     (132, "132.0.2957.178", "132.0.6834.197"),
@@ -55,6 +57,8 @@ pub(crate) const EDGE_FULL_VERSIONS: &[(u32, &str, &str)] = &[
     (152, "152.0.4191.96", "152.0.7977.85"),
     (153, "153.0.4234.48", "153.0.8010.53"),
     (154, "154.0.4258.37", "154.0.8037.58"),
+    (155, "155.0.4283.62", "155.0.8059.85"),
+    (156, "156.0.4314.58", "156.0.8078.80"),
 ];
 
 /// Opera: its major, the Chromium major it builds on, and the full versions of both. Source: get.geo.opera.com/pub/opera/desktop/: the last Stable release of each major; Chromium from Opera's changelog; updated 2026-11-03.
@@ -72,6 +76,9 @@ pub(crate) const OPERA_CHROMIUM: &[(u32, u32, &str, &str)] = &[
     (134, 150, "134.0.5954.66", "150.0.7871.212"),
     (135, 151, "135.0.5973.142", "151.0.7922.170"),
     (136, 152, "136.0.6008.80", "152.0.7977.134"),
+    (137, 153, "137.0.6036.63", "153.0.8010.55"),
+    (138, 154, "138.0.6044.24", "154.0.8037.99"),
+    (139, 155, "139.0.6053.22", "155.0.8059.85"),
 ];
 
 /// Opera for Android: its major, its Chromium major, the desktop Opera major its Opera brand reports, and the full versions of OperaMobile, Opera and Chromium. Source: a capture of the release on Android; updated 2026-09-28.
@@ -83,6 +90,8 @@ pub(crate) const OPERA_MOBILE_CHROMIUM: &[(u32, u32, u32, &str, &str, &str)] = &
 pub(crate) const BRAVE_CHROMIUM: &[(u32, &str, &str)] = &[
     (153, "1.95.104", "153.0.8010.53"),
     (154, "1.96.62", "154.0.8037.98"),
+    (155, "1.97.59", "155.0.8059.85"),
+    (156, "1.98.63", "156.0.8078.80"),
 ];
 
 /// Samsung Internet: its major, the Chromium major it builds on, and the full versions of both. Source: a capture of the release on a Galaxy A33 5G; Chromium version from libterrace.so; updated 2026-09-28.
@@ -91,7 +100,7 @@ pub(crate) const SAMSUNG_CHROMIUM: &[(u32, u32, &str, &str)] = &[
     (30, 143, "30.0.2.30", "143.0.7499.194"),
 ];
 
-/// Firefox: the oldest and the newest major. Source: product-details.mozilla.org/1.0/firefox_versions.json (LATEST_FIREFOX_VERSION); updated 2026-10-08.
-pub(crate) const FIREFOX_VERSIONS: (u32, u32) = (135, 158);
+/// Firefox: the oldest and the newest major. Source: product-details.mozilla.org/1.0/firefox_versions.json (LATEST_FIREFOX_VERSION); updated 2026-11-03.
+pub(crate) const FIREFOX_VERSIONS: (u32, u32) = (135, 159);
 /// OkHttp: the oldest and the newest major. Source: square.github.io/okhttp/changelogs (major versions); updated 2026-09-28.
 pub(crate) const OKHTTP_VERSIONS: (u32, u32) = (4, 5);
