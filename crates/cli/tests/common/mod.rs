@@ -37,7 +37,9 @@ fn handle<R>(stream: TcpStream, route: &R)
 where
     R: Fn(&str, &str, &str, &[u8]) -> Answer,
 {
-    let mut reader = BufReader::new(stream.try_clone().unwrap());
+    // One handle: on Windows, closing a `try_clone` duplicate reset some connections that still had
+    // response data queued, and the client lost what it had not read yet.
+    let mut reader = BufReader::new(&stream);
     let mut request_line = String::new();
     if reader.read_line(&mut request_line).unwrap_or(0) == 0 {
         return;
@@ -78,7 +80,8 @@ where
         "content-length: {}\r\nconnection: close\r\n\r\n",
         payload.len()
     ));
-    let mut stream = stream;
+    drop(reader);
+    let mut stream = &stream;
     let _ = stream.write_all(response.as_bytes());
     if method != "HEAD" {
         let _ = stream.write_all(&payload);
