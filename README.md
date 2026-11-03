@@ -837,6 +837,7 @@ proxy takes a profile the same way (`koon proxy --profile`).
 | `quic` | Optional; without it the profile does not use HTTP/3. The QUIC stack whose wire behaviour it follows (`chromium`, `neqo` or `apple`), transport parameters, HTTP/3 SETTINGS and an optional QUIC ClientHello (`tls`) |
 | `headers` | The headers of a navigation and their values |
 | `header_family` | Optional: `chromium`, `firefox`, `safari`, `okhttp` or `other`, whose header order and browser rules requests follow; detected from the headers when missing |
+| `multipart` | Optional: `webkit`, `gecko`, `okhttp4` or `okhttp5`, how the client encodes multipart bodies; follows `header_family` when missing |
 | `ua_client_hints` | Optional, for Chromium profiles: the high-entropy client hint values (`full_version`, `full_version_list`, `platform_version`, `architecture`, `bitness`, `model`, `wow64`, `form_factors`) and the device's `device_memory_mib`, `device_pixel_ratio` and `viewport_px` (`[width, height]` in device pixels), sent when a site asks for them |
 
 The optional `http2` keys reproduce a browser's frame layout; a key left out
