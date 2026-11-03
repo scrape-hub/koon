@@ -83,7 +83,16 @@ jobs:
 
   # ─── Node.js binary (Windows x64) ───────────────────────────────────
   build-node-windows:
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - runner: windows-latest
+            triple: x86_64-pc-windows-msvc
+            arch: x64
+          - runner: windows-11-arm
+            triple: aarch64-pc-windows-msvc
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -92,7 +101,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-pc-windows-msvc
+          targets: ${{ matrix.triple }}
 
       - name: Install Go
         uses: actions/setup-go@v7
@@ -100,21 +109,23 @@ jobs:
           go-version: stable
 
       - uses: ./.github/actions/setup-windows
+        with:
+          arch: ${{ matrix.arch }}
 
       - name: Build
-        run: cargo build --release -p koon-node --target x86_64-pc-windows-msvc
+        run: cargo build --release -p koon-node --target ${{ matrix.triple }}
 
       - name: Rename node binary
         shell: bash
         run: |
-          cp "target/x86_64-pc-windows-msvc/release/koon_node.dll" \
-             "crates/node/koon.win32-x64-msvc.node"
+          cp "target/${{ matrix.triple }}/release/koon_node.dll" \
+             "crates/node/koon.win32-${{ matrix.arch }}-msvc.node"
 
       - name: Upload node artifact
         uses: actions/upload-artifact@v7
         with:
-          name: node-x86_64-pc-windows-msvc
-          path: crates/node/koon.win32-x64-msvc.node
+          name: node-${{ matrix.triple }}
+          path: crates/node/koon.win32-${{ matrix.arch }}-msvc.node
 
   # ─── Node.js binary (Linux x64 and arm64) ───────────────────────────
   build-node-linux:
@@ -146,6 +157,49 @@ jobs:
         with:
           name: node-${{ matrix.triple }}
           path: crates/node/koon.linux-${{ matrix.arch }}-gnu.node
+
+  # ─── Node.js binary and CLI (Linux x64 and arm64, musl) ───────────
+  # A Node addon links musl dynamically (crt-static off), and so does the CLI
+  # of the same build: both run where musl is the C library, as on Alpine.
+  build-linux-musl:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            triple: x86_64-unknown-linux-musl
+            arch: x64
+          - runner: ubuntu-24.04-arm
+            triple: aarch64-unknown-linux-musl
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: cargo build in Alpine
+        run: |
+          docker run --rm -v "$PWD":/io -w /io rust:1-alpine sh -euc '
+            apk add -q clang-dev cmake make g++ go perl linux-headers git
+            RUSTFLAGS="-C target-feature=-crt-static" cargo build --release -p koon-node -p koon-cli
+          '
+
+      - name: Rename binaries
+        run: |
+          cp target/release/libkoon_node.so "crates/node/koon.linux-${{ matrix.arch }}-musl.node"
+          cp target/release/koon "koon-linux-${{ matrix.arch }}-musl"
+
+      - name: Upload node artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: node-${{ matrix.triple }}
+          path: crates/node/koon.linux-${{ matrix.arch }}-musl.node
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: cli-${{ matrix.triple }}
+          path: koon-linux-${{ matrix.arch }}-musl
 
   # ─── Node.js binary (macOS arm64 / Apple Silicon) ──────────────────
   build-node-macos-arm64:
@@ -214,7 +268,16 @@ jobs:
   # ─── Python wheel (Windows x64) ─────────────────────────────────────
   build-python-windows:
     needs: licenses
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - runner: windows-latest
+            triple: x86_64-pc-windows-msvc
+            arch: x64
+          - runner: windows-11-arm
+            triple: aarch64-pc-windows-msvc
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -227,6 +290,8 @@ jobs:
           path: crates/python/python/koon/
 
       - uses: ./.github/actions/setup-windows
+        with:
+          arch: ${{ matrix.arch }}
 
       - name: Install Go
         uses: actions/setup-go@v7
@@ -245,13 +310,13 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
-          target: x86_64-pc-windows-msvc
+          target: ${{ matrix.triple }}
           args: --release --out dist --find-interpreter --manifest-path crates/python/Cargo.toml
 
       - name: Upload wheels
         uses: actions/upload-artifact@v7
         with:
-          name: wheels-x86_64-pc-windows-msvc
+          name: wheels-${{ matrix.triple }}
           path: dist/*.whl
 
   # ─── Python wheel (Linux x64 and arm64, manylinux) ──────────────────
@@ -264,10 +329,22 @@ jobs:
             target: x86_64
             triple: x86_64-unknown-linux-gnu
             go-arch: amd64
+            manylinux: auto
           - runner: ubuntu-24.04-arm
             target: aarch64
             triple: aarch64-unknown-linux-gnu
             go-arch: arm64
+            manylinux: auto
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            triple: x86_64-unknown-linux-musl
+            go-arch: amd64
+            manylinux: musllinux_1_2
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            triple: aarch64-unknown-linux-musl
+            go-arch: arm64
+            manylinux: musllinux_1_2
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
@@ -291,10 +368,12 @@ jobs:
               source /opt/rh/llvm-toolset-7.0/enable 2>/dev/null || true
             elif command -v apt-get &>/dev/null; then
               apt-get update && apt-get install -y libclang-dev
+            elif command -v apk &>/dev/null; then
+              apk add -q clang-dev
             fi
             curl -sL https://go.dev/dl/go1.24.1.linux-${{ matrix.go-arch }}.tar.gz | tar -C /usr/local -xzf -
             export PATH=$PATH:/usr/local/go/bin
-          manylinux: auto
+          manylinux: ${{ matrix.manylinux }}
 
       - name: Upload wheels
         uses: actions/upload-artifact@v7
@@ -386,7 +465,16 @@ jobs:
 
   # ─── CLI binary (Windows x64) ──────────────────────────────────────
   build-cli-windows:
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - runner: windows-latest
+            triple: x86_64-pc-windows-msvc
+            arch: x64
+          - runner: windows-11-arm
+            triple: aarch64-pc-windows-msvc
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -395,7 +483,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-pc-windows-msvc
+          targets: ${{ matrix.triple }}
 
       - name: Install Go
         uses: actions/setup-go@v7
@@ -403,19 +491,21 @@ jobs:
           go-version: stable
 
       - uses: ./.github/actions/setup-windows
+        with:
+          arch: ${{ matrix.arch }}
 
       - name: Build
-        run: cargo build --release -p koon-cli --target x86_64-pc-windows-msvc
+        run: cargo build --release -p koon-cli --target ${{ matrix.triple }}
 
       - name: Rename CLI binary
         shell: bash
-        run: cp "target/x86_64-pc-windows-msvc/release/koon.exe" koon-windows-x64.exe
+        run: cp "target/${{ matrix.triple }}/release/koon.exe" koon-windows-${{ matrix.arch }}.exe
 
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v7
         with:
-          name: cli-x86_64-pc-windows-msvc
-          path: koon-windows-x64.exe
+          name: cli-${{ matrix.triple }}
+          path: koon-windows-${{ matrix.arch }}.exe
 
   # ─── CLI binary (Linux x64 and arm64) ─────────────────────────────
   build-cli-linux:
@@ -637,32 +727,46 @@ jobs:
 
   # ─── Install test: the built packages as users install them ────────
   smoke:
-    needs: [build-node-windows, build-node-linux, build-node-macos-arm64, build-node-macos-x64, build-python-windows, build-python-linux, build-python-macos-arm64, build-python-macos-x64, build-cli-windows, build-cli-linux, build-cli-macos-arm64, build-cli-macos-x64]
+    needs: [build-node-windows, build-node-linux, build-linux-musl, build-node-macos-arm64, build-node-macos-x64, build-python-windows, build-python-linux, build-python-macos-arm64, build-python-macos-x64, build-cli-windows, build-cli-linux, build-cli-macos-arm64, build-cli-macos-x64]
     strategy:
       fail-fast: false
       matrix:
         include:
           - runner: ubuntu-latest
             node: linux-x64-gnu
-            wheel: x86_64
+            wheel: manylinux*_x86_64
             cli: koon-linux-x64
             images: node:22 node:24 python:3.11-slim python:3.15-slim rockylinux:8
           - runner: ubuntu-24.04-arm
             node: linux-arm64-gnu
-            wheel: aarch64
+            wheel: manylinux*_aarch64
             cli: koon-linux-arm64
             images: node:22 node:24 python:3.11-slim python:3.15-slim rockylinux:8
+          - runner: ubuntu-latest
+            node: linux-x64-musl
+            wheel: musllinux_1_2_x86_64
+            cli: koon-linux-x64-musl
+            images: node:22-alpine node:24-alpine python:3.11-alpine python:3.15-alpine
+          - runner: ubuntu-24.04-arm
+            node: linux-arm64-musl
+            wheel: musllinux_1_2_aarch64
+            cli: koon-linux-arm64-musl
+            images: node:22-alpine node:24-alpine python:3.11-alpine python:3.15-alpine
           - runner: windows-latest
             node: win32-x64-msvc
             wheel: win_amd64
             cli: koon-windows-x64.exe
+          - runner: windows-11-arm
+            node: win32-arm64-msvc
+            wheel: win_arm64
+            cli: koon-windows-arm64.exe
           - runner: macos-latest
             node: darwin-arm64
-            wheel: arm64
+            wheel: macosx*_arm64
             cli: koon-macos-arm64
           - runner: macos-15-intel
             node: darwin-x64
-            wheel: x86_64
+            wheel: macosx*_x86_64
             cli: koon-macos-x64
     runs-on: ${{ matrix.runner }}
     defaults:
@@ -689,7 +793,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install and run
-        run: bash .github/smoke/run.sh artifacts ${{ matrix.node }} ${{ matrix.wheel }} ${{ matrix.cli }} ${{ matrix.images }}
+        run: bash .github/smoke/run.sh artifacts ${{ matrix.node }} '${{ matrix.wheel }}' ${{ matrix.cli }} ${{ matrix.images }}
 
       - uses: actions/setup-python@v7
         if: ${{ !matrix.images }}
@@ -698,11 +802,11 @@ jobs:
 
       - name: Install and run on free-threaded Python
         if: ${{ !matrix.images }}
-        run: ONLY=python bash .github/smoke/run.sh artifacts ${{ matrix.node }} ${{ matrix.wheel }} ${{ matrix.cli }}
+        run: ONLY=python bash .github/smoke/run.sh artifacts ${{ matrix.node }} '${{ matrix.wheel }}' ${{ matrix.cli }}
 
   # ─── Publish to npm ─────────────────────────────────────────────────
   publish-npm:
-    needs: [licenses, build-node-windows, build-node-linux, build-node-macos-arm64, build-node-macos-x64, smoke]
+    needs: [licenses, build-node-windows, build-node-linux, build-linux-musl, build-node-macos-arm64, build-node-macos-x64, smoke]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     # Trusted publishing: npm mints a short-lived credential from the OIDC token
@@ -747,11 +851,9 @@ jobs:
 
       - name: Publish platform packages
         run: |
-          cp artifacts/koon.win32-x64-msvc.node crates/node/npm/win32-x64-msvc/
-          cp artifacts/koon.linux-x64-gnu.node crates/node/npm/linux-x64-gnu/
-          cp artifacts/koon.linux-arm64-gnu.node crates/node/npm/linux-arm64-gnu/
-          cp artifacts/koon.darwin-arm64.node crates/node/npm/darwin-arm64/
-          cp artifacts/koon.darwin-x64.node crates/node/npm/darwin-x64/
+          for dir in crates/node/npm/*/; do
+            cp "artifacts/koon.$(basename "$dir").node" "$dir"
+          done
           for dir in crates/node/npm/*/; do
             pkg=$(node -p "const p = require('./$dir/package.json'); p.name + '@' + p.version")
             if [ -n "$(npm view "$pkg" version 2>/dev/null)" ]; then
@@ -813,7 +915,7 @@ jobs:
 
   # ─── GitHub Release with binaries ───────────────────────────────────
   publish-github:
-    needs: [licenses, build-node-windows, build-node-linux, build-node-macos-arm64, build-node-macos-x64, build-python-windows, build-python-linux, build-python-macos-arm64, build-python-macos-x64, build-cli-windows, build-cli-linux, build-cli-macos-arm64, build-cli-macos-x64, build-r-windows, build-r-macos, sdist, smoke]
+    needs: [licenses, build-node-windows, build-node-linux, build-linux-musl, build-node-macos-arm64, build-node-macos-x64, build-python-windows, build-python-linux, build-python-macos-arm64, build-python-macos-x64, build-cli-windows, build-cli-linux, build-cli-macos-arm64, build-cli-macos-x64, build-r-windows, build-r-macos, sdist, smoke]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     permissions:

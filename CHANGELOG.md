@@ -40,6 +40,8 @@ Rust only:
 - R: `$post_multipart()`, `$request_streaming()`, `$websocket()`,
   `$save_session_to_file()`, `$load_session_from_file()`, `KoonProxy$start()`,
   `koon_verify()` and `koon_blocked_by()`, as in Node and Python.
+- Alpine Linux (musl, x64 and arm64) and Windows on arm64 packages for Node,
+  Python and the CLI.
 
 ### Changed
 

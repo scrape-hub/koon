@@ -1,23 +1,30 @@
 name: Setup Windows MSVC
-description: Configure VS Enterprise vcvars64, linker override, and NASM for boring2/BoringSSL builds
+description: Configure the VS developer environment and linker for the target architecture, and the assembler BoringSSL needs (NASM on x64, clang-cl on arm64)
+
+inputs:
+  arch:
+    description: Target architecture, x64 or arm64
+    default: x64
 
 runs:
   using: composite
   steps:
-    - name: Setup MSVC Enterprise
+    - name: Setup MSVC
       shell: pwsh
+      env:
+        ARCH: ${{ inputs.arch }}
       run: |
-        $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
-          -products 'Microsoft.VisualStudio.Product.Enterprise' `
-          -latest -property installationPath
-        if (-not $vsPath) { throw "VS Enterprise not found" }
+        $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+        $vsPath = & $vswhere -products 'Microsoft.VisualStudio.Product.Enterprise' -latest -property installationPath
+        if (-not $vsPath) { $vsPath = & $vswhere -products * -latest -property installationPath }
+        if (-not $vsPath) { throw "Visual Studio not found" }
 
         $before = @{}
         cmd /c set 2>$null | ForEach-Object {
           if ($_ -match '^([^=]+)=(.*)$') { $before[$matches[1]] = $matches[2] }
         }
 
-        $vcvars = Join-Path $vsPath 'VC\Auxiliary\Build\vcvars64.bat'
+        $vcvars = Join-Path $vsPath ("VC\Auxiliary\Build\" + $(if ($env:ARCH -eq 'arm64') { 'vcvarsarm64.bat' } else { 'vcvars64.bat' }))
         cmd /c "`"$vcvars`" >nul 2>&1 && set" | ForEach-Object {
           if ($_ -match '^([^=]+)=(.*)$') {
             $k = $matches[1]; $v = $matches[2]
@@ -34,12 +41,35 @@ runs:
 
         $toolsDir = Get-ChildItem "$vsPath\VC\Tools\MSVC" -Directory |
           Sort-Object Name -Descending | Select-Object -First 1
-        $linker = Join-Path $toolsDir.FullName 'bin\Hostx64\x64\link.exe'
-        echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$linker" >> $env:GITHUB_ENV
-        Write-Host "VS Enterprise: $vsPath"
+        if ($env:ARCH -eq 'arm64') {
+          $linker = Join-Path $toolsDir.FullName 'bin\Hostarm64\arm64\link.exe'
+          echo "CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER=$linker" >> $env:GITHUB_ENV
+        } else {
+          $linker = Join-Path $toolsDir.FullName 'bin\Hostx64\x64\link.exe'
+          echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$linker" >> $env:GITHUB_ENV
+        }
+        Write-Host "Visual Studio: $vsPath"
         Write-Host "Linker: $linker (exists: $(Test-Path $linker))"
 
     - name: Install NASM
+      if: inputs.arch == 'x64'
       uses: ilammy/setup-nasm@v1
       with:
         version: "3.02"
+
+    # BoringSSL's arm64 assembly is in GNU syntax, which clang-cl assembles and MSVC does not;
+    # bindgen needs libclang from the same LLVM.
+    - name: Use clang-cl
+      if: inputs.arch == 'arm64'
+      shell: pwsh
+      run: |
+        $llvm = "${env:ProgramFiles}\LLVM\bin"
+        if (-not (Test-Path "$llvm\clang-cl.exe")) {
+          choco install llvm -y --no-progress
+        }
+        if (-not (Test-Path "$llvm\clang-cl.exe")) { throw "clang-cl not found in $llvm" }
+        echo $llvm >> $env:GITHUB_PATH
+        echo "CC=clang-cl" >> $env:GITHUB_ENV
+        echo "CXX=clang-cl" >> $env:GITHUB_ENV
+        echo "LIBCLANG_PATH=$llvm" >> $env:GITHUB_ENV
+        & "$llvm\clang-cl.exe" --version

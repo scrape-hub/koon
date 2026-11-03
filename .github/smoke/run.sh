@@ -4,7 +4,8 @@
 # (ONLY=python: just the Python test, for a second interpreter).
 #
 # usage: run.sh <artifacts dir> <npm platform> <wheel platform> <CLI binary> [docker images...]
-#   e.g. run.sh artifacts linux-x64-gnu x86_64 koon-linux-x64 node:22 python:3.11-slim
+#   e.g. run.sh artifacts linux-x64-gnu 'manylinux*_x86_64' koon-linux-x64 node:22 python:3.11-slim
+# The wheel platform is a glob of the platform tag; the artifacts hold every platform's wheels.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 artifacts=$(cd "$1" && pwd)
@@ -22,7 +23,8 @@ printf ok > "$work/www/ok"
 cp "$artifacts/koon.$platform.node" "crates/node/npm/$platform/"
 (cd "crates/node/npm/$platform" && npm pack --silent --pack-destination "$work" >/dev/null)
 (cd crates/node && npm pack --silent --pack-destination "$work" >/dev/null)
-cp "$here/node.cjs" "$here/python.py" "$artifacts"/*"$wheel_platform"*.whl "$artifacts/$cli" "$work/"
+# shellcheck disable=SC2086 # the wheel platform is a glob
+cp "$here/node.cjs" "$here/python.py" "$artifacts"/*-$wheel_platform.whl "$artifacts/$cli" "$work/"
 chmod +x "$work/$cli"
 ls "$work"
 

@@ -1,30 +1,37 @@
 'use strict';
 
 const { platform, arch } = process;
+
+// Linux binaries come for glibc and for musl (Alpine): ldd names its libc, and
+// Node's report has a glibc version only on glibc.
+function linuxLibc() {
+  try {
+    if (require('fs').readFileSync('/usr/bin/ldd', 'utf8').includes('musl')) return 'musl';
+  } catch {}
+  try {
+    return process.report.getReport().header.glibcVersionRuntime ? 'gnu' : 'musl';
+  } catch {
+    return 'gnu';
+  }
+}
+
+const platforms = {
+  'win32-x64': 'win32-x64-msvc',
+  'win32-arm64': 'win32-arm64-msvc',
+  'linux-x64': `linux-x64-${platform === 'linux' ? linuxLibc() : 'gnu'}`,
+  'linux-arm64': `linux-arm64-${platform === 'linux' ? linuxLibc() : 'gnu'}`,
+  'darwin-x64': 'darwin-x64',
+  'darwin-arm64': 'darwin-arm64',
+};
+
 const platformArch = `${platform}-${arch}`;
-
-const packages = {
-  'win32-x64': '@koonjs/win32-x64-msvc',
-  'linux-x64': '@koonjs/linux-x64-gnu',
-  'linux-arm64': '@koonjs/linux-arm64-gnu',
-  'darwin-x64': '@koonjs/darwin-x64',
-  'darwin-arm64': '@koonjs/darwin-arm64',
-};
-
-const localFiles = {
-  'win32-x64': './koon.win32-x64-msvc.node',
-  'linux-x64': './koon.linux-x64-gnu.node',
-  'linux-arm64': './koon.linux-arm64-gnu.node',
-  'darwin-x64': './koon.darwin-x64.node',
-  'darwin-arm64': './koon.darwin-arm64.node',
-};
-
-const localFile = localFiles[platformArch];
-const pkg = packages[platformArch];
+const target = platforms[platformArch];
+const localFile = target && `./koon.${target}.node`;
+const pkg = target && `@koonjs/${target}`;
 if (!localFile) {
   throw new Error(
     `koon: unsupported platform ${platformArch}. ` +
-      `Supported: ${Object.keys(localFiles).join(', ')}`
+      `Supported: ${Object.keys(platforms).join(', ')}`
   );
 }
 
