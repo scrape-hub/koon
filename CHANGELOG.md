@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-04
+
 ### Breaking changes
 
 - Python 3.9 and 3.10 are no longer supported; pip installs 1.2.2 there.
