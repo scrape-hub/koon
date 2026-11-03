@@ -1280,7 +1280,7 @@ fn test_okhttp_plain_http_through_proxy() {
         client_hints: None,
         accept_ch_frame: None,
         restarted: false,
-        redirect_chain: &[],
+        context: None,
     });
     assert_eq!(
         names(&h),

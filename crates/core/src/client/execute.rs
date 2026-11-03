@@ -263,6 +263,7 @@ const H1_CONNECTIONS_PER_HOST: usize = 6;
 /// One hop's request as it goes out, with the jar's cookies of the moment.
 struct Outgoing<'a> {
     hop: &'a Hop,
+    context: &'a headers::RequestContext,
     cookie: Option<&'a str>,
     /// A Critical-CH restarted the request (see [`HeaderInput::restarted`]).
     restarted: bool,
@@ -498,19 +499,26 @@ impl super::Client {
     ) -> Result<HopOutcome, ExchangeError> {
         self.fire_on_request(options, hop.method.as_str(), &hop.url)
             .map_err(ExchangeError::Invalid)?;
+        let (client, request) = match &hop.source {
+            HeaderSource::Raw(raw) => (&[][..], raw.as_slice()),
+            HeaderSource::Profile => (&hop.client_headers[..], &hop.request_headers[..]),
+        };
+        let context = headers::RequestContext::new(
+            headers::Family::of(&self.profile),
+            &hop.method,
+            &hop.url,
+            client,
+            request,
+            &hop.redirected_from,
+            None,
+        );
         let cookie_context = self.cookie_jar.is_some().then(|| {
-            let (client, request) = match &hop.source {
-                HeaderSource::Raw(raw) => (&[][..], raw.as_slice()),
-                HeaderSource::Profile => (&hop.client_headers[..], &hop.request_headers[..]),
-            };
             headers::cookie_context(
                 headers::cookie_rules(&self.profile),
+                &context,
                 &hop.method,
                 &hop.url,
-                client,
-                request,
                 hop.cross_site_redirect,
-                None,
             )
         });
         let cookie = self
@@ -525,6 +533,7 @@ impl super::Client {
             .exchange(
                 &Outgoing {
                     hop,
+                    context: &context,
                     cookie: cookie.as_deref(),
                     restarted: !restarted.is_empty(),
                 },
@@ -550,8 +559,7 @@ impl super::Client {
         // took (`Hop::replay` then returns `None`) can't go out again, so the response is just
         // returned as final instead of failing: the same rule a redirect already applies, and what
         // a browser does too (it can't resend a consumed body either).
-        let navigation = matches!(hop.source, HeaderSource::Profile)
-            && headers::builds_navigation(&hop.method, &hop.client_headers, &hop.request_headers);
+        let navigation = matches!(hop.source, HeaderSource::Profile) && context.navigation();
         if navigation {
             if let Some(origin) = self
                 .learn_client_hints(&hop.url, &parts, restarted)
@@ -1055,7 +1063,7 @@ impl super::Client {
                     client_hints: Some(&self.client_hints),
                     accept_ch_frame: info.accept_ch_for(&super::client_hints::origin_of(&hop.url)),
                     restarted: out.restarted,
-                    redirect_chain: &hop.redirected_from,
+                    context: Some(out.context),
                 });
                 if length == Length::Unknown {
                     unknown_length(&mut headers, protocol);

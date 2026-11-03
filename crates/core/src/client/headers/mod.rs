@@ -3,6 +3,7 @@
 //! keeping every header at the real browser's position. Output: an ordered list with wire casing
 //! (browser casing on HTTP/1.1, lowercase on HTTP/2 and HTTP/3).
 
+mod context;
 mod fetch_metadata;
 mod order;
 mod order_tables;
@@ -17,15 +18,14 @@ use http::{Method, Uri};
 use super::client_hints::{self, ClientHintsState};
 use crate::profile::BrowserProfile;
 pub use crate::profile::HeaderFamily as Family;
-use fetch_metadata::{
-    apply_insecure_context, apply_mode, detect_mode, fetch_site, serialized_origin,
-};
-pub use fetch_metadata::{builds_navigation, is_navigation, is_potentially_trustworthy};
+pub use context::RequestContext;
+use fetch_metadata::{apply_insecure_context, apply_mode};
 pub(crate) use fetch_metadata::{cookie_context, cookie_rules};
+pub use fetch_metadata::{is_navigation, is_potentially_trustworthy};
 pub use order::host_header;
 use order::{finalize_http1, finalize_multiplexed, order_headers, safari_order, sort_into};
 pub use util::header_value;
-use util::{content_length, cookie_header, is_get_or_head, merge_caller_headers, page_url, remove};
+use util::{content_length, cookie_header, merge_caller_headers, remove};
 pub use websocket::{build_websocket, build_websocket_h2};
 
 impl Family {
@@ -89,8 +89,9 @@ pub struct HeaderInput<'a> {
     /// The navigation started over for a `Critical-CH`: Chromium then sends every client hint after
     /// `accept`.
     pub restarted: bool,
-    /// The URLs this request was redirected from, first to last.
-    pub redirect_chain: &'a [Uri],
+    /// What the request is ([`RequestContext`]); `None` derives it from the headers, as for a
+    /// request that was not redirected.
+    pub context: Option<&'a RequestContext>,
 }
 
 /// Build the request headers, in wire order and casing.
@@ -118,38 +119,23 @@ pub fn build(input: &HeaderInput) -> Vec<(String, String)> {
         headers.push(("priority".into(), "u=0, i".into()));
     }
 
-    // Navigation vs. fetch, detected unless the caller sets sec-fetch-mode.
-    let mode = match caller_value("sec-fetch-mode") {
-        Some(m) if m.eq_ignore_ascii_case("navigate") => Mode::Navigate,
-        Some(_) => Mode::Cors,
-        None => detect_mode(
-            input.method,
-            caller_value("origin"),
-            caller_value("content-type"),
-            caller_value("accept"),
-        ),
+    let derived;
+    let context = match input.context {
+        Some(context) => context,
+        None => {
+            derived = RequestContext::new(
+                family,
+                input.method,
+                input.uri,
+                input.client_headers,
+                input.request_headers,
+                &[],
+                None,
+            );
+            &derived
+        }
     };
-
-    // The page the request comes from, as the caller's Referer names it.
-    let referer_origin = caller_value("referer")
-        .and_then(page_url)
-        .map(|page| serialized_origin(&page));
-
-    // Browsers send an Origin on every non-GET/HEAD request (Fetch standard), from the caller's
-    // Referer page if any, else the request's own origin. Blink also sets one on CORS-mode element
-    // loads, same-origin included, where fetch() only gets one when cross-origin or unsafe.
-    let element_cors = family == Family::Chromium
-        && caller_value("sec-fetch-mode").is_some_and(|m| m.eq_ignore_ascii_case("cors"))
-        && caller_value("sec-fetch-dest").is_some_and(|d| !d.eq_ignore_ascii_case("empty"));
-    let own_origin = (family.is_browser()
-        && caller_value("origin").is_none()
-        && (!is_get_or_head(input.method) || element_cors))
-        .then(|| {
-            referer_origin
-                .clone()
-                .unwrap_or_else(|| serialized_origin(input.uri))
-        });
-    let origin = caller_value("origin").or(own_origin.as_deref());
+    let mode = context.mode;
 
     // Every real browser adjusts Accept/Origin/sec-fetch-* for the request kind, whether or not it
     // sends fetch metadata on the wire: `set()` only replaces a header already in the template, so a
@@ -157,14 +143,11 @@ pub fn build(input: &HeaderInput) -> Vec<(String, String)> {
     // getting Accept's Cors-mode override. OkHttp and an unrecognized profile have no Accept in
     // their template either, so this is a no-op for them.
     if family.is_browser() {
-        // A navigation or GET fetch() carries no Origin; sec-fetch-site still derives from the page
-        // it comes from.
-        let initiator = origin.or(referer_origin.as_deref());
         apply_mode(
             &mut headers,
             family,
             mode,
-            fetch_site(family, mode, input.uri, input.redirect_chain, initiator),
+            context.fetch_site,
             caller_value("accept").is_some(),
             caller_value("sec-fetch-dest"),
         );
@@ -182,8 +165,13 @@ pub fn build(input: &HeaderInput) -> Vec<(String, String)> {
     // The client hints the origin asked for; caller values below replace them in place.
     let mut hints = AddedHints::default();
     if let (Family::Chromium, true, Some(state)) = (family, secure, input.client_hints) {
-        let page = origin.or(referer_origin.as_deref());
-        hints = add_client_hints(&mut headers, input, state, mode, page);
+        hints = add_client_hints(
+            &mut headers,
+            input,
+            state,
+            mode,
+            context.initiator.as_deref(),
+        );
     }
 
     // Caller values replace template values in place; other caller headers follow in the caller's
@@ -215,8 +203,8 @@ pub fn build(input: &HeaderInput) -> Vec<(String, String)> {
             }
         }
     }
-    if let Some(origin) = own_origin {
-        headers.push(("origin".into(), origin));
+    if let Some(origin) = &context.own_origin {
+        headers.push(("origin".into(), origin.clone()));
     }
     if let Some(length) = content_length(family, input.method, input.body_len) {
         headers.push(("content-length".into(), length));
@@ -231,9 +219,7 @@ pub fn build(input: &HeaderInput) -> Vec<(String, String)> {
         caller_value("accept-language"),
         input.client_hints,
     ) {
-        let page = (mode == Mode::Cors)
-            .then(|| caller_value("referer").and_then(page_url))
-            .flatten();
+        let page = (mode == Mode::Cors).then(|| context.page()).flatten();
         let site = page.as_ref().unwrap_or(input.uri);
         farble_accept_language(&mut headers, state, site);
     }
@@ -252,7 +238,7 @@ pub fn build(input: &HeaderInput) -> Vec<(String, String)> {
         mode,
         &caller,
         &hints,
-        element_cors,
+        context.element_cors,
         restarted,
     );
     if let Some(layout) = safari_layout {

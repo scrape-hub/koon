@@ -38,7 +38,7 @@ fn subresource(
         client_hints: None,
         accept_ch_frame: None,
         restarted: false,
-        redirect_chain: &[],
+        context: None,
     })
 }
 

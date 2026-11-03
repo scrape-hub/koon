@@ -457,6 +457,37 @@ fn brave_154_matches_the_capture() {
     assert!(values.iter().all(|v| v.len() == "en-US,en;q=0.5".len()));
 }
 
+/// Brave farbles a fetch by the page's site, whether Origin or Referer names the page.
+#[test]
+fn brave_farbles_a_fetch_by_the_page_it_comes_from() {
+    let state = ClientHintsState::default();
+    let profile = crate::profile::Brave::version(154, Os::Windows).unwrap();
+    let language = |url: &str, request: &[(&str, &str)]| {
+        let headers = Request {
+            headers: request,
+            client_hints: Some(&state),
+            ..Request::new(&profile, Method::GET, url)
+        }
+        .build();
+        header_value(&headers, "accept-language")
+            .unwrap()
+            .to_string()
+    };
+    let page = language("https://page.test/", &[]);
+    // A target site whose own value differs from the page's, so the test tells them apart.
+    let target = (0..50)
+        .map(|i| format!("https://api{i}.test/data"))
+        .find(|url| language(url, &[]) != page)
+        .unwrap();
+    for named_by in [
+        ("Origin", "https://page.test"),
+        ("Referer", "https://page.test/"),
+    ] {
+        let fetch = language(&target, &[("sec-fetch-mode", "cors"), named_by]);
+        assert_eq!(fetch, page, "{named_by:?}");
+    }
+}
+
 /// Samsung Internet sends no zstd and reports no network estimate: `rtt` 100/`downlink` 10 on
 /// navigations, 0/10 on subresources; device hints are the Galaxy A33 5G's.
 #[test]

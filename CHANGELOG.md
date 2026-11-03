@@ -60,6 +60,8 @@ Rust only:
 - Chrome profiles no longer join the ended handshake-padding trial.
 - The system nameserver for DNS HTTPS records is looked up once per process.
 - A client takes about 9 KiB of memory instead of 280 KiB.
+- Brave profiles vary Accept-Language by the page's site also when only Origin
+  names the page.
 
 **Responses and errors**
 

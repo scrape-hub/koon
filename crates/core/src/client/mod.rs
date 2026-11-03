@@ -958,14 +958,21 @@ impl Client {
         // A handshake is no navigation: Origin (the socket's own unless set) decides `SameSite`
         // and the partition.
         let cookie_context = self.cookie_jar.is_some().then(|| {
-            headers::cookie_context(
-                headers::cookie_rules(&self.profile),
+            let context = headers::RequestContext::new(
+                headers::Family::of(&self.profile),
                 &http::Method::GET,
                 &http_uri,
                 &self.custom_headers,
                 &extra_headers,
-                false,
+                &[],
                 Some(false),
+            );
+            headers::cookie_context(
+                headers::cookie_rules(&self.profile),
+                &context,
+                &http::Method::GET,
+                &http_uri,
+                false,
             )
         });
         let cookie = self

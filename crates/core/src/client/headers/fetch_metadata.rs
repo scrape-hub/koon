@@ -3,8 +3,8 @@
 use http::{Method, Uri};
 
 use super::order::host_header;
-use super::util::{header_value, is_get_or_head, merge_caller_headers, page_url, remove, set};
-use super::{Family, Mode};
+use super::util::{header_value, is_get_or_head, remove, set};
+use super::{Family, Mode, RequestContext};
 use crate::cookie::{CookieContext, CookieRules, SameSiteRules, ThirdPartyCookies, top_level_site};
 use crate::profile::{BrowserProfile, SafariLayout, SafariStack};
 use crate::util::same_site;
@@ -38,20 +38,6 @@ pub(super) fn detect_mode(
     }
 }
 
-/// Whether [`build`](super::build) builds a navigation for this method and these client- and
-/// request-level headers: `sec-fetch-mode` set by the caller decides, else [`detect_mode`].
-pub fn builds_navigation(
-    method: &Method,
-    client: &[(String, String)],
-    request: &[(String, String)],
-) -> bool {
-    let caller = merge_caller_headers(client, request);
-    match header_value(&caller, "sec-fetch-mode") {
-        Some(mode) => mode.eq_ignore_ascii_case("navigate"),
-        None => is_navigation(method, &caller),
-    }
-}
-
 /// Whether a request with this method and these caller headers is built as a navigation (see
 /// [`detect_mode`]).
 pub fn is_navigation(method: &Method, headers: &[(String, String)]) -> bool {
@@ -66,42 +52,24 @@ pub fn is_navigation(method: &Method, headers: &[(String, String)]) -> bool {
     )
 }
 
-/// The cookie context of a request with these caller headers. The page it comes from is the one
-/// `sec-fetch-site` derives from (Origin, else Referer); a request from no page is same-site.
-/// Chromium compares sites with their scheme and ignores redirects
-/// (`GetContextForCookieInclusion`, `kCookieSameSiteConsidersRedirectChain` off); Firefox and
-/// Safari compare without the scheme and treat a request that went through a cross-site redirect
-/// as cross-site (`CookieCommons::IsSameSiteForeign`, WebKit's `CachedResourceLoader`). A request
-/// that is no navigation belongs to its page's top-level site; `navigation` overrides what the
-/// headers say (a WebSocket handshake is none).
+/// The cookie context of a request in `context`. A request from no page is same-site. Chromium
+/// compares sites with their scheme and ignores redirects (`GetContextForCookieInclusion`,
+/// `kCookieSameSiteConsidersRedirectChain` off); Firefox and Safari compare without the scheme and
+/// treat a request that went through a cross-site redirect as cross-site
+/// (`CookieCommons::IsSameSiteForeign`, WebKit's `CachedResourceLoader`). A request that is no
+/// navigation belongs to its page's top-level site.
 pub(crate) fn cookie_context(
     rules: CookieRules,
+    context: &RequestContext,
     method: &Method,
     uri: &Uri,
-    client: &[(String, String)],
-    request: &[(String, String)],
     cross_site_redirect: bool,
-    navigation: Option<bool>,
 ) -> CookieContext {
-    let caller = merge_caller_headers(client, request);
-    let top_level_navigation =
-        navigation.unwrap_or_else(|| match header_value(&caller, "sec-fetch-mode") {
-            Some(mode) => mode.eq_ignore_ascii_case("navigate"),
-            None => is_navigation(method, &caller),
-        });
-    let initiator = header_value(&caller, "origin")
-        .map(str::to_string)
-        .or_else(|| {
-            header_value(&caller, "referer")
-                .and_then(page_url)
-                .map(|page| serialized_origin(&page))
-        });
-    let page = initiator
-        .as_deref()
-        .and_then(|origin| origin.parse::<Uri>().ok());
-    let same_site = initiator.is_none_or(|initiator| {
+    let top_level_navigation = context.navigation();
+    let page = context.page();
+    let same_site = context.initiator.as_deref().is_none_or(|initiator| {
         if rules.same_site == SameSiteRules::Chromium {
-            compute_fetch_site(uri, &initiator) != "cross-site"
+            compute_fetch_site(uri, initiator) != "cross-site"
         } else {
             page.as_ref()
                 .and_then(|page| Some(same_site(page.host()?, uri.host()?)))

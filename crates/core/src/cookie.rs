@@ -1294,6 +1294,24 @@ mod tests {
         }
     }
 
+    /// The cookie context of a request with `headers` (none: a typed URL) to `url`.
+    fn request_context(
+        rules: CookieRules,
+        method: &http::Method,
+        url: &Uri,
+        headers: &[(String, String)],
+        cross_site_redirect: bool,
+    ) -> CookieContext {
+        use crate::client::headers::{Family, RequestContext, cookie_context};
+        let family = match rules.same_site {
+            SameSiteRules::Chromium => Family::Chromium,
+            SameSiteRules::UnspecifiedIsNone => Family::Firefox,
+            SameSiteRules::Ignored => Family::OkHttp,
+        };
+        let context = RequestContext::new(family, method, url, &[], headers, &[], None);
+        cookie_context(rules, &context, method, url, cross_site_redirect)
+    }
+
     /// The cookie rules of the newest profile of `family`.
     fn rules(family: crate::profile::HeaderFamily) -> CookieRules {
         use crate::profile::HeaderFamily::{Chromium, Firefox, OkHttp, Safari};
@@ -1327,15 +1345,7 @@ mod tests {
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
         let method: http::Method = method.parse().unwrap();
-        let context = crate::client::headers::cookie_context(
-            rules(family),
-            &method,
-            &uri(url),
-            &[],
-            &headers,
-            false,
-            None,
-        );
+        let context = request_context(rules(family), &method, &uri(url), &headers, false);
         jar.cookie_header_for(&uri(url), &context)
     }
 
@@ -1412,14 +1422,12 @@ mod tests {
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
-        crate::client::headers::cookie_context(
+        request_context(
             rules(family),
             &method.parse().unwrap(),
             &uri(url),
-            &[],
             &headers,
             false,
-            None,
         )
     }
 
@@ -1555,14 +1563,12 @@ mod tests {
                 .iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect();
-            crate::client::headers::cookie_context(
+            request_context(
                 rules,
                 &http::Method::GET,
                 &uri(url),
-                &[],
                 &headers,
                 cross_site_redirect,
-                None,
             )
         };
         // Without CHIPS the attribute is ignored, Secure or not (macOS 14.8 and 15.8).
@@ -1646,15 +1652,7 @@ mod tests {
         let method = http::Method::GET;
         let url = uri("https://example.com/");
         for (family, same_site) in [(Chromium, true), (Firefox, false), (Safari, false)] {
-            let context = crate::client::headers::cookie_context(
-                rules(family),
-                &method,
-                &url,
-                &[],
-                &[],
-                true,
-                None,
-            );
+            let context = request_context(rules(family), &method, &url, &[], true);
             assert_eq!(context.same_site, same_site, "{family:?}");
             assert!(context.top_level_navigation && context.safe_method);
         }

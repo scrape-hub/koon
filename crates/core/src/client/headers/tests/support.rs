@@ -4,7 +4,7 @@
 use http::{Method, Uri};
 
 use crate::client::client_hints::ClientHintsState;
-use crate::client::headers::{HeaderInput, Protocol, build};
+use crate::client::headers::{Family, HeaderInput, Protocol, RequestContext, build};
 use crate::profile::BrowserProfile;
 
 /// The header names, in order.
@@ -59,6 +59,15 @@ impl<'a> Request<'a> {
             .iter()
             .map(|url| url.parse().unwrap())
             .collect();
+        let context = RequestContext::new(
+            Family::of(self.profile),
+            &self.method,
+            &uri,
+            &[],
+            &headers,
+            &redirect_chain,
+            None,
+        );
         build(&HeaderInput {
             profile: self.profile,
             protocol: self.protocol,
@@ -73,7 +82,7 @@ impl<'a> Request<'a> {
             client_hints: self.client_hints,
             accept_ch_frame: self.accept_ch_frame,
             restarted: self.restarted,
-            redirect_chain: &redirect_chain,
+            context: Some(&context),
         })
     }
 }
