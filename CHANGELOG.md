@@ -33,6 +33,7 @@ Rust only:
   Firefox and Safari.
 - Cookies from an IP address host are host-only.
 - `load_session()` skips the cookies `set_cookies()` skips.
+- R: malformed `set_cookies()` fields raise `koon_invalid_argument`.
 
 **Requests and connections**
 

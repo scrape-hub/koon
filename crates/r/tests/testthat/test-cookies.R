@@ -106,8 +106,8 @@ test_that("only cookies partitioned under their own site are imported", {
 
 test_that("malformed cookie input is an error", {
   client <- Koon$new()
-  expect_koon_error(client$set_cookies(list(list(value = "3", domain = "x.test"))), "INVALID_COOKIE")
-  expect_koon_error(client$set_cookies(list(list(name = "c", value = 3, domain = "x.test"))), "INVALID_COOKIE")
+  expect_koon_error(client$set_cookies(list(list(value = "3", domain = "x.test"))), "INVALID_ARGUMENT")
+  expect_koon_error(client$set_cookies(list(list(name = "c", value = 3, domain = "x.test"))), "INVALID_ARGUMENT")
   expect_koon_error(client$set_cookies("nope"), "INVALID_ARGUMENT")
   cookies <- data.frame(name = "a", value = "1", domain = "example.com")
   expect_koon_error(Koon$new(cookie_jar = FALSE)$set_cookies(cookies), "COOKIE_JAR_DISABLED")

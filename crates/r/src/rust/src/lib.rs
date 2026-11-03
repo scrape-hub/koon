@@ -400,8 +400,10 @@ fn cookie_params(cookies: &Robj) -> RResult<Vec<CookieParams>> {
 /// One cookie, reading its fields with `get`. `index` (0-based, like the
 /// core's own cookie errors) names it in error messages.
 fn cookie(index: usize, get: impl Fn(&str) -> RResult<Option<Robj>>) -> RResult<CookieParams> {
+    // A field of the wrong type is an invalid argument, as in Node and Python; INVALID_COOKIE is
+    // the core's verdict on a cookie that converted.
     let invalid = |name: &str, expected: &str| RError::Koon {
-        code: "INVALID_COOKIE",
+        code: "INVALID_ARGUMENT",
         message: format!("cookie {index}: `{name}` must be {expected}"),
     };
     let text = |name: &str| -> RResult<Option<String>> {
