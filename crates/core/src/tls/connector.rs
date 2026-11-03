@@ -519,17 +519,18 @@ pub fn shuffle_client_trust_anchors(config: &mut TlsConfig) {
 /// configuration with a trial of its own, beside a TCP one without, draws its own.
 pub fn draw_server_padding(profile: &mut crate::BrowserProfile) {
     let mut rng = rand::rng();
+    let now = std::time::SystemTime::now();
     let drawn = profile
         .tls
         .server_padding_trial
         .take()
-        .map(|trial| trial.draw(&mut rng));
+        .map(|trial| trial.draw(&mut rng, now));
     if let Some(padding) = drawn {
         profile.tls.server_padding = padding;
     }
     if let Some(tls) = profile.quic.as_mut().and_then(|q| q.tls.as_mut()) {
         if let Some(trial) = tls.server_padding_trial.take() {
-            tls.server_padding = drawn.unwrap_or_else(|| trial.draw(&mut rng));
+            tls.server_padding = drawn.unwrap_or_else(|| trial.draw(&mut rng, now));
         }
     }
 }
@@ -731,8 +732,16 @@ mod tests {
                 .unwrap()
                 .server_padding
         };
-        for (enrolled, expected) in [(100, Some(9000)), (0, None)] {
+        // Chrome's trial as it ran, before its study ended.
+        let running = || {
             let mut profile = Chrome::latest();
+            profile.tls.server_padding_trial.as_mut().unwrap().ends_at = None;
+            let quic = profile.quic.as_mut().unwrap().tls.as_mut().unwrap();
+            quic.server_padding_trial.as_mut().unwrap().ends_at = None;
+            profile
+        };
+        for (enrolled, expected) in [(100, Some(9000)), (0, None)] {
+            let mut profile = running();
             let trial = profile.tls.server_padding_trial.as_mut().unwrap();
             trial.enrolled_slots = enrolled;
             trial.groups.retain(|g| g.bytes == 9000);
@@ -746,11 +755,18 @@ mod tests {
         // Many clients: some in the trial, TCP and QUIC always alike.
         let mut padded = 0;
         for _ in 0..2000 {
-            let mut profile = Chrome::latest();
+            let mut profile = running();
             draw_server_padding(&mut profile);
             assert_eq!(profile.tls.server_padding, quic_padding(&profile));
             padded += usize::from(profile.tls.server_padding.is_some());
         }
         assert!((40..=240).contains(&padded), "{padded} of 2000");
+        // The study has ended: nobody asks for padding.
+        for _ in 0..2000 {
+            let mut profile = Chrome::latest();
+            draw_server_padding(&mut profile);
+            assert_eq!(profile.tls.server_padding, None);
+            assert_eq!(quic_padding(&profile), None);
+        }
     }
 }

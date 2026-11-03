@@ -84,12 +84,12 @@ host's.}
 decompressed (default 100 MiB): past it, a response fails with a
 \code{koon_body_error} instead of growing the buffer further (also covers
 a compressed body that decodes past the cap). \code{0} disables it.}
-\item{\code{server_padding}}{Pins Chrome/Edge/Opera 151+'s
+\item{\code{server_padding}}{Pins Chrome 151+'s
 \code{PqcBandwidthExperiment} server-padding field trial group instead of
-drawing one when the client is built: \code{"none"} (not in the study,
-like 94\% of real Chrome) or the bytes of padding the group asks for
-(e.g. \code{"6000"}). No effect on a profile that does not run the trial.
-Default: drawn per client.}
+drawing one when the client is built: \code{"none"} (not in the study) or
+the bytes of padding the group asks for (e.g. \code{"6000"}). The study
+ended on 2026-10-30, so a client no longer draws one. No effect on a
+profile without the trial.}
 }
 }
 

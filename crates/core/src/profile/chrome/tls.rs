@@ -81,8 +81,12 @@ pub(super) const CHROME_PQC_BANDWIDTH_VERSION: u32 = 151;
 /// and `Enabled_00000`, each weight 1). 0 still sends the extension.
 const PQC_BANDWIDTH_BYTES: [u16; 6] = [6000, 9000, 12000, 14000, 16000, 0];
 
+/// The end of `PqcBandwidthExperiment`, 2026-10-30 (the stable seed of 2026-09-25); the seed of
+/// 2026-11-02 no longer has the study.
+const PQC_BANDWIDTH_ENDS_AT: u64 = 1_793_318_400;
+
 /// `PqcBandwidthExperiment` as a [`ServerPaddingTrial`]: 6 of 100 slots, the groups of
-/// [`PQC_BANDWIDTH_BYTES`] with equal weight.
+/// [`PQC_BANDWIDTH_BYTES`] with equal weight, until [`PQC_BANDWIDTH_ENDS_AT`].
 pub(super) fn pqc_bandwidth_experiment() -> ServerPaddingTrial {
     ServerPaddingTrial {
         enrolled_slots: 6,
@@ -91,6 +95,7 @@ pub(super) fn pqc_bandwidth_experiment() -> ServerPaddingTrial {
             .iter()
             .map(|&bytes| ServerPaddingGroup { weight: 1, bytes })
             .collect(),
+        ends_at: Some(PQC_BANDWIDTH_ENDS_AT),
     }
 }
 
@@ -223,6 +228,7 @@ pub fn chromium_tls(
 mod tests {
     use super::*;
     use crate::profile::{Chrome, Opera, Os};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     #[test]
     fn trust_anchors_by_version() {
@@ -274,17 +280,18 @@ mod tests {
         }
     }
 
-    /// 6 % of clients take part, spread evenly over the six groups.
+    /// While the study ran, 6 % of clients took part, spread evenly over the six groups.
     #[test]
     fn pqc_bandwidth_experiment_draws_the_seed_weights() {
         use rand::SeedableRng;
 
         let trial = pqc_bandwidth_experiment();
+        let running = UNIX_EPOCH + Duration::from_secs(PQC_BANDWIDTH_ENDS_AT - 1);
         let mut rng = rand::rngs::StdRng::seed_from_u64(1);
         let draws = 600_000;
         let mut counts = std::collections::HashMap::new();
         for _ in 0..draws {
-            *counts.entry(trial.draw(&mut rng)).or_insert(0u32) += 1;
+            *counts.entry(trial.draw(&mut rng, running)).or_insert(0u32) += 1;
         }
         let share = |value| f64::from(counts[&value]) / f64::from(draws);
         assert!((share(None) - 0.94).abs() < 0.002, "{counts:?}");
@@ -292,6 +299,18 @@ mod tests {
             assert!((share(Some(bytes)) - 0.01).abs() < 0.001, "{counts:?}");
         }
         assert_eq!(counts.len(), 7);
+    }
+
+    /// Once the study has ended, no client enters it.
+    #[test]
+    fn pqc_bandwidth_experiment_draws_nobody_after_it_ended() {
+        use rand::SeedableRng;
+
+        let trial = pqc_bandwidth_experiment();
+        let ended = UNIX_EPOCH + Duration::from_secs(PQC_BANDWIDTH_ENDS_AT);
+        let mut rng = rand::rngs::StdRng::seed_from_u64(1);
+        assert!((0..10_000).all(|_| trial.draw(&mut rng, ended).is_none()));
+        assert!((0..10_000).all(|_| trial.draw(&mut rng, SystemTime::now()).is_none()));
     }
 
     /// Chrome 152 on macOS sends its IDs in one captured order over TCP; a new order per QUIC

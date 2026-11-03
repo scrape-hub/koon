@@ -453,10 +453,11 @@ const CHROME_153_ANDROID_EXTENSIONS: &[u16] = &[
 
 /// Chrome `major` on `os` whose client is in the group of
 /// `PqcBandwidthExperiment` that asks for `bytes`, or with `None` outside
-/// the trial (which 94 % of the clients are).
+/// the trial (which 94 % of the clients were), as while the study ran.
 fn chrome_in_padding_trial(major: u32, os: Os, bytes: Option<u16>) -> BrowserProfile {
     let mut profile = Chrome::version(major, os).unwrap();
     let trial = profile.tls.server_padding_trial.as_mut().unwrap();
+    trial.ends_at = None;
     match bytes {
         Some(bytes) => {
             trial.enrolled_slots = trial.slots;

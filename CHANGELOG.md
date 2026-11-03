@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 Rust only:
 
 - New variant `SameSite::Unspecified`.
+- `ServerPaddingTrial` has an `ends_at` field, and `draw` takes the time.
 
 ### Added
 
@@ -31,6 +32,7 @@ Rust only:
 
 - A request whose response has arrived is not retried.
 - Proxy credentials in the URL are percent-decoded.
+- Chrome profiles no longer join the ended handshake-padding trial.
 
 **Bindings and CLI**
 

@@ -370,8 +370,8 @@ pub struct KoonOptions {
     pub resolve: Option<Vec<String>>,
     /// Maximum response body size in bytes, decompressed; 0 disables it. Default: 100 MiB.
     pub max_response_body: Option<f64>,
-    /// Pins Chrome/Edge/Opera >=151's server-padding field trial group instead of drawing it:
-    /// "none", or the bytes of padding the group asks for. Default: drawn per client.
+    /// Pins Chrome >=151's server-padding field trial group instead of drawing it: "none", or
+    /// the bytes of padding the group asks for. The study ended on 2026-10-30.
     pub server_padding: Option<String>,
     pub on_request: Option<RequestHookFn>,
     pub on_response: Option<ResponseHookFn>,

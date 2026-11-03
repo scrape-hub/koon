@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -346,7 +347,7 @@ impl Default for TlsConfig {
 
 /// A field trial on the `server_padding` extension, as a Finch study of Chrome runs it: a client
 /// enters with chance `enrolled_slots / slots`, then draws a group with a chance proportional to
-/// its weight.
+/// its weight, until the study ends.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ServerPaddingTrial {
@@ -356,6 +357,10 @@ pub struct ServerPaddingTrial {
     pub slots: u32,
     /// The groups a client in the trial is assigned to.
     pub groups: Vec<ServerPaddingGroup>,
+    /// When the study ends (its filter's `end_date`), in Unix seconds: from then on no client
+    /// enters it. `None` for no end.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ends_at: Option<u64>,
 }
 
 /// A group of a [`ServerPaddingTrial`].
@@ -369,9 +374,14 @@ pub struct ServerPaddingGroup {
 }
 
 impl ServerPaddingTrial {
-    /// The padding one client asks for: `None` outside the trial.
-    pub fn draw<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> Option<u16> {
-        if self.slots == 0 || rng.random_range(0..self.slots) >= self.enrolled_slots {
+    /// The padding one client built at `now` asks for: `None` outside the trial, and for every
+    /// client once the study has ended.
+    pub fn draw<R: rand::Rng + ?Sized>(&self, rng: &mut R, now: SystemTime) -> Option<u16> {
+        let ended = self.ends_at.is_some_and(|end| {
+            now.duration_since(UNIX_EPOCH)
+                .is_ok_and(|now| now.as_secs() >= end)
+        });
+        if ended || self.slots == 0 || rng.random_range(0..self.slots) >= self.enrolled_slots {
             return None;
         }
         let total: u64 = self.groups.iter().map(|g| u64::from(g.weight)).sum();

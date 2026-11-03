@@ -647,7 +647,7 @@ fn profile_names(browser: Browser) -> Vec<ProfileName> {
 /// [`BrowserProfile::pin_server_padding`]), instead of drawing one when the client is built.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServerPadding {
-    /// Not in the trial, like 94 % of real Chrome installs.
+    /// Not in the trial.
     None,
     /// In the trial, asking servers to pad their `EncryptedExtensions` with this many bytes (one
     /// of 0, 6000, 9000, 12000, 14000, 16000).
@@ -802,8 +802,7 @@ impl BrowserProfile {
 
     /// Pins the profile's server-padding field trial (Chrome's `PqcBandwidthExperiment`) to
     /// `padding`, over TCP and QUIC, instead of letting the client draw a group when it is built.
-    /// Does nothing for a profile that does not run the trial (anything but Chrome, Edge and
-    /// Opera on Chromium 151+).
+    /// Does nothing for a profile without the trial (anything but Chrome 151+).
     pub fn pin_server_padding(&mut self, padding: ServerPadding) {
         let padding = match padding {
             ServerPadding::None => None,

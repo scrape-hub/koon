@@ -327,11 +327,11 @@ struct ConnectionArgs {
     #[arg(long = "max-response-body", value_name = "BYTES")]
     max_response_body: Option<u64>,
 
-    /// Pin Chrome/Edge/Opera >=151's `PqcBandwidthExperiment` server-padding
-    /// field trial group instead of drawing it per client: `none` (not in
-    /// the study, like 94% of real Chrome) or the bytes of padding the
-    /// group asks for (0, 6000, 9000, 12000, 14000, 16000) [default: drawn
-    /// per client]. No effect on a profile that does not run the trial.
+    /// Pin Chrome >=151's `PqcBandwidthExperiment` server-padding field
+    /// trial group instead of drawing it per client: `none` (not in the
+    /// study) or the bytes of padding the group asks for (0, 6000, 9000,
+    /// 12000, 14000, 16000). The study ended on 2026-10-30, so a client no
+    /// longer draws one. No effect on a profile without the trial.
     #[arg(long = "server-padding", value_name = "none|BYTES", value_parser = parse_server_padding)]
     server_padding: Option<koon_core::ServerPadding>,
 }

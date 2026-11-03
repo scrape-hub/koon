@@ -157,10 +157,10 @@ export interface KoonOptions {
    */
   maxResponseBody?: number;
   /**
-   * Pins Chrome/Edge/Opera 151+'s `PqcBandwidthExperiment` server-padding field trial group
-   * instead of drawing one when the client is built: `"none"` (not in the study, like 94% of
-   * real Chrome) or the bytes of padding the group asks for (e.g. `"6000"`). No effect on a
-   * profile that does not run the trial. Default: drawn per client.
+   * Pins Chrome 151+'s `PqcBandwidthExperiment` server-padding field trial group instead of
+   * drawing one when the client is built: `"none"` (not in the study) or the bytes of padding
+   * the group asks for (e.g. `"6000"`). The study ended on 2026-10-30, so a client no longer
+   * draws one. No effect on a profile without the trial.
    */
   serverPadding?: string;
 }
