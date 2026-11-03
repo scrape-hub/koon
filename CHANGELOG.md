@@ -44,6 +44,7 @@ Rust only:
 
 **Responses and errors**
 
+- A streaming response yields no empty chunks.
 - `blockedBy`/`blocked_by` reports fewer ordinary pages as blocks.
 
 **Bindings and CLI**

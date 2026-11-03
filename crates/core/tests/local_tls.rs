@@ -72,6 +72,47 @@ async fn h2_server(release: watch::Receiver<bool>) -> (u16, Received) {
     (port, received)
 }
 
+/// An HTTP/2 server that answers every request with `abc` and then an empty DATA frame that
+/// ends the stream, as many servers do.
+async fn empty_end_frame_server() -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (cert, key) = common::leaf("127.0.0.1");
+    let acceptor = common::h2_acceptor(&cert, &key);
+    tokio::spawn(async move {
+        while let Ok((tcp, _)) = listener.accept().await {
+            let ssl = btls::ssl::Ssl::new(acceptor.context()).unwrap();
+            let mut tls = tokio_btls::SslStream::new(ssl, tcp).unwrap();
+            tokio::spawn(async move {
+                Pin::new(&mut tls).accept().await.unwrap();
+                let mut h2 = http2::server::handshake(tls).await.unwrap();
+                while let Some(Ok((_request, mut respond))) = h2.accept().await {
+                    let response = http::Response::builder().status(200).body(()).unwrap();
+                    let mut send = respond.send_response(response, false).unwrap();
+                    send.send_data(Bytes::from_static(b"abc"), false).unwrap();
+                    send.send_data(Bytes::new(), true).unwrap();
+                }
+            });
+        }
+    });
+    port
+}
+
+#[tokio::test]
+async fn an_empty_data_frame_is_no_chunk() {
+    let port = empty_end_frame_server().await;
+    let url = format!("https://127.0.0.1:{port}/");
+    let mut response = client()
+        .send_streaming(http::Method::GET, &url, Body::empty(), Default::default())
+        .await
+        .unwrap();
+    let mut chunks = Vec::new();
+    while let Some(chunk) = response.next_chunk().await {
+        chunks.push(chunk.unwrap());
+    }
+    assert_eq!(chunks, [b"abc".to_vec()]);
+}
+
 /// `count` chunks of 64 KiB; `pulled` counts the bytes taken from the
 /// stream.
 fn counted_chunks(

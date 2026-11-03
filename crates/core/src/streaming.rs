@@ -107,6 +107,10 @@ impl StreamingResponse {
                 }
                 Ok(Ok(Some(chunk))) => chunk,
             };
+            // An empty DATA frame is no chunk: `None` alone ends the body.
+            if chunk.is_empty() {
+                continue;
+            }
             self.bytes_received += chunk.len() as u64;
             self.total_received
                 .fetch_add(chunk.len() as u64, Ordering::Relaxed);
