@@ -135,24 +135,46 @@ pub(crate) fn cookie_context(
     }
 }
 
-/// Adapt the navigation template's fetch metadata to the request. `initiator` is the origin of the
-/// page the request comes from, if any: the browser derives `sec-fetch-site` from it. `dest` is the
-/// caller's `sec-fetch-dest`, which sets a subresource's priority.
+/// The `sec-fetch-site` of a request from the page of origin `initiator`, `None` for a request from
+/// no page: every URL of the redirect chain counts (Fetch Metadata §2.1), the one furthest from
+/// the page deciding; Safari compares a navigation's current URL only (captured).
+pub(super) fn fetch_site(
+    family: Family,
+    mode: Mode,
+    uri: &Uri,
+    redirect_chain: &[Uri],
+    initiator: Option<&str>,
+) -> Option<&'static str> {
+    let initiator = initiator?;
+    let chain = if family == Family::Safari && mode != Mode::Cors {
+        &[]
+    } else {
+        redirect_chain
+    };
+    chain
+        .iter()
+        .chain([uri])
+        .map(|url| compute_fetch_site(url, initiator))
+        .max_by_key(|site| {
+            ["same-origin", "same-site", "cross-site"]
+                .iter()
+                .position(|s| s == site)
+        })
+}
+
+/// Adapt the navigation template's fetch metadata to the request. `fetch_site` is the request's
+/// [`fetch_site`], `None` for a request from no page. `dest` is the caller's `sec-fetch-dest`,
+/// which sets a subresource's priority.
 pub(super) fn apply_mode(
     headers: &mut Vec<(String, String)>,
     family: Family,
     mode: Mode,
-    uri: &Uri,
-    initiator: Option<&str>,
+    fetch_site: Option<&str>,
     caller_sets_accept: bool,
     dest: Option<&str>,
 ) {
-    if let Some(initiator) = initiator {
-        set(
-            headers,
-            "sec-fetch-site",
-            compute_fetch_site(uri, initiator),
-        );
+    if let Some(site) = fetch_site {
+        set(headers, "sec-fetch-site", site);
     }
     match mode {
         Mode::Navigate => {}
@@ -165,7 +187,7 @@ pub(super) fn apply_mode(
         Mode::Cors => {
             set(headers, "sec-fetch-mode", "cors");
             set(headers, "sec-fetch-dest", "empty");
-            if initiator.is_none() {
+            if fetch_site.is_none() {
                 set(headers, "sec-fetch-site", "same-origin");
             }
             remove(headers, "sec-fetch-user");

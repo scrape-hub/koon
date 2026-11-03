@@ -172,6 +172,8 @@ struct Hop {
     source: HeaderSource,
     /// An earlier hop of this request's redirect chain was on another site.
     cross_site_redirect: bool,
+    /// The URLs of the earlier hops, first to last.
+    redirected_from: Vec<Uri>,
 }
 
 impl Hop {
@@ -189,6 +191,7 @@ impl Hop {
             request_headers: self.request_headers.clone(),
             source: self.source.clone(),
             cross_site_redirect: self.cross_site_redirect,
+            redirected_from: self.redirected_from.clone(),
         })
     }
 
@@ -226,7 +229,8 @@ impl Hop {
         if let (Some(from), Some(to)) = hosts {
             self.cross_site_redirect |= !crate::util::same_site(from, to);
         }
-        self.url = next;
+        self.redirected_from
+            .push(std::mem::replace(&mut self.url, next));
         Ok(())
     }
 }
@@ -416,6 +420,7 @@ impl super::Client {
             request_headers: options.headers.clone(),
             source,
             cross_site_redirect: false,
+            redirected_from: Vec::new(),
         };
         // Where a Critical-CH restart starts over; a stream body cannot be sent again, which leaves
         // the current hop to repeat.
@@ -1050,6 +1055,7 @@ impl super::Client {
                     client_hints: Some(&self.client_hints),
                     accept_ch_frame: info.accept_ch_for(&super::client_hints::origin_of(&hop.url)),
                     restarted: out.restarted,
+                    redirect_chain: &hop.redirected_from,
                 });
                 if length == Length::Unknown {
                     unknown_length(&mut headers, protocol);

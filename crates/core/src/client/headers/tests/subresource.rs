@@ -5,7 +5,7 @@ use http::{Method, Uri};
 
 use super::support::{Request, names};
 use crate::client::headers::{HeaderInput, Protocol, build, header_value};
-use crate::profile::{BrowserProfile, Chrome, Firefox};
+use crate::profile::{BrowserProfile, Chrome, Firefox, Safari};
 
 fn subresource(
     profile: &BrowserProfile,
@@ -38,6 +38,7 @@ fn subresource(
         client_hints: None,
         accept_ch_frame: None,
         restarted: false,
+        redirect_chain: &[],
     })
 }
 
@@ -267,4 +268,35 @@ fn firefox_priority_follows_the_destination() {
     .build();
     assert_eq!(names(&replayed)[4..], expected);
     assert_eq!(header_value(&replayed, "priority"), Some("u=2"));
+}
+
+#[test]
+fn sec_fetch_site_covers_the_redirect_chain() {
+    // A page of b.example loads b.example through a redirect on a.example (captured: Chrome 156,
+    // Firefox 160, Safari 26.6).
+    let chain = ["https://a.example/bounce"];
+    let referer = [("Referer", "https://b.example/page")];
+    let image = [
+        ("Referer", "https://b.example/page"),
+        ("Sec-Fetch-Mode", "no-cors"),
+        ("Sec-Fetch-Dest", "image"),
+    ];
+    for (profile, navigation) in [
+        (Chrome::latest(), "cross-site"),
+        (Firefox::latest(), "cross-site"),
+        (Safari::latest(), "same-origin"),
+    ] {
+        for (headers, expected) in [(&referer[..], navigation), (&image[..], "cross-site")] {
+            let built = Request {
+                headers,
+                redirect_chain: &chain,
+                ..Request::new(&profile, Method::GET, "https://b.example/final")
+            }
+            .build();
+            let site = built
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case("sec-fetch-site"));
+            assert_eq!(site.map(|(_, v)| v.as_str()), Some(expected), "{headers:?}");
+        }
+    }
 }

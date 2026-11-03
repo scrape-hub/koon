@@ -26,6 +26,7 @@ pub(crate) struct Request<'a> {
     pub client_hints: Option<&'a ClientHintsState>,
     pub accept_ch_frame: Option<&'a str>,
     pub restarted: bool,
+    pub redirect_chain: &'a [&'a str],
 }
 
 impl<'a> Request<'a> {
@@ -42,6 +43,7 @@ impl<'a> Request<'a> {
             client_hints: None,
             accept_ch_frame: None,
             restarted: false,
+            redirect_chain: &[],
         }
     }
 
@@ -51,6 +53,11 @@ impl<'a> Request<'a> {
             .headers
             .iter()
             .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+            .collect();
+        let redirect_chain: Vec<Uri> = self
+            .redirect_chain
+            .iter()
+            .map(|url| url.parse().unwrap())
             .collect();
         build(&HeaderInput {
             profile: self.profile,
@@ -66,6 +73,7 @@ impl<'a> Request<'a> {
             client_hints: self.client_hints,
             accept_ch_frame: self.accept_ch_frame,
             restarted: self.restarted,
+            redirect_chain: &redirect_chain,
         })
     }
 }

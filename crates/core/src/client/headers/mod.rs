@@ -18,7 +18,9 @@ use super::client_hints::{self, ClientHintsState};
 use crate::profile::BrowserProfile;
 pub use crate::profile::HeaderFamily as Family;
 pub(crate) use fetch_metadata::cookie_context;
-use fetch_metadata::{apply_insecure_context, apply_mode, detect_mode, serialized_origin};
+use fetch_metadata::{
+    apply_insecure_context, apply_mode, detect_mode, fetch_site, serialized_origin,
+};
 pub use fetch_metadata::{builds_navigation, is_navigation, is_potentially_trustworthy};
 pub use order::host_header;
 use order::{finalize_http1, finalize_multiplexed, order_headers, safari_order, sort_into};
@@ -87,6 +89,8 @@ pub struct HeaderInput<'a> {
     /// The navigation started over for a `Critical-CH`: Chromium then sends every client hint after
     /// `accept`.
     pub restarted: bool,
+    /// The URLs this request was redirected from, first to last.
+    pub redirect_chain: &'a [Uri],
 }
 
 /// Build the request headers, in wire order and casing.
@@ -160,8 +164,7 @@ pub fn build(input: &HeaderInput) -> Vec<(String, String)> {
             &mut headers,
             family,
             mode,
-            input.uri,
-            initiator,
+            fetch_site(family, mode, input.uri, input.redirect_chain, initiator),
             caller_value("accept").is_some(),
             caller_value("sec-fetch-dest"),
         );
