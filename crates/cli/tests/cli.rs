@@ -81,7 +81,7 @@ fn max_response_body_caps_the_response() {
 
     // --json: the collected path.
     let out = koon(&["--json", "--max-response-body", "100", &url]);
-    assert_eq!(out.status.code(), Some(1), "{}", text(&out.stderr));
+    assert_eq!(out.status.code(), Some(63), "{}", text(&out.stderr));
     assert!(
         text(&out.stderr).contains("exceeded 100 bytes"),
         "{}",
@@ -95,7 +95,7 @@ fn max_response_body_caps_the_response() {
 
     // Piped stdout: streamed chunk by chunk, still capped the same way.
     let out = koon(&["--max-response-body", "100", &url]);
-    assert_eq!(out.status.code(), Some(1), "{}", text(&out.stderr));
+    assert_eq!(out.status.code(), Some(63), "{}", text(&out.stderr));
     assert!(
         text(&out.stderr).contains("exceeded 100 bytes"),
         "{}",
@@ -117,7 +117,7 @@ fn max_response_body_caps_the_response() {
         file.to_str().unwrap(),
         &url,
     ]);
-    assert_eq!(out.status.code(), Some(1), "{}", text(&out.stderr));
+    assert_eq!(out.status.code(), Some(63), "{}", text(&out.stderr));
     let partial = std::fs::read(&file).expect("the partial file is left on disk");
     assert!(partial.len() < 2000, "{} bytes", partial.len());
 }

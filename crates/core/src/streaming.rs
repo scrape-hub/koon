@@ -127,10 +127,11 @@ impl StreamingResponse {
 
     /// Read the rest of the body into a single buffer, capped like
     /// [`ClientBuilder::max_response_body`](crate::client::ClientBuilder::max_response_body) (past
-    /// it, [`Error::Body`]) whether or not [`decode_content()`](Self::decode_content) was called. The
-    /// response stays available, e.g. for [`bytes_received()`](Self::bytes_received). Errors
-    /// ([`Error::Timeout`]) if no data arrives within the client's timeout, or with whatever
-    /// [`decode_content()`](Self::decode_content) fails with.
+    /// it, [`Error::ResponseTooLarge`]) whether or not [`decode_content()`](Self::decode_content)
+    /// was called. The response stays available, e.g. for
+    /// [`bytes_received()`](Self::bytes_received). Errors ([`Error::Timeout`]) if no data arrives
+    /// within the client's timeout, or with whatever [`decode_content()`](Self::decode_content)
+    /// fails with.
     pub async fn collect_body(&mut self) -> Result<Vec<u8>, Error> {
         let mut body = Vec::new();
         let mut total: u64 = 0;
@@ -138,10 +139,7 @@ impl StreamingResponse {
             let chunk = chunk?;
             total += chunk.len() as u64;
             if total > self.max_body {
-                return Err(Error::Body(
-                    format!("response body exceeded {} bytes", self.max_body),
-                    None,
-                ));
+                return Err(Error::ResponseTooLarge(self.max_body));
             }
             body.extend_from_slice(&chunk);
         }

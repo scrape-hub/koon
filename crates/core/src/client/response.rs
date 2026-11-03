@@ -138,7 +138,8 @@ fn deserialize_tls_sessions<'de, D: serde::Deserializer<'de>>(
 /// its decoded size, independent of how small the compressed `data` is.
 ///
 /// # Errors
-/// [`Error::Body`] once decoding crosses `max` bytes, [`Error::Io`] for data that does not decode.
+/// [`Error::ResponseTooLarge`] once decoding crosses `max` bytes, [`Error::Io`] for data that does
+/// not decode.
 pub(crate) fn decompress_body(
     data: Vec<u8>,
     encoding: Option<&str>,
@@ -203,8 +204,9 @@ impl ContentDecoder {
     }
 
     /// Caps the total decoded size at `max` bytes across every [`decode`](Self::decode) and
-    /// [`finish`](Self::finish) call; past it they fail with [`Error::Body`] instead of decoding
-    /// further, which also catches a decompression bomb whose compressed size is far under `max`.
+    /// [`finish`](Self::finish) call; past it they fail with [`Error::ResponseTooLarge`] instead of
+    /// decoding further, which also catches a decompression bomb whose compressed size is far under
+    /// `max`.
     #[must_use]
     pub fn limit(mut self, max: u64) -> Self {
         self.max = max;
@@ -217,8 +219,8 @@ impl ContentDecoder {
     /// Decode the next piece of the body, returning what it decodes to so far (may be empty).
     ///
     /// # Errors
-    /// [`Error::Io`] on data that does not decode, [`Error::Body`] once the total decoded so far
-    /// (see [`limit`](Self::limit)) exceeds `max`.
+    /// [`Error::Io`] on data that does not decode, [`Error::ResponseTooLarge`] once the total
+    /// decoded so far (see [`limit`](Self::limit)) exceeds `max`.
     pub fn decode(&mut self, data: &[u8]) -> Result<Vec<u8>, Error> {
         if data.is_empty() {
             return Ok(Vec::new());
@@ -239,8 +241,9 @@ impl ContentDecoder {
     /// End the body, returning the rest of what it decodes to.
     ///
     /// # Errors
-    /// [`Error::Io`] if a gzip, brotli or zstd stream is incomplete (cut off); [`Error::Body`] once
-    /// the total decoded (see [`limit`](Self::limit)) exceeds `max`.
+    /// [`Error::Io`] if a gzip, brotli or zstd stream is incomplete (cut off);
+    /// [`Error::ResponseTooLarge`] once the total decoded (see [`limit`](Self::limit)) exceeds
+    /// `max`.
     pub fn finish(mut self) -> Result<Vec<u8>, Error> {
         if !self.started {
             return Ok(Vec::new());
@@ -340,14 +343,11 @@ impl Stage {
         }
     }
 
-    /// The error for a failed `decode`/`finish`: [`Error::Body`] when the cap stopped it,
-    /// [`Error::Io`] for data that does not decode.
+    /// The error for a failed `decode`/`finish`: [`Error::ResponseTooLarge`] when the cap stopped
+    /// it, [`Error::Io`] for data that does not decode.
     fn error(&mut self, e: std::io::Error, max: u64) -> Error {
         if self.sink().is_some_and(|sink| sink.exceeded) {
-            Error::Body(
-                format!("decompressed response body exceeded {max} bytes"),
-                None,
-            )
+            Error::ResponseTooLarge(max)
         } else {
             Error::Io(e)
         }

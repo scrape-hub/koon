@@ -269,14 +269,16 @@ impl ClientBuilder {
         self
     }
 
-    /// Caps a response body at `max` bytes, decompressed: past it, [`Client::send`]/[`get`](Client::get)/
-    /// etc. and [`StreamingResponse::collect_body`](crate::StreamingResponse::collect_body)/
-    /// [`decode_content`](crate::StreamingResponse::decode_content) fail with [`Error::Body`] instead
-    /// of growing the buffer further, and a compressed body decoding past `max` fails the same way
-    /// even if its compressed size is smaller: both protect against an unbounded or malicious server
-    /// (a stalled close, or a decompression bomb), which this crate has no other bound against.
-    /// Reading a streaming response chunk by chunk without decoding it is not capped: the caller
-    /// already controls how much of it to read. `0` disables the cap. Default: 100 MiB.
+    /// Caps a response body at `max` bytes, decompressed: past it,
+    /// [`Client::send`]/[`get`](Client::get)/ etc. and
+    /// [`StreamingResponse::collect_body`](crate::StreamingResponse::collect_body)/
+    /// [`decode_content`](crate::StreamingResponse::decode_content) fail with
+    /// [`Error::ResponseTooLarge`] instead of growing the buffer further, and a compressed body
+    /// decoding past `max` fails the same way even if its compressed size is smaller: both protect
+    /// against an unbounded or malicious server (a stalled close, or a decompression bomb), which
+    /// this crate has no other bound against. Reading a streaming response chunk by chunk without
+    /// decoding it is not capped: the caller already controls how much of it to read. `0` disables
+    /// the cap. Default: 100 MiB.
     #[must_use]
     pub fn max_response_body(mut self, max: u64) -> Self {
         self.max_response_body = if max == 0 { u64::MAX } else { max };
@@ -802,7 +804,7 @@ impl Client {
     /// # Errors
     /// [`Error::Url`]/[`Error::UnsupportedScheme`] for an invalid URL or redirect target,
     /// [`Error::Timeout`], [`Error::TooManyRedirects`], a request hook's own error, [`Error::Body`]
-    /// for a failed or unresendable stream body or a response past
+    /// for a failed or unresendable stream body, [`Error::ResponseTooLarge`] for a response past
     /// [`max_response_body`](ClientBuilder::max_response_body), or a connection/proxy/TLS/protocol
     /// error once [retries](ClientBuilder::max_retries) run out.
     pub async fn request(

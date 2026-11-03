@@ -53,8 +53,9 @@ Exit codes (curl's, where one fits):
   3   invalid URL                  35  TLS error
   6   could not resolve host       47  too many redirects
   7   connection failed            56  network I/O error
-  8   malformed HTTP response      95  HTTP/3 or QUIC error
-  16  HTTP/2 error                 97  proxy error";
+  8   malformed HTTP response      63  body over --max-response-body
+  16  HTTP/2 error                 95  HTTP/3 or QUIC error
+                                   97  proxy error";
 
 /// `-d @file` bodies up to this size are read into memory, as curl does;
 /// larger ones are streamed from disk. A streamed body cannot be sent again,
@@ -63,6 +64,9 @@ const STREAM_UPLOAD_THRESHOLD: u64 = 16 * 1024 * 1024;
 
 /// Exit code of `--fail` for an HTTP error, curl's.
 const HTTP_ERROR_EXIT: u8 = 22;
+
+/// curl's exit code for a body over `--max-filesize`.
+const RESPONSE_TOO_LARGE_EXIT: u8 = 63;
 
 #[derive(Parser)]
 #[command(
@@ -629,16 +633,26 @@ impl CliError {
 impl From<koon_core::Error> for CliError {
     fn from(e: koon_core::Error) -> Self {
         Self {
-            exit_code: exit_code(e.code()),
+            exit_code: error_exit_code(&e),
             message: e.to_string(),
         }
+    }
+}
+
+/// Exit code for a koon error: curl's 63 for a body over `--max-response-body`, as for its
+/// `--max-filesize`; else by its code.
+fn error_exit_code(e: &koon_core::Error) -> u8 {
+    if matches!(e, koon_core::Error::ResponseTooLarge(_)) {
+        RESPONSE_TOO_LARGE_EXIT
+    } else {
+        exit_code(e.code())
     }
 }
 
 /// A koon error with what was being done, keeping its exit code.
 fn failed(action: &'static str) -> impl FnOnce(koon_core::Error) -> CliError {
     move |e| CliError {
-        exit_code: exit_code(e.code()),
+        exit_code: error_exit_code(&e),
         message: format!("{action}: {e}"),
     }
 }
@@ -964,11 +978,7 @@ async fn write_response(cli: &Cli, response: &mut StreamingResponse) -> Result<(
                 }
                 received += chunk.len() as u64;
                 if max_response_body != 0 && received > max_response_body {
-                    return Err(koon_core::Error::Body(
-                        format!("response body exceeded {max_response_body} bytes"),
-                        None,
-                    )
-                    .into());
+                    return Err(koon_core::Error::ResponseTooLarge(max_response_body).into());
                 }
                 open = sink.write(&chunk)?;
             }

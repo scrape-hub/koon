@@ -408,7 +408,11 @@ impl super::Client {
             request.push_str(&format!("{name}: {value}\r\n"));
         }
         request.push_str("\r\n");
-        io.write_all(request.as_bytes()).await.map_err(Error::Io)?;
+        // A proxy that drops the connection during CONNECT is a proxy failure, not a network one.
+        let proxy_io = |e: std::io::Error| {
+            Error::Proxy(format!("CONNECT failed: {e}"), crate::error::boxed(e))
+        };
+        io.write_all(request.as_bytes()).await.map_err(proxy_io)?;
 
         let mut buf = BytesMut::with_capacity(1024);
         let head_end = loop {
@@ -419,7 +423,7 @@ impl super::Client {
                 return Err(Error::Proxy("CONNECT response head too large".into(), None));
             }
             buf.reserve(1024);
-            if io.read_buf(&mut buf).await.map_err(Error::Io)? == 0 {
+            if io.read_buf(&mut buf).await.map_err(proxy_io)? == 0 {
                 return Err(Error::Proxy(
                     "proxy closed the connection during CONNECT".into(),
                     None,

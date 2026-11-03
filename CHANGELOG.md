@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Rust only:
 
-- New variant `SameSite::Unspecified`.
+- New variants `SameSite::Unspecified` and `Error::ResponseTooLarge`.
 - `ServerPaddingTrial` has an `ends_at` field, and `draw` takes the time.
 
 ### Added
@@ -45,6 +45,10 @@ Rust only:
 **Responses and errors**
 
 - A streaming response yields no empty chunks.
+- An oversized response fails with "Response body exceeded N bytes"; the CLI
+  exits with 63.
+- A refused WebSocket upgrade fails with `WEBSOCKET_ERROR`.
+- A proxy dropping the connection during CONNECT fails with `PROXY_ERROR`.
 - `blockedBy`/`blocked_by` reports fewer ordinary pages as blocks.
 
 **Bindings and CLI**

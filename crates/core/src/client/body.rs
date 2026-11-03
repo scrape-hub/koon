@@ -199,10 +199,7 @@ impl BodyStream {
         while let Some(chunk) = self.next().await? {
             total += chunk.len() as u64;
             if total > max {
-                return Err(Error::Body(
-                    format!("response body exceeded {max} bytes"),
-                    None,
-                ));
+                return Err(Error::ResponseTooLarge(max));
             }
             out.extend_from_slice(&chunk);
         }

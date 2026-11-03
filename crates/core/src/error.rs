@@ -47,6 +47,11 @@ pub enum Error {
     /// (a redirect other than 303 of a request with a stream body).
     #[error("Request body error: {0}")]
     Body(String, #[source] Option<Source>),
+    /// The response body, decoded, went past the client's cap of this many bytes
+    /// ([`ClientBuilder::max_response_body`](crate::client::ClientBuilder::max_response_body)).
+    /// Its code is `BODY_ERROR`, as for [`Error::Body`].
+    #[error("Response body exceeded {0} bytes")]
+    ResponseTooLarge(u64),
     /// TCP connection failed (refused, unreachable, etc.).
     #[error("Connection failed: {0}")]
     ConnectionFailed(String, #[source] Option<Source>),
@@ -108,7 +113,7 @@ impl Error {
             Self::Url(_) | Self::UnsupportedScheme(_) => "INVALID_URL",
             Self::Proxy(..) => "PROXY_ERROR",
             Self::InvalidHeader(..) => "INVALID_HEADER",
-            Self::Body(..) => "BODY_ERROR",
+            Self::Body(..) | Self::ResponseTooLarge(_) => "BODY_ERROR",
             Self::ConnectionFailed(..) => "CONNECTION_FAILED",
             Self::Protocol(..) => "PROTOCOL_ERROR",
             Self::Json(_) => "JSON_ERROR",

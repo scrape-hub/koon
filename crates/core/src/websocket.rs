@@ -14,6 +14,7 @@ use futures_util::{SinkExt, StreamExt};
 use http::{Method, Uri};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::Mutex;
+use tungstenite::error::ProtocolError;
 use tungstenite::protocol::Role;
 
 use crate::client::headers::header_value;
@@ -227,8 +228,25 @@ pub(crate) fn policy(profile: &BrowserProfile) -> Policy {
     }
 }
 
-fn handshake_failed(reason: String) -> Error {
-    Error::ConnectionFailed(format!("WebSocket handshake failed: {reason}"), None)
+/// The error for a handshake the server answered with `status` instead of switching protocols: its
+/// response, as tungstenite reports one ([`Error::WebSocket`], not a connection failure).
+fn refused(status: http::StatusCode, headers: &[(String, String)]) -> Error {
+    let mut response = http::Response::new(None);
+    *response.status_mut() = status;
+    for (name, value) in headers {
+        if let (Ok(name), Ok(value)) = (
+            http::HeaderName::from_bytes(name.as_bytes()),
+            http::HeaderValue::from_str(value),
+        ) {
+            response.headers_mut().append(name, value);
+        }
+    }
+    tungstenite::Error::Http(response).into()
+}
+
+/// The error for a switching response that breaks RFC 6455 or RFC 8441.
+fn invalid(e: ProtocolError) -> Error {
+    tungstenite::Error::Protocol(e).into()
 }
 
 /// Fail if the response selects an extension or subprotocol the request did not offer. `value`
@@ -238,13 +256,10 @@ fn check_selected<'a>(
     value: impl Fn(&str) -> Option<&'a str>,
 ) -> Result<(), Error> {
     let was_offered = |name: &str| offered.iter().any(|(k, _)| k.eq_ignore_ascii_case(name));
-    for (name, what) in [
-        ("sec-websocket-extensions", "Sec-WebSocket-Extensions"),
-        ("sec-websocket-protocol", "Sec-WebSocket-Protocol"),
-    ] {
+    for name in ["sec-websocket-extensions", "sec-websocket-protocol"] {
         if value(name).is_some_and(|v| !v.trim().is_empty()) && !was_offered(name) {
-            return Err(handshake_failed(format!(
-                "server selected a {what} that was not offered"
+            return Err(invalid(ProtocolError::InvalidHeader(
+                http::HeaderName::from_static(name),
             )));
         }
     }
@@ -266,10 +281,9 @@ pub(crate) async fn connect(
     let response = http1::read_response_headers(&mut conn).await?;
 
     if response.status != 101 {
-        return Err(handshake_failed(format!(
-            "server returned {}",
-            response.status
-        )));
+        let status =
+            http::StatusCode::from_u16(response.status).unwrap_or(http::StatusCode::BAD_GATEWAY);
+        return Err(refused(status, &response.headers));
     }
     let value = |name: &str| {
         response
@@ -279,23 +293,18 @@ pub(crate) async fn connect(
             .map(|(_, v)| v.as_str())
     };
     if !value("upgrade").is_some_and(|v| v.trim().eq_ignore_ascii_case("websocket")) {
-        return Err(handshake_failed("missing Upgrade: websocket".into()));
+        return Err(invalid(ProtocolError::MissingUpgradeWebSocketHeader));
     }
     if !value("connection").is_some_and(|v| {
         v.split(',')
             .any(|t| t.trim().eq_ignore_ascii_case("upgrade"))
     }) {
-        return Err(handshake_failed("missing Connection: Upgrade".into()));
+        return Err(invalid(ProtocolError::MissingConnectionUpgradeHeader));
     }
     let expected = tungstenite::handshake::derive_accept_key(key.as_bytes());
     match value("sec-websocket-accept") {
         Some(accept) if accept.trim() == expected => {}
-        Some(accept) => {
-            return Err(handshake_failed(format!(
-                "invalid Sec-WebSocket-Accept {accept}"
-            )));
-        }
-        None => return Err(handshake_failed("missing Sec-WebSocket-Accept".into())),
+        _ => return Err(invalid(ProtocolError::SecWebSocketAcceptKeyMismatch)),
     }
     check_selected(&headers, value)?;
 
@@ -337,10 +346,7 @@ pub(crate) async fn connect_h2(
         received: FrameScan::default(),
     };
     if response.status != http::StatusCode::OK {
-        return Err(handshake_failed(format!(
-            "server returned {}",
-            response.status.as_u16()
-        )));
+        return Err(refused(response.status, &headers));
     }
     check_selected(offered, |name| {
         headers

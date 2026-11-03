@@ -838,6 +838,63 @@ async fn chrome_and_firefox_keep_six_http1_connections_per_host() {
     assert_eq!(peak, 10);
 }
 
+/// A server that answers every request with `answer` once its head is in, then closes.
+async fn answering(answer: &'static [u8]) -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        while let Ok((mut stream, _)) = listener.accept().await {
+            let mut buf = Vec::new();
+            if fill(&mut stream, &mut buf).await {
+                let _ = stream.write_all(answer).await;
+            }
+        }
+    });
+    port
+}
+
+#[tokio::test]
+async fn a_refused_websocket_upgrade_is_a_websocket_error() {
+    let port = answering(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n").await;
+    let client = Client::new(Chrome::latest()).unwrap();
+    let Err(err) = client.websocket(&format!("ws://127.0.0.1:{port}/")).await else {
+        panic!("the upgrade succeeded");
+    };
+    match &err {
+        Error::WebSocket(ws) => match ws.as_ref() {
+            tungstenite::Error::Http(response) => assert_eq!(response.status(), 200),
+            other => panic!("{other}"),
+        },
+        other => panic!("{other}"),
+    }
+    assert_eq!(err.code(), "WEBSOCKET_ERROR");
+}
+
+#[tokio::test]
+async fn a_proxy_that_resets_during_connect_is_a_proxy_error() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        while let Ok((mut stream, _)) = listener.accept().await {
+            let mut buf = Vec::new();
+            if fill(&mut stream, &mut buf).await {
+                // A reset instead of an answer. A zero linger does not block the drop, which is
+                // why tokio deprecates `set_linger` in general.
+                #[allow(deprecated)]
+                let _ = stream.set_linger(Some(Duration::ZERO));
+                drop(stream);
+            }
+        }
+    });
+    let client = Client::builder(Chrome::latest())
+        .proxy(&format!("http://127.0.0.1:{port}"))
+        .unwrap()
+        .build()
+        .unwrap();
+    let err = client.get("https://example.test/").await.unwrap_err();
+    assert_eq!(err.code(), "PROXY_ERROR", "{err}");
+}
+
 #[tokio::test]
 async fn a_redirect_to_an_unsupported_scheme_is_not_retried() {
     let server = Server::start().await;
