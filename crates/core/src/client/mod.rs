@@ -78,7 +78,7 @@ use crate::cookie::CookieJar;
 use crate::dns::DohResolver;
 use crate::error::Error;
 use crate::multipart::Multipart;
-use crate::pool::ConnectionPool;
+use crate::pool::{ConnectionPool, IdleTimeouts};
 use crate::profile::BrowserProfile;
 use crate::proxy::{ProxyConfig, ProxyRotation};
 use crate::quic::transport::QuicSetup;
@@ -182,6 +182,46 @@ pub fn parse_method(method: &str) -> Result<Method, Error> {
         let message = format!("Invalid HTTP method: '{method}'");
         Error::InvalidArgument(message, crate::error::boxed(e))
     })
+}
+
+/// The connection pool of `family`'s browser: how long it keeps idle connections and how many.
+fn browser_pool(family: headers::Family) -> ConnectionPool {
+    let seconds = Duration::from_secs;
+    let (max_size, timeouts) = match family {
+        // `used_idle_socket_timeout` (net/socket/client_socket_pool.cc); a SpdySession has none.
+        headers::Family::Chromium => (
+            256,
+            IdleTimeouts {
+                h1: seconds(300),
+                mux: None,
+            },
+        ),
+        // network.http.keep-alive.timeout and network.http.http2.timeout.
+        headers::Family::Firefox => (
+            256,
+            IdleTimeouts {
+                h1: seconds(115),
+                mux: Some(seconds(170)),
+            },
+        ),
+        // `ConnectionPool()`: 5 idle connections for 5 minutes.
+        headers::Family::OkHttp => (
+            5,
+            IdleTimeouts {
+                h1: seconds(300),
+                mux: Some(seconds(300)),
+            },
+        ),
+        // CFNetwork's are not public.
+        _ => (
+            256,
+            IdleTimeouts {
+                h1: seconds(90),
+                mux: Some(seconds(90)),
+            },
+        ),
+    };
+    ConnectionPool::new(max_size, timeouts)
 }
 
 impl ClientBuilder {
@@ -517,6 +557,7 @@ impl ClientBuilder {
             None
         };
 
+        let pool = Arc::new(browser_pool(headers::Family::of(&self.profile)));
         Ok(Client {
             profile: self.profile,
             tls_connector,
@@ -547,7 +588,7 @@ impl ClientBuilder {
                 .native_https_resolver
                 .map_or_else(crate::dns::NativeHttpsResolver::shared, Arc::new),
             h2_builder,
-            pool: Arc::new(ConnectionPool::new(256, Duration::from_secs(90))),
+            pool,
             alt_svc: Arc::default(),
             host_cache: Mutex::default(),
             quic_setup: OnceLock::new(),

@@ -17,6 +17,26 @@ const MAX_MULTIPLEXED_ORIGINS: usize = 1024;
 /// Keys with HTTP/1.1 slot counters kept once none is in use (see [`ConnectionPool::h1_slot`]).
 const MAX_IDLE_H1_SLOT_KEYS: usize = 1024;
 
+/// How long a browser keeps an idle connection, HTTP/1.1 and multiplexed (HTTP/2, HTTP/3) apart;
+/// `None` keeps it until the server closes it. Checked when the pool is next used, as Chromium does
+/// (`CleanupIdleSockets` on a socket request).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct IdleTimeouts {
+    pub h1: Duration,
+    pub mux: Option<Duration>,
+}
+
+impl IdleTimeouts {
+    fn h1_fresh(&self, last_used: Instant, now: Instant) -> bool {
+        now.duration_since(last_used) < self.h1
+    }
+
+    fn mux_fresh(&self, last_used: Instant, now: Instant) -> bool {
+        self.mux
+            .is_none_or(|timeout| now.duration_since(last_used) < timeout)
+    }
+}
+
 /// Pool key: scheme, origin and the proxy the connection goes through. Connections are never shared
 /// across proxies: a different proxy URL (including its credentials, which often carry a session
 /// ID) is a different exit.
@@ -98,15 +118,15 @@ impl Slot {
 /// Thread-safe connection pool for HTTP/1.1, HTTP/2 and HTTP/3.
 ///
 /// HTTP/2 and HTTP/3 keep one multiplexed connection per key; HTTP/1.1 keeps up to six idle
-/// connections per key. Connections idle for longer than `idle_timeout` are dropped, and the pool
-/// holds at most `max_size` connections, evicting the least recently used.
+/// connections per key. Connections idle for longer than their [`IdleTimeouts`] are dropped, and
+/// the pool holds at most `max_size` connections, evicting the least recently used.
 ///
 /// The pool also remembers which keys speak HTTP/2 or HTTP/3, beyond the life of their connections,
 /// and gates new connections to them.
 pub(crate) struct ConnectionPool {
     slots: Mutex<HashMap<PoolKey, Slot>>,
     max_size: usize,
-    idle_timeout: Duration,
+    timeouts: IdleTimeouts,
     next_id: AtomicU64,
     /// Keys known to be multiplexed, each with the gate a request holds while it opens a connection
     /// to it.
@@ -116,11 +136,11 @@ pub(crate) struct ConnectionPool {
 }
 
 impl ConnectionPool {
-    pub fn new(max_size: usize, idle_timeout: Duration) -> Self {
+    pub fn new(max_size: usize, timeouts: IdleTimeouts) -> Self {
         Self {
             slots: Mutex::new(HashMap::new()),
             max_size,
-            idle_timeout,
+            timeouts,
             next_id: AtomicU64::new(0),
             multiplexed: Mutex::new(HashMap::new()),
             h1_slots: Mutex::new(HashMap::new()),
@@ -133,10 +153,14 @@ impl ConnectionPool {
 
     fn prune(&self, map: &mut HashMap<PoolKey, Slot>) {
         let now = Instant::now();
-        let fresh = |last_used: Instant| now.duration_since(last_used) < self.idle_timeout;
         map.retain(|_, slot| {
-            slot.idle.retain(|e| fresh(e.last_used));
-            if slot.mux.as_ref().is_some_and(|e| !fresh(e.last_used)) {
+            slot.idle
+                .retain(|e| self.timeouts.h1_fresh(e.last_used, now));
+            if slot
+                .mux
+                .as_ref()
+                .is_some_and(|e| !self.timeouts.mux_fresh(e.last_used, now))
+            {
                 slot.mux = None;
             }
             slot.len() > 0
@@ -177,7 +201,7 @@ impl ConnectionPool {
         let now = Instant::now();
         let mut found = None;
         while let Some(entry) = slot.idle.pop() {
-            if now.duration_since(entry.last_used) < self.idle_timeout {
+            if self.timeouts.h1_fresh(entry.last_used, now) {
                 found = Some((entry.conn, entry.info));
                 break;
             }
@@ -211,7 +235,7 @@ impl ConnectionPool {
         let mut map = self.lock();
         let slot = map.get_mut(key)?;
         let entry = slot.mux.as_mut()?;
-        if entry.last_used.elapsed() >= self.idle_timeout {
+        if !self.timeouts.mux_fresh(entry.last_used, Instant::now()) {
             slot.mux = None;
             if slot.len() == 0 {
                 map.remove(key);
@@ -353,6 +377,29 @@ pub(crate) struct Taken {
 mod tests {
     use super::*;
 
+    const TEST_TIMEOUTS: IdleTimeouts = IdleTimeouts {
+        h1: Duration::from_secs(90),
+        mux: Some(Duration::from_secs(90)),
+    };
+
+    #[tokio::test]
+    async fn idle_connections_last_as_long_as_the_browser_keeps_them() {
+        let timeouts = IdleTimeouts {
+            h1: Duration::from_millis(50),
+            mux: None,
+        };
+        let pool = ConnectionPool::new(256, timeouts);
+        let (io, _peer) = tokio::io::duplex(64);
+        pool.put_h1(key(0), Box::new(io), ConnInfo::default());
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(pool.take_h1(&key(0)).is_none());
+
+        // Chromium keeps an idle HTTP/2 session until the server closes it.
+        let long_ago = Instant::now() - Duration::from_secs(24 * 60 * 60);
+        assert!(timeouts.mux_fresh(long_ago, Instant::now()));
+        assert!(!TEST_TIMEOUTS.mux_fresh(long_ago, Instant::now()));
+    }
+
     fn key(i: usize) -> PoolKey {
         PoolKey {
             secure: true,
@@ -367,7 +414,7 @@ mod tests {
     /// insert below it must still not let `known` grow past the cap.
     #[tokio::test]
     async fn set_multiplexed_stays_bounded_when_every_known_key_has_a_waiter() {
-        let pool = ConnectionPool::new(256, Duration::from_secs(90));
+        let pool = ConnectionPool::new(256, TEST_TIMEOUTS);
         let mut guards = Vec::new();
         for i in 0..MAX_MULTIPLEXED_ORIGINS {
             let k = key(i);

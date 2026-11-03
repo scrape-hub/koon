@@ -64,6 +64,8 @@ Rust only:
   names the page.
 - A host's addresses and its DNS HTTPS record are looked up at once, as
   browsers do, not one after the other.
+- Idle connections stay pooled as long as the profile's browser keeps them,
+  instead of 90 s for every browser.
 
 **Responses and errors**
 
