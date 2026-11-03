@@ -18,7 +18,7 @@ Every binding uses the same fingerprint engine, so a profile behaves the same fr
 npm install koonjs
 ```
 
-**Python**
+**Python** (3.11 or newer)
 ```bash
 pip install koon
 pip install "koon[httpx]"      # with the httpx transport's dependency

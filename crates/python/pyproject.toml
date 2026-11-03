@@ -6,7 +6,7 @@ build-backend = "maturin"
 name = "koon"
 version = "1.2.2"
 description = "Browser-impersonating HTTP client: TLS, HTTP/2 and HTTP/3 fingerprints of Chrome, Firefox, Safari, Edge, Opera, Brave, Samsung Internet and OkHttp, checked against the real browsers."
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "scrape-hub" }]
 readme = "../../README.md"
@@ -32,8 +32,6 @@ classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",

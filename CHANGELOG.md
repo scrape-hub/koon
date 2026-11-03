@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Breaking changes
 
+- Python 3.9 and 3.10 are no longer supported; pip installs 1.2.2 there.
 - Node: unknown option keys throw `INVALID_ARGUMENT` instead of being ignored.
 - A cookie without SameSite keeps none; `cookies()` leaves `sameSite` out for it.
 
