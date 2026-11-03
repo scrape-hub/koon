@@ -1,5 +1,6 @@
 // Offline tests: the plain request/response path, profile resolution, error
 // codes, cookies, hooks and shutdown.
+const fs = require('node:fs');
 const os = require('node:os');
 const http2 = require('node:http2');
 const { pathToFileURL } = require('node:url');
@@ -633,8 +634,48 @@ async function testHookErrorsFailTheRequest() {
   }
 }
 
+// Every options type rejects a key it does not have, and its keys are those of index.d.ts.
+async function testUnknownOptions() {
+  console.log('unknown option keys are an INVALID_ARGUMENT error');
+  const { OPTION_KEYS: optionKeys } = require('./options.js');
+  const dts = fs.readFileSync(path.join(__dirname, 'index.d.ts'), 'utf8');
+  const members = (body) => {
+    const keys = [];
+    let depth = 0;
+    for (const line of body.replace(/\/\*[\s\S]*?\*\//g, '').split('\n')) {
+      const key = depth === 0 && /^\s*(?:readonly\s+)?([A-Za-z_]\w*)\??\s*[:(]/.exec(line);
+      if (key) keys.push(key[1]);
+      depth += (line.match(/\{/g) || []).length - (line.match(/\}/g) || []).length;
+    }
+    return keys;
+  };
+  const declared = (name) => {
+    const head = new RegExp(`export interface ${name}(?: extends (\\w+))? \\{`).exec(dts);
+    let i = head.index + head[0].length;
+    for (let depth = 1; depth; i += 1) depth += { '{': 1, '}': -1 }[dts[i]] || 0;
+    const own = members(dts.slice(head.index + head[0].length, i - 1));
+    return head[1] ? [...declared(head[1]), ...own] : own;
+  };
+  for (const [type, keys] of Object.entries(optionKeys)) {
+    if (type === 'KoonVerifyOptions') continue;
+    check(`${type} keys match index.d.ts`, [...keys].sort().join() === declared(type).sort().join(), [...keys].join());
+  }
+  const url = 'http://127.0.0.1:9/';
+  await expectThrows(() => new Koon({ browsr: 'firefox' }), 'a misspelled client option', 'INVALID_ARGUMENT');
+  try {
+    new Koon({ follow_redirects: false });
+  } catch (err) {
+    check('a snake_case key names its camelCase spelling', /did you mean 'followRedirects'/.test(err.message), err.message);
+  }
+  await expectThrows(() => new Koon().get(url, { followRedirect: false }), 'a misspelled request option', 'INVALID_ARGUMENT');
+  await expectThrows(() => new Koon().requestStreaming('GET', url, undefined, { decoded: false }), 'a misspelled streaming option', 'INVALID_ARGUMENT');
+  await expectThrows(() => KoonProxy.start({ listen: '127.0.0.1:0' }), 'a misspelled proxy option', 'INVALID_ARGUMENT');
+  await expectThrows(() => Koon.verify('chrome', { proxys: [] }), 'a misspelled verify option', 'INVALID_ARGUMENT');
+}
+
 async function run() {
   await testEsmNamedImport();
+  await testUnknownOptions();
   await testLatestProfiles();
   await testErrorCodes();
   await testHttp2ErrorCode();

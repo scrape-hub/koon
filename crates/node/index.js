@@ -75,7 +75,7 @@ function warnOnce(code, message) {
 // synchronous: a Promise a hook returns is not awaited, so its rejection
 // cannot fail the request; it is reported as a warning instead of becoming
 // an unhandled rejection.
-const HOOKS = ['onRequest', 'onResponse', 'onRedirect'];
+const { HOOKS, checkOptions } = require('./options.js');
 
 // Values hooks threw, by id, until the request they failed rejects with them.
 const thrownByHooks = new Map();
@@ -204,13 +204,20 @@ for (const nativeClass of [
   native.KoonProxy,
 ]) {
   const proto = nativeClass.prototype;
-  const mapArgs = nativeClass === native.Koon ? (args) => args.map(prepareOptions) : (args) => args;
+  const mapArgs =
+    nativeClass === native.Koon
+      ? (name, args) => {
+          // `requestStreaming` (below) has taken `decode` out by now.
+          if (name === 'request' || name === 'requestStreaming') checkOptions(args[3], 'KoonRequestOptions');
+          return args.map(prepareOptions);
+        }
+      : (name, args) => args;
   for (const name of Object.getOwnPropertyNames(proto)) {
     const { value } = Object.getOwnPropertyDescriptor(proto, name);
     if (name === 'constructor' || typeof value !== 'function') continue;
     proto[name] = {
       [name](...args) {
-        return callWithErrorCode(value, this, mapArgs(args));
+        return callWithErrorCode(value, this, mapArgs(name, args));
       },
     }[name];
   }
@@ -240,6 +247,7 @@ native.KoonStreamingResponse.prototype[Symbol.asyncIterator] = async function* c
 // `Koon.browsers()` is inherited from the native class.
 class Koon extends native.Koon {
   constructor(options) {
+    checkOptions(options, 'KoonOptions');
     try {
       super(prepareOptions(options));
     } catch (err) {
@@ -278,6 +286,7 @@ class Koon extends native.Koon {
   // The body is decoded (Content-Encoding) unless `decode: false`; the
   // decoder is set before the caller can read the first chunk.
   async requestStreaming(method, url, body, options) {
+    checkOptions(options, 'KoonStreamingOptions');
     let decode = true;
     if (options !== null && typeof options === 'object' && 'decode' in options) {
       ({ decode, ...options } = options);
@@ -289,6 +298,7 @@ class Koon extends native.Koon {
 
   // The fingerprint self-test: the report of the native side, parsed.
   static async verify(browser = 'chrome', options = {}) {
+    checkOptions(options, 'KoonVerifyOptions');
     const proxy = options && options.proxy != null ? options.proxy : undefined;
     return JSON.parse(await callWithErrorCode(native.verifyJson, undefined, [browser, proxy]));
   }
@@ -304,6 +314,7 @@ function KoonProxy() {
 }
 KoonProxy.prototype = native.KoonProxy.prototype;
 KoonProxy.start = function start(options) {
+  checkOptions(options, 'KoonProxyOptions');
   return callWithErrorCode(nativeProxyStart, undefined, [prepareOptions(options)]);
 };
 

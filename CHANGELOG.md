@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Breaking changes
 
+- Node: unknown option keys throw `INVALID_ARGUMENT` instead of being ignored.
 - A cookie without SameSite keeps none; `cookies()` leaves `sameSite` out for it.
 
 Rust only:
