@@ -541,9 +541,11 @@ impl ClientBuilder {
             ip_version: self.ip_version,
             resolve_overrides: self.resolve_overrides,
             #[cfg(feature = "doh")]
-            doh_resolver: self.doh_resolver,
+            doh_resolver: self.doh_resolver.map(Arc::new),
             #[cfg(feature = "doh")]
-            native_https_resolver: self.native_https_resolver.unwrap_or_default(),
+            native_https_resolver: self
+                .native_https_resolver
+                .map_or_else(crate::dns::NativeHttpsResolver::shared, Arc::new),
             h2_builder,
             pool: Arc::new(ConnectionPool::new(256, Duration::from_secs(90))),
             alt_svc: Arc::default(),
@@ -590,12 +592,12 @@ pub struct Client {
     pub(super) ip_version: Option<IpVersion>,
     resolve_overrides: ResolveOverrides,
     #[cfg(feature = "doh")]
-    doh_resolver: Option<DohResolver>,
+    doh_resolver: Option<Arc<DohResolver>>,
     /// Queries HTTPS DNS records over plain DNS when no [`DohResolver`] is configured: a profile's
     /// default (non-DoH) configuration, which still discovers HTTP/3 through them (see
     /// [`QuicConfig::https_rr`](crate::quic::QuicConfig::https_rr)).
     #[cfg(feature = "doh")]
-    native_https_resolver: crate::dns::NativeHttpsResolver,
+    native_https_resolver: Arc<crate::dns::NativeHttpsResolver>,
     /// The profile's HTTP/2 settings, applied to every HTTP/2 connection.
     h2_builder: http2::client::Builder,
     /// Shared with response bodies, which return HTTP/1.1 connections once they have been read, and

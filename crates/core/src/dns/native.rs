@@ -39,6 +39,14 @@ pub struct NativeHttpsResolver {
 }
 
 impl NativeHttpsResolver {
+    /// The resolver of every client built without one of its own: one per process, so the
+    /// nameserver is discovered once and the records found serve every client.
+    pub(crate) fn shared() -> std::sync::Arc<Self> {
+        static SHARED: std::sync::OnceLock<std::sync::Arc<NativeHttpsResolver>> =
+            std::sync::OnceLock::new();
+        SHARED.get_or_init(std::sync::Arc::default).clone()
+    }
+
     /// Queries `nameserver` directly instead of discovering the system's configured one: for a
     /// sandbox where that read is unavailable or wrong, or to point the query at a specific (e.g.
     /// local test) server.

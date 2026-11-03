@@ -660,16 +660,22 @@ impl super::Client {
     /// another port, see [`select_https_record`]).
     #[cfg(feature = "doh")]
     async fn https_record(&self, host: &str, port: u16) -> Option<crate::dns::HttpsRecord> {
-        let lookup = async {
-            match &self.doh_resolver {
-                Some(resolver) => resolver.query_https_records(host).await,
-                None => self.native_https_resolver.query_https_records(host).await,
+        let doh = self.doh_resolver.clone();
+        let native = self.native_https_resolver.clone();
+        let name = host.to_string();
+        // Its own task: a lookup slower than the bound still fills the cache for the next
+        // connection instead of being dropped with this one's wait.
+        let lookup = tokio::spawn(async move {
+            match doh {
+                Some(resolver) => resolver.query_https_records(&name).await,
+                None => native.query_https_records(&name).await,
             }
-        };
+        });
         let records = tokio::time::timeout(HTTPS_RR_TIMEOUT, lookup)
             .await
-            .ok()
-            .and_then(|r| r.ok())?;
+            .ok()?
+            .ok()?
+            .ok()?;
         let chromium = matches!(
             self.profile.header_family,
             Some(super::headers::Family::Chromium)
