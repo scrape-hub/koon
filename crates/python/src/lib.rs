@@ -18,9 +18,9 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBytes, PyDict, PyList, PyMapping, PyString};
 
 use koon_core::{
-    Body, BoundaryStyle, BrowserProfile, ClientBuilder, CookieParams, HeaderFamily, HeaderMode,
-    IpVersion, Multipart, OnRedirectHook, OnRequestHook, OnResponseHook, PartitionKey, ProxyServer,
-    ProxyServerConfig, RequestOptions, SkippedCookie, WsMessage,
+    Body, BrowserProfile, ClientBuilder, CookieParams, HeaderMode, IpVersion, Multipart,
+    OnRedirectHook, OnRequestHook, OnResponseHook, PartitionKey, ProxyServer, ProxyServerConfig,
+    RequestOptions, SkippedCookie, WsMessage,
 };
 
 /// How often a blocking request checks for Ctrl+C.
@@ -810,15 +810,7 @@ impl NativeClient {
     /// uploads of `files=` this way.
     #[pyo3(name = "_encode_multipart")]
     fn encode_multipart(&self, fields: Vec<Bound<'_, PyAny>>) -> PyResult<(Vec<u8>, String)> {
-        let profile = self.client.profile();
-        let style = match profile
-            .header_family
-            .unwrap_or_else(|| HeaderFamily::detect(profile))
-        {
-            HeaderFamily::Firefox => BoundaryStyle::Gecko,
-            _ => BoundaryStyle::WebKit,
-        };
-        Ok(build_multipart(fields)?.build_with(style))
+        Ok(build_multipart(fields)?.build_with(self.client.boundary_style()))
     }
 
     /// Open a WebSocket connection (awaitable).

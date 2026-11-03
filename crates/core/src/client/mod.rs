@@ -819,20 +819,27 @@ impl Client {
             .await
     }
 
-    /// Sends a POST request with a `multipart/form-data` body, whose boundary follows the profile's
-    /// browser. Its Content-Type replaces any in `options`. Fails as [`request`](Self::request)
+    /// The multipart boundary of the profile's browser: Firefox's, else Chromium's, which Safari
+    /// shares. Every binding encodes forms with it, as [`post_multipart`](Self::post_multipart)
     /// does.
+    #[must_use]
+    pub fn boundary_style(&self) -> crate::multipart::BoundaryStyle {
+        match headers::Family::of(&self.profile) {
+            headers::Family::Firefox => crate::multipart::BoundaryStyle::Gecko,
+            _ => crate::multipart::BoundaryStyle::WebKit,
+        }
+    }
+
+    /// Sends a POST request with a `multipart/form-data` body, whose boundary follows the profile's
+    /// browser ([`boundary_style`](Self::boundary_style)). Its Content-Type replaces any in
+    /// `options`. Fails as [`request`](Self::request) does.
     pub async fn post_multipart(
         &self,
         url: &str,
         multipart: Multipart,
         mut options: RequestOptions,
     ) -> Result<HttpResponse, Error> {
-        let style = match headers::Family::of(&self.profile) {
-            headers::Family::Firefox => crate::multipart::BoundaryStyle::Gecko,
-            _ => crate::multipart::BoundaryStyle::WebKit,
-        };
-        let (body, content_type) = multipart.build_with(style);
+        let (body, content_type) = multipart.build_with(self.boundary_style());
         options
             .headers
             .retain(|(k, _)| !k.eq_ignore_ascii_case("content-type"));

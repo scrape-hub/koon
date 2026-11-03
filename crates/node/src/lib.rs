@@ -9,9 +9,8 @@ use koon_core::dns::DohConfig;
 use koon_core::multipart::Multipart;
 use koon_core::profile::BrowserProfile;
 use koon_core::{
-    Body, BoundaryStyle, Client, ClientBuilder, CookieParams, Error as KoonError, HeaderFamily,
-    IpVersion, PartitionKey, ProxyServer, ProxyServerAuth, ProxyServerConfig, SkippedCookie,
-    WsMessage,
+    Body, Client, ClientBuilder, CookieParams, Error as KoonError, IpVersion, PartitionKey,
+    ProxyServer, ProxyServerAuth, ProxyServerConfig, SkippedCookie, WsMessage,
 };
 use napi::bindgen_prelude::*;
 use napi::threadsafe_function::{ErrorStrategy, ThreadsafeFunction, ThreadsafeFunctionCallMode};
@@ -1011,15 +1010,8 @@ impl Koon {
     /// browser, as `postMultipart()` sends it (for a `FormData` in koonFetch).
     #[napi(js_name = "_encodeMultipart")]
     pub fn encode_multipart(&self, fields: Vec<KoonMultipartField>) -> Result<KoonEncodedBody> {
-        let profile = self.client.profile();
-        let family = profile
-            .header_family
-            .unwrap_or_else(|| HeaderFamily::detect(profile));
-        let style = match family {
-            HeaderFamily::Firefox => BoundaryStyle::Gecko,
-            _ => BoundaryStyle::WebKit,
-        };
-        let (body, content_type) = build_multipart(fields)?.build_with(style);
+        let (body, content_type) =
+            build_multipart(fields)?.build_with(self.client.boundary_style());
         Ok(KoonEncodedBody {
             body: body.into(),
             content_type,

@@ -5,9 +5,9 @@ use futures_util::Stream;
 use http::Method;
 use koon_core::dns::DohConfig;
 use koon_core::{
-    Body, BoundaryStyle, Browser, BrowserProfile, Chrome, Client, ClientBuilder, DEFAULT_OS,
-    HeaderFamily, HeaderMode, IpVersion, Multipart, Os, ProxyServer, ProxyServerAuth,
-    ProxyServerConfig, RequestOptions, StreamingResponse, decode_body_text, parse_method,
+    Body, Browser, BrowserProfile, Chrome, Client, ClientBuilder, DEFAULT_OS, HeaderMode,
+    IpVersion, Multipart, Os, ProxyServer, ProxyServerAuth, ProxyServerConfig, RequestOptions,
+    StreamingResponse, decode_body_text, parse_method,
 };
 use serde_json::json;
 use std::borrow::Cow;
@@ -577,12 +577,7 @@ fn form_body(fields: &[FormField], client: &Client) -> Result<(Vec<u8>, String),
             }
         };
     }
-    // As `Client::post_multipart`: Firefox's boundary, or Chromium's.
-    let style = match client.profile().header_family {
-        Some(HeaderFamily::Firefox) => BoundaryStyle::Gecko,
-        _ => BoundaryStyle::WebKit,
-    };
-    Ok(form.build_with(style))
+    Ok(form.build_with(client.boundary_style()))
 }
 
 /// The chunks of a file, read as the request sends them.

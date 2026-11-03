@@ -21,6 +21,7 @@ Rust only:
 
 - Linux arm64 packages for Node, Python and the CLI.
 - Python: free-threaded wheels (3.14t, 3.15t) for Windows and macOS.
+- Rust: `Client::boundary_style()`.
 
 ### Changed
 
