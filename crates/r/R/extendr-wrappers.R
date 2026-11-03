@@ -25,6 +25,15 @@ NULL
 #' @export
 koon_browsers <- function() .Call(wrap__koon_browsers)
 
+#' The fingerprint self-test of `koon_core::verify` for `koon_verify()` in
+#' `R/koon.R`: the report as a named list.
+#' @noRd
+verify_report <- function(browser, options = NULL) .Call(wrap__verify_report, browser, options)
+
+#' `koon_core::blocked_by` for `koon_blocked_by()` in `R/koon.R`.
+#' @noRd
+blocked_by_parts <- function(status, headers, body, url) .Call(wrap__blocked_by_parts, status, headers, body, url)
+
 #' Raise the user interrupt that stopped a request.
 #' @noRd
 raise_interrupt <- function() invisible(.Call(wrap__raise_interrupt))
@@ -34,6 +43,16 @@ Koon <- new.env(parent = emptyenv())
 Koon$new <- function(browser = "chrome", options = NULL) .Call(wrap__Koon__new, browser, options)
 
 Koon$request <- function(method, url, body = NULL, options = NULL) .Call(wrap__Koon__request, self, method, url, body, options)
+
+Koon$post_multipart <- function(url, fields, options = NULL) .Call(wrap__Koon__post_multipart, self, url, fields, options)
+
+Koon$request_streaming <- function(method, url, body = NULL, options = NULL) .Call(wrap__Koon__request_streaming, self, method, url, body, options)
+
+Koon$websocket <- function(url, headers = NULL) .Call(wrap__Koon__websocket, self, url, headers)
+
+Koon$save_session_to_file <- function(path) .Call(wrap__Koon__save_session_to_file, self, path)
+
+Koon$load_session_from_file <- function(path) .Call(wrap__Koon__load_session_from_file, self, path)
 
 Koon$save_session <- function() .Call(wrap__Koon__save_session, self)
 
@@ -64,5 +83,53 @@ Koon$shutdown <- function() invisible(.Call(wrap__Koon__shutdown, self))
 
 #' @export
 `[[.Koon` <- `$.Koon`
+
+KoonStream <- new.env(parent = emptyenv())
+
+KoonStream$next_chunk <- function() .Call(wrap__KoonStream__next_chunk, self)
+
+KoonStream$collect <- function() .Call(wrap__KoonStream__collect, self)
+
+KoonStream$cancel <- function() invisible(.Call(wrap__KoonStream__cancel, self))
+
+#' @export
+`$.KoonStream` <- function (self, name) { func <- KoonStream[[name]]; environment(func) <- environment(); func }
+
+#' @export
+`[[.KoonStream` <- `$.KoonStream`
+
+KoonWebSocket <- new.env(parent = emptyenv())
+
+KoonWebSocket$send <- function(data) .Call(wrap__KoonWebSocket__send, self, data)
+
+KoonWebSocket$receive <- function() .Call(wrap__KoonWebSocket__receive, self)
+
+KoonWebSocket$close <- function(code = NULL, reason = NULL) .Call(wrap__KoonWebSocket__close, self, code, reason)
+
+#' @export
+`$.KoonWebSocket` <- function (self, name) { func <- KoonWebSocket[[name]]; environment(func) <- environment(); func }
+
+#' @export
+`[[.KoonWebSocket` <- `$.KoonWebSocket`
+
+KoonProxy <- new.env(parent = emptyenv())
+
+KoonProxy$start <- function(options = NULL) .Call(wrap__KoonProxy__start, options)
+
+KoonProxy$port <- function() .Call(wrap__KoonProxy__port, self)
+
+KoonProxy$url <- function() .Call(wrap__KoonProxy__url, self)
+
+KoonProxy$ca_cert_path <- function() .Call(wrap__KoonProxy__ca_cert_path, self)
+
+KoonProxy$ca_cert_pem <- function() .Call(wrap__KoonProxy__ca_cert_pem, self)
+
+KoonProxy$shutdown <- function() invisible(.Call(wrap__KoonProxy__shutdown, self))
+
+#' @export
+`$.KoonProxy` <- function (self, name) { func <- KoonProxy[[name]]; environment(func) <- environment(); func }
+
+#' @export
+`[[.KoonProxy` <- `$.KoonProxy`
 
 # nolint end

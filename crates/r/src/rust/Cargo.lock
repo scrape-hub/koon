@@ -936,6 +936,7 @@ version = "0.5.6"
 dependencies = [
  "extendr-api",
  "koon-core",
+ "serde_json",
  "tokio",
 ]
 

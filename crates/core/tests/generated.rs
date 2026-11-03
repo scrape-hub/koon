@@ -566,6 +566,92 @@ fn r() -> Result<(), String> {
         &["self"],
         &request,
     );
+    functions.push('\n');
+    r_function(
+        &mut functions,
+        "Koon$post_multipart",
+        &[("url", None), ("fields", None)],
+        "wrap__Koon__post_multipart",
+        &["self"],
+        &request,
+    );
+    functions.push('\n');
+    r_function(
+        &mut functions,
+        "Koon$request_streaming",
+        &[("method", None), ("url", None), ("body", Some("NULL"))],
+        "wrap__Koon__request_streaming",
+        &["self"],
+        &r_options(Scope::Stream, &[]),
+    );
+    functions.push('\n');
+    let proxy = r_options(Scope::Proxy, &[]);
+    r_function(
+        &mut functions,
+        "KoonProxy$start",
+        &[],
+        "wrap__KoonProxy__start",
+        &[],
+        &proxy,
+    );
+
+    let mut proxy_docs = String::new();
+    proxy_docs.push_str("#' @section Start arguments:\n");
+    proxy_docs.push_str(
+        "#' `KoonProxy$start()` takes the following arguments. Any left `NULL` keeps\n#' its \
+         default.\n",
+    );
+    r_items(&mut proxy_docs, &proxy);
+    proxy_docs.push_str("#' @name KoonProxy\n#' @rdname KoonProxy\nNULL\n");
+
+    let mut verify = String::new();
+    verify.push_str(
+        "#' Check koon's fingerprint against the real browser\n#'\n\
+         #' Connects to tls.browserleaks.com (tls.peet.ws as fallback) and, where a QUIC\n\
+         #' reference exists, over HTTP/3 to quic.browserleaks.com, and compares JA4,\n\
+         #' JA3N, JA3, the Akamai HTTP/2 fingerprint and the QUIC JA4 with the values\n\
+         #' captured from the real browser. Through a proxy, HTTP/3 is not used.\n#'\n\
+         #' @param browser A built-in profile name, e.g. `\"chrome\"` or\n\
+         #'   `\"firefox154-windows\"`.\n",
+    );
+    let options: Vec<_> = r_options(Scope::Verify, &[])
+        .into_iter()
+        .filter(|spec| spec.name != "browser")
+        .collect();
+    for spec in &options {
+        let mut text = render(spec.doc, Target::R);
+        if let Some(note) = r_note(spec.kind) {
+            text = format!("{text} {note}");
+        }
+        if let Some(default) = default_text(spec.default, Target::R) {
+            text = format!("{text} Default {default}.");
+        }
+        let param = format!("@param {} {text}", spec.name);
+        for (i, line) in wrap(&param, R_WIDTH, "#'   ").into_iter().enumerate() {
+            if i == 0 {
+                verify.push_str(&format!("#' {}\n", &line["#'   ".len()..]));
+            } else {
+                verify.push_str(&line);
+                verify.push('\n');
+            }
+        }
+    }
+    verify.push_str(
+        "#' @return The report as a named list: `profile`, `koon_version`, `outcome`\n\
+         #'   (`\"match\"`, `\"mismatch\"`, `\"no_reference\"` or `\"unreachable\"`),\n\
+         #'   `references`, `service`, `http3_service`, `fields` (one list per field\n\
+         #'   with its `status`) and `errors` (the services that failed). An unknown\n\
+         #'   profile is a `koon_invalid_argument` error; unreachable services are part\n\
+         #'   of the report.\n#' @export\n",
+    );
+    r_function(
+        &mut verify,
+        "koon_verify",
+        &[("browser", Some("\"chrome\""))],
+        "wrap__verify_report",
+        &[],
+        &options,
+    );
 
     update(
         KOON_R,
@@ -578,6 +664,18 @@ fn r() -> Result<(), String> {
         "# BEGIN GENERATED functions",
         "# END GENERATED functions",
         &functions,
+    )?;
+    update(
+        KOON_R,
+        "# BEGIN GENERATED proxy docs",
+        "# END GENERATED proxy docs",
+        &proxy_docs,
+    )?;
+    update(
+        KOON_R,
+        "# BEGIN GENERATED koon_verify",
+        "# END GENERATED koon_verify",
+        &verify,
     )
 }
 

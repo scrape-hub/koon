@@ -8,8 +8,8 @@
 use extendr_api::prelude::*;
 use koon_core::options::{Hook, Kind, OptionError, Options, Scope, Target, Value};
 use koon_core::{
-    decode_body_text, parse_method, BrowserProfile, Client, CookieParams, HttpResponse,
-    PartitionKey, RequestOptions,
+    decode_body_text, parse_method, BrowserProfile, Client, CookieParams, HttpResponse, Multipart,
+    PartitionKey, RequestOptions, WsMessage,
 };
 use std::borrow::Cow;
 use std::os::raw::{c_int, c_void};
@@ -850,25 +850,71 @@ impl Koon {
         let body = self::body(&body)?;
         // Unset (NULL) options fall back to the client's settings.
         let (read, callbacks) = read_options(Scope::Request, &options)?;
-        let mut options = read.request_options();
-        let callbacks = callbacks.or(&self.callbacks);
-
-        let (tx, rx) = unbounded_channel();
-        callbacks.wire(&mut options, &tx);
-        drop(tx);
-        let runner = if callbacks.is_empty() {
-            None
-        } else {
-            Some(CallbackRunner {
-                callbacks,
-                runner: callback_runner()?,
-            })
-        };
-
-        let client = Arc::clone(&self.client);
-        let handle = runtime().spawn(async move { client.send(method, &url, body, options).await });
-        let response = poll_until_done(handle, rx, runner)??;
+        let response = self.run(read, callbacks, move |client, options| async move {
+            client.send(method, &url, body, options).await
+        })?;
         Ok(response_to_list(response))
+    }
+
+    /// Send a multipart/form-data POST; `$post_multipart()` in R/koon.R
+    /// passes the options as a named list.
+    fn post_multipart(
+        &self,
+        url: Robj,
+        fields: Robj,
+        #[default = "NULL"] options: Robj,
+    ) -> RResult<List> {
+        let url = string(&url, "url")?;
+        let form = multipart(&fields)?;
+        let (read, callbacks) = read_options(Scope::Request, &options)?;
+        let response = self.run(read, callbacks, move |client, options| async move {
+            client.post_multipart(&url, form, options).await
+        })?;
+        Ok(response_to_list(response))
+    }
+
+    /// Send a request and return once its head has arrived, the body behind
+    /// `stream`; `$request_streaming()` in R/koon.R passes the options as a
+    /// named list.
+    fn request_streaming(
+        &self,
+        method: Robj,
+        url: Robj,
+        #[default = "NULL"] body: Robj,
+        #[default = "NULL"] options: Robj,
+    ) -> RResult<List> {
+        let method = parse_method(&string(&method, "method")?)?;
+        let url = string(&url, "url")?;
+        let body = self::body(&body)?;
+        let (read, callbacks) = read_options(Scope::Stream, &options)?;
+        let decode = read.decode();
+        let mut response = self.run(read, callbacks, move |client, options| async move {
+            client.send_streaming(method, &url, body, options).await
+        })?;
+        // Before the first chunk is read.
+        if decode {
+            response.decode_content();
+        }
+        Ok(streaming_to_list(response))
+    }
+
+    /// Open a WebSocket connection, interruptibly.
+    fn websocket(&self, url: Robj, #[default = "NULL"] headers: Robj) -> RResult<KoonWebSocket> {
+        let url = string(&url, "url")?;
+        let headers = self::headers(&headers, "headers")?;
+        let client = Arc::clone(&self.client);
+        let ws = block_on_r(async move { client.websocket_with_headers(&url, headers).await })?;
+        Ok(KoonWebSocket { ws: Arc::new(ws) })
+    }
+
+    fn save_session_to_file(&self, path: Robj) -> RResult<()> {
+        Ok(self.client.save_session_to_file(&string(&path, "path")?)?)
+    }
+
+    fn load_session_from_file(&self, path: Robj) -> RResult<()> {
+        Ok(self
+            .client
+            .load_session_from_file(&string(&path, "path")?)?)
     }
 
     fn save_session(&self) -> RResult<String> {
@@ -980,6 +1026,345 @@ impl Koon {
     }
 }
 
+// --- Request helpers -------------------------------------------------------------
+
+impl Koon {
+    /// Run a request built by `send` with `read`'s options and the request's
+    /// callbacks (each falling back to the client's), interruptibly.
+    fn run<T, Fut>(
+        &self,
+        read: Options,
+        callbacks: Callbacks,
+        send: impl FnOnce(Arc<Client>, RequestOptions) -> Fut,
+    ) -> RResult<T>
+    where
+        Fut:
+            std::future::Future<Output = std::result::Result<T, koon_core::Error>> + Send + 'static,
+        T: Send + 'static,
+    {
+        let mut options = read.request_options();
+        let callbacks = callbacks.or(&self.callbacks);
+        let (tx, rx) = unbounded_channel();
+        callbacks.wire(&mut options, &tx);
+        drop(tx);
+        let runner = if callbacks.is_empty() {
+            None
+        } else {
+            Some(CallbackRunner {
+                callbacks,
+                runner: callback_runner()?,
+            })
+        };
+        let handle = runtime().spawn(send(Arc::clone(&self.client), options));
+        Ok(poll_until_done(handle, rx, runner)??)
+    }
+}
+
+/// Run `future` on the runtime and wait for it on the R thread,
+/// interruptibly (no callbacks).
+fn block_on_r<T: Send + 'static>(
+    future: impl std::future::Future<Output = std::result::Result<T, koon_core::Error>> + Send + 'static,
+) -> RResult<T> {
+    let (tx, rx) = unbounded_channel();
+    drop(tx);
+    Ok(poll_until_done(runtime().spawn(future), rx, None)??)
+}
+
+/// The fields of `$post_multipart()`: a list of named lists, each with
+/// `name` and either `value` (text) or `file_data` (a raw vector), plus an
+/// optional `filename` and `content_type` for a file.
+fn multipart(fields: &Robj) -> RResult<Multipart> {
+    let list = List::try_from(fields)
+        .map_err(|_| RError::invalid("`fields` must be a list of named lists"))?;
+    list.values()
+        .enumerate()
+        .try_fold(Multipart::new(), |form, (index, field)| {
+            let number = index + 1;
+            let field = List::try_from(&field)
+                .map_err(|_| RError::invalid(format!("field {number} must be a named list")))?;
+            let get = |name: &str| self::field(&field, name).unwrap_or_else(|| ().into());
+            let name = string(&get("name"), "name")
+                .map_err(|_| RError::invalid(format!("field {number} needs a `name`")))?;
+            let value = opt_string(&get("value"), "value")?;
+            let file_data = get("file_data");
+            let file_data = if file_data.is_null() {
+                None
+            } else {
+                Some(
+                    file_data
+                        .as_raw_slice()
+                        .map(<[u8]>::to_vec)
+                        .ok_or_else(|| {
+                            RError::invalid(format!(
+                                "field '{name}': `file_data` must be a raw vector"
+                            ))
+                        })?,
+                )
+            };
+            match (file_data, value) {
+                (Some(_), Some(_)) => Err(RError::invalid(format!(
+                    "field '{name}' must have either `value` (text) or `file_data` (raw), not both"
+                ))),
+                (Some(data), None) => Ok(form.file(
+                    name,
+                    opt_string(&get("filename"), "filename")?.unwrap_or_else(|| "file".into()),
+                    opt_string(&get("content_type"), "content_type")?
+                        .unwrap_or_else(|| "application/octet-stream".into()),
+                    data,
+                )),
+                (None, Some(value)) => Ok(form.text(name, value)),
+                (None, None) => Err(RError::invalid(format!(
+                    "field '{name}' must have either `value` (text) or `file_data` (raw)"
+                ))),
+            }
+        })
+}
+
+/// A streaming response's head as an R list, with its body behind `stream`.
+fn streaming_to_list(resp: koon_core::StreamingResponse) -> List {
+    let content_type = resp
+        .headers
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
+        .map(|(_, v)| v.clone());
+    list!(
+        status = resp.status as i32,
+        status_code = resp.status as i32,
+        ok = (200..300).contains(&resp.status),
+        version = resp.version.as_str(),
+        url = resp.url.as_str(),
+        content_type = string_or_null(content_type.as_deref()),
+        headers = headers_data_frame(&resp.headers),
+        request_headers = headers_data_frame(&resp.request_headers),
+        tls_resumed = resp.tls_resumed,
+        connection_reused = resp.connection_reused,
+        remote_address = string_or_null(resp.remote_address.as_deref()),
+        stream = Robj::from(KoonStream {
+            response: Arc::new(tokio::sync::Mutex::new(Some(resp))),
+        })
+    )
+}
+
+/// The body of a streaming response, read chunk by chunk. The R
+/// documentation lives in `R/koon.R`.
+#[extendr]
+struct KoonStream {
+    response: Arc<tokio::sync::Mutex<Option<koon_core::StreamingResponse>>>,
+}
+
+fn stream_consumed() -> koon_core::Error {
+    koon_core::Error::Body(
+        "the response body was already read by $collect() or cancelled".into(),
+        None,
+    )
+}
+
+#[extendr]
+impl KoonStream {
+    /// The next chunk of the body as a raw vector, or `NULL` at its end.
+    fn next_chunk(&self) -> RResult<Robj> {
+        let response = Arc::clone(&self.response);
+        let chunk = block_on_r(async move {
+            let mut guard = response.lock().await;
+            let response = guard.as_mut().ok_or_else(stream_consumed)?;
+            response.next_chunk().await.transpose()
+        })?;
+        Ok(chunk.map_or_else(|| ().into(), |chunk| Raw::from_bytes(&chunk).into()))
+    }
+
+    /// The rest of the body as one raw vector.
+    fn collect(&self) -> RResult<Raw> {
+        let response = Arc::clone(&self.response);
+        let body = block_on_r(async move {
+            let mut guard = response.lock().await;
+            let mut response = guard.take().ok_or_else(stream_consumed)?;
+            response.collect_body().await
+        })?;
+        Ok(Raw::from_bytes(&body))
+    }
+
+    /// Drop the rest of the body without reading it.
+    fn cancel(&self) {
+        drop(self.response.blocking_lock().take());
+    }
+}
+
+/// A WebSocket connection. The R documentation lives in `R/koon.R`.
+#[extendr]
+struct KoonWebSocket {
+    ws: Arc<koon_core::WebSocket>,
+}
+
+#[extendr]
+impl KoonWebSocket {
+    /// Send a single string as a text message or a raw vector as a binary one.
+    fn send(&self, data: Robj) -> RResult<()> {
+        let ws = Arc::clone(&self.ws);
+        if let Some(bytes) = data.as_raw_slice() {
+            let bytes = bytes.to_vec();
+            return block_on_r(async move { ws.send_binary(&bytes).await });
+        }
+        let text = string(&data, "data")
+            .map_err(|_| RError::invalid("`data` must be a single string or a raw vector"))?;
+        block_on_r(async move { ws.send_text(&text).await })
+    }
+
+    /// The next message as `list(type = "text" or "binary", data = ...)`, or
+    /// `NULL` once the connection is closed.
+    fn receive(&self) -> RResult<Robj> {
+        let ws = Arc::clone(&self.ws);
+        let message = block_on_r(async move { ws.receive().await })?;
+        let (kind, data): (&str, Robj) = match message {
+            Some(WsMessage::Text(text)) => ("text", text.into()),
+            Some(WsMessage::Binary(bytes)) => ("binary", Raw::from_bytes(&bytes).into()),
+            None => return Ok(().into()),
+        };
+        List::from_names_and_values(["type", "data"], [Robj::from(kind), data])
+            .map(Into::into)
+            .map_err(|e| RError::internal(format!("a message could not be converted: {e}")))
+    }
+
+    /// Close the connection with an optional close code (0-65535) and reason.
+    fn close(
+        &self,
+        #[default = "NULL"] code: Robj,
+        #[default = "NULL"] reason: Robj,
+    ) -> RResult<()> {
+        let code = opt::<f64>(&code, "code", "a close code from 0 to 65535")?
+            .map(|code| {
+                if code.fract() == 0.0 && (0.0..=65535.0).contains(&code) {
+                    Ok(code as u16)
+                } else {
+                    Err(RError::invalid(format!(
+                        "`code` must be a close code from 0 to 65535, not {code}"
+                    )))
+                }
+            })
+            .transpose()?;
+        let reason = opt_string(&reason, "reason")?;
+        let ws = Arc::clone(&self.ws);
+        block_on_r(async move { ws.close(code, reason).await })
+    }
+}
+
+type RunningProxy = Arc<std::sync::Mutex<Option<koon_core::ProxyServer>>>;
+
+/// Every proxy started and not shut down yet: a server stops once dropped,
+/// and a `KoonProxy` R's garbage collector takes must not take its server
+/// with it.
+static RUNNING_PROXIES: std::sync::Mutex<Vec<RunningProxy>> = std::sync::Mutex::new(Vec::new());
+
+/// A local MITM proxy. The R documentation lives in `R/koon.R`.
+#[extendr]
+struct KoonProxy {
+    server: RunningProxy,
+    port: u16,
+    url: String,
+    ca_cert_path: String,
+    ca_cert_pem: Vec<u8>,
+}
+
+#[extendr]
+impl KoonProxy {
+    /// The options of `KoonProxy$start()` in `R/koon.R`, as a named list.
+    fn start(#[default = "NULL"] options: Robj) -> RResult<Self> {
+        let (read, _) = read_options(Scope::Proxy, &options)?;
+        let config = read.proxy_config()?;
+        let server = runtime().block_on(koon_core::ProxyServer::start(config))?;
+        let proxy = KoonProxy {
+            port: server.port(),
+            url: server.url(),
+            ca_cert_path: server.ca_cert_path().to_string_lossy().into_owned(),
+            ca_cert_pem: server.ca_cert_pem()?,
+            server: Arc::new(std::sync::Mutex::new(Some(server))),
+        };
+        RUNNING_PROXIES
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(Arc::clone(&proxy.server));
+        Ok(proxy)
+    }
+
+    fn port(&self) -> i32 {
+        i32::from(self.port)
+    }
+
+    fn url(&self) -> String {
+        self.url.clone()
+    }
+
+    fn ca_cert_path(&self) -> String {
+        self.ca_cert_path.clone()
+    }
+
+    fn ca_cert_pem(&self) -> Raw {
+        Raw::from_bytes(&self.ca_cert_pem)
+    }
+
+    /// Stop accepting and close every open connection. Calling it again
+    /// does nothing.
+    fn shutdown(&self) {
+        RUNNING_PROXIES
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .retain(|running| !Arc::ptr_eq(running, &self.server));
+        let server = self
+            .server
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some(server) = server {
+            let _guard = runtime().enter();
+            server.shutdown();
+        }
+    }
+}
+
+/// A JSON value as R data: objects become named lists, arrays lists.
+fn json_to_robj(value: &serde_json::Value) -> Robj {
+    use serde_json::Value as Json;
+    match value {
+        Json::Null => ().into(),
+        Json::Bool(b) => (*b).into(),
+        Json::Number(n) => n.as_f64().unwrap_or(f64::NAN).into(),
+        Json::String(s) => s.as_str().into(),
+        Json::Array(items) => List::from_values(items.iter().map(json_to_robj)).into(),
+        Json::Object(map) => {
+            List::from_names_and_values(map.keys(), map.values().map(json_to_robj))
+                .map_or_else(|_| ().into(), Into::into)
+        }
+    }
+}
+
+/// The fingerprint self-test of `koon_core::verify` for `koon_verify()` in
+/// `R/koon.R`: the report as a named list.
+/// @noRd
+#[extendr]
+fn verify_report(browser: Robj, #[default = "NULL"] options: Robj) -> RResult<Robj> {
+    let (mut read, _) = read_options(Scope::Verify, &options)?;
+    let browser = r_value(&browser, Kind::Browser, "browser")?;
+    read.set("browser", browser).map_err(option_error)?;
+    let report = block_on_r(koon_core::verify::verify_options(read))?;
+    let json: serde_json::Value = serde_json::from_str(&report.to_json())
+        .map_err(|e| RError::internal(format!("the report did not parse: {e}")))?;
+    Ok(json_to_robj(&json))
+}
+
+/// `koon_core::blocked_by` for `koon_blocked_by()` in `R/koon.R`.
+/// @noRd
+#[extendr]
+fn blocked_by_parts(status: Robj, headers: Robj, body: Robj, url: Robj) -> RResult<Robj> {
+    let status = opt::<f64>(&status, "status", "an HTTP status")?
+        .filter(|status| status.fract() == 0.0 && (100.0..=999.0).contains(status))
+        .ok_or_else(|| RError::invalid("`status` must be an HTTP status"))? as u16;
+    let headers = self::headers(&headers, "headers")?;
+    let body = self::body(&body)?.unwrap_or_default();
+    let url = string(&url, "url")?;
+    Ok(string_or_null(koon_core::blocked_by(
+        status, &headers, &body, &url,
+    )))
+}
+
 /// List all available browser profile names
 ///
 /// One name per profile: every browser version on every OS it has a profile
@@ -999,6 +1384,11 @@ fn koon_browsers() -> Vec<String> {
 extendr_module! {
     mod koon;
     impl Koon;
+    impl KoonStream;
+    impl KoonWebSocket;
+    impl KoonProxy;
     fn koon_browsers;
+    fn verify_report;
+    fn blocked_by_parts;
     fn raise_interrupt;
 }

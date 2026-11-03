@@ -182,7 +182,7 @@ Chrome Mobile and Firefox Mobile send their desktop counterpart's fingerprint wi
 - **Key logging**: `SSLKEYLOGFILE` writes the TLS secrets (TCP, QUIC and DoH) for Wireshark
 - **Custom profiles**: export a profile as JSON, change it and load it back (see [Custom profiles](#custom-profiles))
 - **Drop-in adapters**: an httpx transport, a requests adapter and a `fetch()` for Node; `KoonSync`, a blocking Python client
-- **Structured errors**: a machine-readable code on every error (`TIMEOUT`, `TLS_ERROR`, `PROXY_ERROR`, ...)
+- **Structured errors**: a machine-readable code on every error (`TIMEOUT`, `TLS_ERROR`, `PROXY_ERROR`, ...), and for a request's transport failure the phase it failed in (`connect`, `request` or `body`)
 
 ## Usage
 
@@ -546,10 +546,39 @@ resp <- client$get("https://httpbin.org/cookies")
 # Clear cookies (keeps TLS sessions and connection pool)
 client$clear_cookies()
 
-# Session save/load
+# Session save/load, as JSON or to a file
 json <- client$save_session()
 client2 <- Koon$new("chrome")
 client2$load_session(json)
+client$save_session_to_file("session.json")
+client2$load_session_from_file("session.json")
+
+# Multipart upload
+resp <- client$post_multipart("https://httpbin.org/post", list(
+  list(name = "field", value = "text"),
+  list(name = "file", file_data = as.raw(c(0x89, 0x50, 0x4e, 0x47)),
+       filename = "photo.png", content_type = "image/png")
+))
+
+# Streaming: the head first, then the body chunk by chunk (raw vectors)
+resp <- client$request_streaming("GET", "https://httpbin.org/stream/5")
+while (!is.null(chunk <- resp$stream$next_chunk())) cat(rawToChar(chunk))
+
+# WebSocket
+ws <- client$websocket("wss://ws.postman-echo.com/raw")
+ws$send("hello")
+ws$receive()    # list(type = "text", data = "hello")
+ws$close()
+
+# A request's transport failure names how far it got
+err <- tryCatch(client$get("https://10.255.255.1/", timeout = 1), koon_error = identity)
+err$code        # "TIMEOUT"
+err$phase       # "connect": nothing was sent, so sending it again cannot repeat it
+
+# Local MITM proxy for other programs
+proxy <- KoonProxy$start(browser = "firefox", listen_addr = "127.0.0.1:8080")
+proxy$url()     # "http://127.0.0.1:8080"
+proxy$shutdown()
 
 # Export profile as JSON
 client$export_profile()
@@ -775,6 +804,11 @@ console.log(report.outcome); // 'match', 'mismatch', 'no_reference' or 'unreacha
 ```python
 report = koon.verify("firefox")
 print(report["outcome"], [f for f in report["fields"] if f["status"] == "mismatch"])
+```
+
+```r
+report <- koon_verify("safari", doh = "cloudflare")
+report$outcome
 ```
 
 In Rust, `koon_core::verify::verify("chrome", None)` returns a `VerifyReport`;

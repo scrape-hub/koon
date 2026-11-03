@@ -37,6 +37,9 @@ Rust only:
 - Python: `KoonSync.websocket()`, a blocking `KoonSyncWebSocket`.
 - `phase` on errors in Node, Python and R: how far a request got before a
   transport failure, `connect` (nothing sent), `request` or `body`.
+- R: `$post_multipart()`, `$request_streaming()`, `$websocket()`,
+  `$save_session_to_file()`, `$load_session_from_file()`, `KoonProxy$start()`,
+  `koon_verify()` and `koon_blocked_by()`, as in Node and Python.
 
 ### Changed
 

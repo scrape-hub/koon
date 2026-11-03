@@ -24,6 +24,7 @@ extendr-api = { version = "0.8", features = ["result_condition"] }
 # Copy of crates/core, written by bootstrap.R
 koon-core = { path = "vendor/koon-core", features = ["doh"] }
 tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "macros"] }
+serde_json = "1"
 
 # koon's forks of quinn and h3 replace the crates.io releases, as in the
 # workspace Cargo.toml (this crate is a workspace of its own).

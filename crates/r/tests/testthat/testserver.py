@@ -3,6 +3,9 @@
 Serves on 127.0.0.1 at the port given as the first argument (0: a free one)
 and prints "listening on PORT" once it accepts connections."""
 
+import base64
+import gzip
+import hashlib
 import json
 import struct
 import sys
@@ -65,6 +68,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.echo()
         if path == "/png":
             return self.send(200, png_bytes(), "image/png")
+        if path == "/gzip":
+            return self.send(
+                200, gzip.compress(b"compressed text"), "text/plain", extra=[("Content-Encoding", "gzip")]
+            )
+        if path == "/ws":
+            return self.websocket_echo()
         if path == "/nul-text":
             return self.send(200, b"a\x00b", "text/plain")
         if path == "/binary-noct":
@@ -97,6 +106,34 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/hits":
             return self.send(200, str(HITS["count"]).encode(), "text/plain")
         return self.send(404, b"not found", "text/plain")
+
+    def websocket_echo(self):
+        """Minimal RFC 6455 server side: the handshake, then text and binary
+        frames echoed back and a close frame answered."""
+        key = self.headers.get("Sec-WebSocket-Key", "").encode()
+        accept = base64.b64encode(hashlib.sha1(key + b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest())
+        self.send_response(101)
+        self.send_header("Upgrade", "websocket")
+        self.send_header("Connection", "Upgrade")
+        self.send_header("Sec-WebSocket-Accept", accept.decode())
+        self.end_headers()
+        self.close_connection = True
+        while len(head := self.rfile.read(2)) == 2:
+            opcode, length = head[0] & 0x0F, head[1] & 0x7F
+            if length == 126:
+                (length,) = struct.unpack("!H", self.rfile.read(2))
+            elif length == 127:
+                (length,) = struct.unpack("!Q", self.rfile.read(8))
+            mask = self.rfile.read(4) if head[1] & 0x80 else b"\0\0\0\0"
+            payload = bytes(b ^ mask[i % 4] for i, b in enumerate(self.rfile.read(length)))
+            if len(payload) < 126:
+                frame = struct.pack("!BB", 0x80 | opcode, len(payload))
+            else:
+                frame = struct.pack("!BBH", 0x80 | opcode, 126, len(payload))
+            self.wfile.write(frame + payload)
+            self.wfile.flush()
+            if opcode == 0x8:
+                return
 
     do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = do_HEAD = do_OPTIONS = route
 

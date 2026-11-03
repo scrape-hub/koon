@@ -136,9 +136,29 @@ request with a body.}
 \item{\verb{$request(method, url, body = NULL, ...)}}{Send a request with any
 method. \code{body} is a single string or a raw vector. \code{...} takes the
 request options above.}
+\item{\verb{$post_multipart(url, fields, ...)}}{Send a multipart/form-data
+POST as the profile's browser builds it. \code{fields} is a list of named
+lists, each with \code{name} and either \code{value} (text) or \code{file_data} (a raw
+vector, e.g. \code{readBin(path, "raw", file.size(path))}) with an optional
+\code{filename} and \code{content_type}. \code{...} takes the request options above.}
+\item{\verb{$request_streaming(method, url, body = NULL, ..., decode = NULL)}}{Send
+a request and return once its head has arrived: a list like a
+response without \code{body} and \code{text}, whose \code{stream} reads the body.
+\verb{$stream$next_chunk()} gives the next chunk as a raw vector, \code{NULL} at
+the end; \verb{$stream$collect()} the rest at once; \verb{$stream$cancel()} drops
+it. The body is decoded (Content-Encoding) as it is read unless
+\code{decode = FALSE}. \code{...} takes the request options above.}
+\item{\verb{$websocket(url, headers = NULL)}}{Open a WebSocket connection.
+Its \verb{$send(data)} sends a single string as a text message or a raw
+vector as a binary one, \verb{$receive()} returns the next message as
+\verb{list(type = "text" or "binary", data = ...)}, \code{NULL} once the
+connection is closed, and \verb{$close(code = NULL, reason = NULL)} closes
+it.}
 \item{\verb{$save_session()}, \verb{$load_session(json)}}{Save the cookies and TLS
 sessions as a JSON string, and restore them. \code{json} may also be the
 lines of a saved session file, as \code{readLines()} returns them.}
+\item{\verb{$save_session_to_file(path)}, \verb{$load_session_from_file(path)}}{The
+same with a file.}
 \item{\verb{$cookies()}}{All stored cookies as a data frame with Playwright's
 field names: \code{name}, \code{value}, \code{domain} (with a leading dot for domain
 cookies), \code{path}, \code{expires} (Unix seconds, -1 for session cookies),
