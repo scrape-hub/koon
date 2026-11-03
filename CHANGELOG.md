@@ -43,7 +43,8 @@ Rust only:
 
 **Requests and connections**
 
-- Chromium and Firefox profiles open at most 6 HTTP/1.1 connections per host.
+- Chromium, Firefox and Safari profiles open at most 6 HTTP/1.1 connections per
+  host.
 - A request whose response has arrived is not retried.
 - Proxy credentials in the URL are percent-decoded.
 - Proxy URLs may start with `socks5h://`.

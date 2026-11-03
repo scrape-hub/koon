@@ -253,7 +253,7 @@ fn unknown_length(headers: &mut Vec<(String, String)>, protocol: Protocol) {
     }
 }
 
-/// HTTP/1.1 connections per origin of Chromium and Firefox (see [`Client::h1_slot`]).
+/// HTTP/1.1 connections per origin of Chromium, Firefox and Safari (see [`Client::h1_slot`]).
 const H1_CONNECTIONS_PER_HOST: usize = 6;
 
 /// One hop's request as it goes out, with the jar's cookies of the moment.
@@ -753,18 +753,17 @@ impl super::Client {
         }
     }
 
-    /// Whether a request may go out again after it failed with `e`: when it did not leave or its
-    /// method is idempotent, and its body can be sent again. A request that could not be built
-    /// never goes out.
     /// One of the HTTP/1.1 connection slots of `key`, for a profile whose browser keeps at most a
     /// few per origin and queues further requests: Chromium's `kMaxSocketsPerGroup`
-    /// (`net/socket/client_socket_pool_manager.cc`) and Firefox's
-    /// `network.http.max-persistent-connections-per-server` are both 6. `None` for a key known to
-    /// speak HTTP/2 or HTTP/3, and for Safari (not captured yet) and `OkHttp` (whose dispatcher
-    /// limits requests per host, not connections).
+    /// (`net/socket/client_socket_pool_manager.cc`), Firefox's
+    /// `network.http.max-persistent-connections-per-server` and Safari (captured) all keep 6.
+    /// `None` for a key known to speak HTTP/2 or HTTP/3, and for `OkHttp`, whose dispatcher limits
+    /// requests per host, not connections.
     async fn h1_slot(&self, key: &PoolKey) -> Option<tokio::sync::OwnedSemaphorePermit> {
         let limit = match headers::Family::of(&self.profile) {
-            headers::Family::Chromium | headers::Family::Firefox => H1_CONNECTIONS_PER_HOST,
+            headers::Family::Chromium | headers::Family::Firefox | headers::Family::Safari => {
+                H1_CONNECTIONS_PER_HOST
+            }
             _ => return None,
         };
         if self.pool.is_multiplexed(key) {
@@ -773,6 +772,9 @@ impl super::Client {
         self.pool.h1_slot(key, limit).await
     }
 
+    /// Whether a request may go out again after it failed with `e`: when it did not leave or its
+    /// method is idempotent, and its body can be sent again. A request that could not be built
+    /// never goes out.
     fn may_resend(e: &ExchangeError, hop: &Hop) -> bool {
         let resend = match e {
             ExchangeError::NotSent(_) => true,

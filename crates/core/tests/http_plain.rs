@@ -828,13 +828,17 @@ async fn ten_at_once(profile: koon_core::BrowserProfile) -> (usize, usize) {
 }
 
 #[tokio::test]
-async fn chrome_and_firefox_keep_six_http1_connections_per_host() {
-    for profile in [Chrome::latest(), Firefox::latest()] {
+async fn browsers_keep_six_http1_connections_per_host() {
+    for profile in [
+        Chrome::latest(),
+        Firefox::latest(),
+        koon_core::Safari::latest(),
+    ] {
         let (peak, total) = ten_at_once(profile).await;
         assert_eq!((peak, total), (6, 6));
     }
-    // Safari (not captured yet) opens one per request, as before.
-    let (peak, _) = ten_at_once(koon_core::Safari::latest()).await;
+    // OkHttp limits requests per host, not connections.
+    let (peak, _) = ten_at_once(koon_core::OkHttp::latest()).await;
     assert_eq!(peak, 10);
 }
 
