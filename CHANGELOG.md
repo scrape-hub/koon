@@ -34,6 +34,10 @@ Rust only:
 - Proxy credentials in the URL are percent-decoded.
 - Chrome profiles no longer join the ended handshake-padding trial.
 
+**Responses and errors**
+
+- `blockedBy`/`blocked_by` reports fewer ordinary pages as blocks.
+
 **Bindings and CLI**
 
 - Node and the CLI on Linux need glibc 2.28 instead of 2.38.

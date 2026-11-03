@@ -51,21 +51,28 @@ pub fn blocked_by(
     ) {
         return Some("aws-waf");
     }
-    let path = url
-        .split(['?', '#'])
-        .next()
-        .unwrap_or(url)
+    let parsed = url::Url::parse(url).ok();
+    let host = parsed
+        .as_ref()
+        .and_then(url::Url::host_str)
+        .unwrap_or_default()
         .to_ascii_lowercase();
+    let path = parsed
+        .as_ref()
+        .map(|u| u.path().to_ascii_lowercase())
+        .unwrap_or_default();
     if ["consent.google.", "consent.yahoo.", "guce.yahoo."]
         .iter()
-        .any(|h| path.contains(h))
+        .any(|h| host.starts_with(h))
     {
         return Some("consent");
     }
-    if path.contains("/sorry/") {
+    // Google's "unusual traffic" page, on any of its country domains.
+    if path.starts_with("/sorry/") && crate::util::site(&host).starts_with("google.") {
         return Some("google");
     }
-    if !is_text(header("content-type").as_deref(), body) {
+    let content_type = header("content-type");
+    if !is_text(content_type.as_deref(), body) {
         return None;
     }
 
@@ -73,6 +80,10 @@ pub fn blocked_by(
     let size = body.len();
     let title = title(&b);
     let has = |s: &str| b.contains(s);
+    let html = match content_type.as_deref() {
+        Some(ct) => ct.contains("html"),
+        None => b.trim_start().starts_with('<'),
+    };
 
     if has("cf_chl_opt") {
         return Some("cloudflare");
@@ -112,12 +123,12 @@ pub fn blocked_by(
     }
     if (size < 20_000 && has("<form hidden"))
         || (size < 10_000 && title.is_empty() && b.matches("_0x").count() > 20)
-        || (status == 202 && size < 5_000)
+        || (status == 202 && html && size < 5_000)
     {
         return Some("javascript");
     }
     if (size < 30_000 && has("experiencing high demand"))
-        || path.contains("captcha")
+        || (path.contains("captcha") && html && size < SMALL_PAGE)
         || BLOCK_TITLES.contains(&title.as_str())
         || title.contains("prove your humanity")
         || (size < SMALL_PAGE && SMALL_PAGE_TITLE_WORDS.iter().any(|w| title.contains(w)))
@@ -266,6 +277,16 @@ mod tests {
             ),
             Some("consent")
         );
+        let sorry = "https://www.google.co.uk/sorry/index?continue=x";
+        assert_eq!(
+            blocked_by(429, &headers, b"<html></html>", sorry),
+            Some("google")
+        );
+        let captcha = "https://shop.example/captcha/?r=1";
+        assert_eq!(
+            blocked_by(200, &headers, b"<html><form></form></html>", captcha),
+            Some("block-page")
+        );
     }
 
     #[test]
@@ -274,6 +295,30 @@ mod tests {
         assert_eq!(html(403, &page("403 Forbidden", 1)), None);
         assert_eq!(html(404, &page("Page not found", 1)), None);
         assert_eq!(html(200, &page("CAPTCHA - Wikipedia", 5_000)), None);
+        let text_html = vec![(
+            "content-type".to_string(),
+            "text/html; charset=utf-8".to_string(),
+        )];
+        let at = |status, headers: &[(String, String)], body: &str, url| {
+            blocked_by(status, headers, body.as_bytes(), url)
+        };
+        // An article about captchas and a captcha vendor's site are pages.
+        let article = page("CAPTCHA - Wikipedia", 5_000);
+        let wiki = "https://en.wikipedia.org/wiki/CAPTCHA";
+        assert_eq!(at(200, &text_html, &article, wiki), None);
+        let vendor = page("hCaptcha", 5_000);
+        assert_eq!(
+            at(200, &text_html, &vendor, "https://www.hcaptcha.com/"),
+            None
+        );
+        // `/sorry/` is Google's block page only on Google.
+        let shop = "https://shop.example/sorry/out-of-stock";
+        assert_eq!(at(200, &text_html, &page("Sorry", 5), shop), None);
+        // A 202 of an API that accepted a job.
+        let json = vec![("content-type".to_string(), "application/json".to_string())];
+        let api = "https://api.example/jobs";
+        assert_eq!(at(202, &json, r#"{"id":1}"#, api), None);
+        assert_eq!(at(202, &[], "", api), None);
         let pdf = vec![("content-type".to_string(), "application/pdf".to_string())];
         assert_eq!(
             blocked_by(
