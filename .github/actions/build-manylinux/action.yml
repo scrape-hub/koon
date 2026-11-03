@@ -1,0 +1,26 @@
+name: Build in manylinux_2_28
+description: cargo build --release in manylinux_2_28 (glibc 2.28), so that the Linux binaries also load on distributions older than the runner's
+
+inputs:
+  args:
+    description: Arguments for cargo build --release
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: cargo build in manylinux_2_28
+      shell: bash
+      env:
+        CARGO_ARGS: ${{ inputs.args }}
+      run: |
+        arch=$(uname -m)
+        go_arch=$([ "$arch" = aarch64 ] && echo arm64 || echo amd64)
+        docker run --rm -v "$PWD":/io -w /io -e CARGO_ARGS -e GO_ARCH="$go_arch" \
+          "quay.io/pypa/manylinux_2_28_$arch" bash -euc '
+            dnf install -y -q clang-devel
+            curl -sSf https://sh.rustup.rs | sh -s -- -y -q --profile minimal
+            curl -sSL "https://go.dev/dl/go1.24.1.linux-$GO_ARCH.tar.gz" | tar -C /usr/local -xzf -
+            export PATH="/root/.cargo/bin:/usr/local/go/bin:$PATH"
+            cargo build --release $CARGO_ARGS
+          '

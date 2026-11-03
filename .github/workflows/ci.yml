@@ -52,7 +52,11 @@ jobs:
         run: cargo test -p koon-core -p koon-cli
 
   node:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
 
@@ -78,8 +82,8 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-node-${{ hashFiles('Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-node-
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-node-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-node-
 
       - name: Build the addon
         working-directory: crates/node
@@ -90,7 +94,11 @@ jobs:
         run: npm run test:offline
 
   python:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
 
@@ -116,8 +124,8 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-python-${{ hashFiles('Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-python-
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-python-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-python-
 
       - name: Create virtualenv
         run: |

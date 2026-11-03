@@ -116,40 +116,36 @@ jobs:
           name: node-x86_64-pc-windows-msvc
           path: crates/node/koon.win32-x64-msvc.node
 
-  # ─── Node.js binary (Linux x64) ─────────────────────────────────────
+  # ─── Node.js binary (Linux x64 and arm64) ───────────────────────────
   build-node-linux:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            triple: x86_64-unknown-linux-gnu
+            arch: x64
+          - runner: ubuntu-24.04-arm
+            triple: aarch64-unknown-linux-gnu
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-unknown-linux-gnu
-
-      - name: Install Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: stable
-
-      - name: Install build deps
-        run: sudo apt-get update && sudo apt-get install -y cmake build-essential
-
       - name: Build
-        run: cargo build --release -p koon-node --target x86_64-unknown-linux-gnu
+        uses: ./.github/actions/build-manylinux
+        with:
+          args: -p koon-node
 
       - name: Rename node binary
-        run: |
-          cp "target/x86_64-unknown-linux-gnu/release/libkoon_node.so" \
-             "crates/node/koon.linux-x64-gnu.node"
+        run: cp target/release/libkoon_node.so "crates/node/koon.linux-${{ matrix.arch }}-gnu.node"
 
       - name: Upload node artifact
         uses: actions/upload-artifact@v7
         with:
-          name: node-x86_64-unknown-linux-gnu
-          path: crates/node/koon.linux-x64-gnu.node
+          name: node-${{ matrix.triple }}
+          path: crates/node/koon.linux-${{ matrix.arch }}-gnu.node
 
   # ─── Node.js binary (macOS arm64 / Apple Silicon) ──────────────────
   build-node-macos-arm64:
@@ -262,10 +258,21 @@ jobs:
           name: wheels-x86_64-pc-windows-msvc
           path: dist/*.whl
 
-  # ─── Python wheel (Linux x64, manylinux) ────────────────────────────
+  # ─── Python wheel (Linux x64 and arm64, manylinux) ──────────────────
   build-python-linux:
     needs: licenses
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: x86_64
+            triple: x86_64-unknown-linux-gnu
+            go-arch: amd64
+          - runner: ubuntu-24.04-arm
+            target: aarch64
+            triple: aarch64-unknown-linux-gnu
+            go-arch: arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -280,7 +287,7 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
-          target: x86_64
+          target: ${{ matrix.target }}
           args: --release --out dist --find-interpreter --manifest-path crates/python/Cargo.toml
           before-script-linux: |
             if command -v yum &>/dev/null; then
@@ -289,14 +296,14 @@ jobs:
             elif command -v apt-get &>/dev/null; then
               apt-get update && apt-get install -y libclang-dev
             fi
-            curl -sL https://go.dev/dl/go1.24.1.linux-amd64.tar.gz | tar -C /usr/local -xzf -
+            curl -sL https://go.dev/dl/go1.24.1.linux-${{ matrix.go-arch }}.tar.gz | tar -C /usr/local -xzf -
             export PATH=$PATH:/usr/local/go/bin
           manylinux: auto
 
       - name: Upload wheels
         uses: actions/upload-artifact@v7
         with:
-          name: wheels-x86_64-unknown-linux-gnu
+          name: wheels-${{ matrix.triple }}
           path: dist/*.whl
 
   # ─── Python wheel (macOS arm64 / Apple Silicon) ───────────────────
@@ -422,38 +429,36 @@ jobs:
           name: cli-x86_64-pc-windows-msvc
           path: koon-windows-x64.exe
 
-  # ─── CLI binary (Linux x64) ───────────────────────────────────────
+  # ─── CLI binary (Linux x64 and arm64) ─────────────────────────────
   build-cli-linux:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            triple: x86_64-unknown-linux-gnu
+            arch: x64
+          - runner: ubuntu-24.04-arm
+            triple: aarch64-unknown-linux-gnu
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-unknown-linux-gnu
-
-      - name: Install Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: stable
-
-      - name: Install build deps
-        run: sudo apt-get update && sudo apt-get install -y cmake build-essential
-
       - name: Build
-        run: cargo build --release -p koon-cli --target x86_64-unknown-linux-gnu
+        uses: ./.github/actions/build-manylinux
+        with:
+          args: -p koon-cli
 
       - name: Rename CLI binary
-        run: cp "target/x86_64-unknown-linux-gnu/release/koon" koon-linux-x64
+        run: cp target/release/koon "koon-linux-${{ matrix.arch }}"
 
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v7
         with:
-          name: cli-x86_64-unknown-linux-gnu
-          path: koon-linux-x64
+          name: cli-${{ matrix.triple }}
+          path: koon-linux-${{ matrix.arch }}
 
   # ─── CLI binary (macOS arm64 / Apple Silicon) ─────────────────────
   build-cli-macos-arm64:
@@ -670,6 +675,7 @@ jobs:
         run: |
           cp artifacts/koon.win32-x64-msvc.node crates/node/npm/win32-x64-msvc/
           cp artifacts/koon.linux-x64-gnu.node crates/node/npm/linux-x64-gnu/
+          cp artifacts/koon.linux-arm64-gnu.node crates/node/npm/linux-arm64-gnu/
           cp artifacts/koon.darwin-arm64.node crates/node/npm/darwin-arm64/
           cp artifacts/koon.darwin-x64.node crates/node/npm/darwin-x64/
           for dir in crates/node/npm/*/; do

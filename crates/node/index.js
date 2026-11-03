@@ -3,11 +3,10 @@
 const { platform, arch } = process;
 const platformArch = `${platform}-${arch}`;
 
-// No linux-arm64 entry: there is no @koonjs/linux-arm64-gnu package and no
-// prebuilt local binary for it.
 const packages = {
   'win32-x64': '@koonjs/win32-x64-msvc',
   'linux-x64': '@koonjs/linux-x64-gnu',
+  'linux-arm64': '@koonjs/linux-arm64-gnu',
   'darwin-x64': '@koonjs/darwin-x64',
   'darwin-arm64': '@koonjs/darwin-arm64',
 };
@@ -15,6 +14,7 @@ const packages = {
 const localFiles = {
   'win32-x64': './koon.win32-x64-msvc.node',
   'linux-x64': './koon.linux-x64-gnu.node',
+  'linux-arm64': './koon.linux-arm64-gnu.node',
   'darwin-x64': './koon.darwin-x64.node',
   'darwin-arm64': './koon.darwin-arm64.node',
 };

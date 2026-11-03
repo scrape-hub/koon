@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Linux arm64 packages for Node, Python and the CLI.
+
+### Fixed
+
+**Bindings and CLI**
+
+- Node and the CLI on Linux need glibc 2.28 instead of 2.38.
+
 ## [1.2.2] - 2026-11-02
 
 ### Fixed

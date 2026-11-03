@@ -11,6 +11,7 @@ const INDEX = path.join(__dirname, 'index.js');
 const LOCAL_BINARIES = {
   'win32-x64': 'koon.win32-x64-msvc.node',
   'linux-x64': 'koon.linux-x64-gnu.node',
+  'linux-arm64': 'koon.linux-arm64-gnu.node',
   'darwin-x64': 'koon.darwin-x64.node',
   'darwin-arm64': 'koon.darwin-arm64.node',
 };

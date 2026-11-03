@@ -25,6 +25,7 @@
   "optionalDependencies": {
     "@koonjs/win32-x64-msvc": "1.2.2",
     "@koonjs/linux-x64-gnu": "1.2.2",
+    "@koonjs/linux-arm64-gnu": "1.2.2",
     "@koonjs/darwin-arm64": "1.2.2",
     "@koonjs/darwin-x64": "1.2.2"
   },
