@@ -81,6 +81,7 @@ fn edge_profile(row: (u32, &'static str, &'static str), os: Os) -> BrowserProfil
     };
     BrowserProfile {
         farble_accept_language: false,
+        multipart: Some(crate::BoundaryStyle::WebKit),
         language_source: Some(match os {
             Os::MacOS => LanguageSource::LanguageThenTable(UiTable::Edge),
             Os::Android => LanguageSource::DeviceThenTable(UiTable::Edge),

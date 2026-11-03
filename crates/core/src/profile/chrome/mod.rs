@@ -104,6 +104,7 @@ fn chrome_profile(
     let full = full_version_for_os(versions, os);
     BrowserProfile {
         farble_accept_language: false,
+        multipart: Some(crate::BoundaryStyle::WebKit),
         language_source: Some(match os {
             Os::Android => LanguageSource::DeviceThenTable(UiTable::ChromiumAndroid),
             _ => LanguageSource::UiTable(UiTable::Chromium),

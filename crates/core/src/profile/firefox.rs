@@ -54,6 +54,7 @@ fn firefox_profile(major: u32, os: Os) -> BrowserProfile {
         let tls = firefox_tls_android(major);
         return BrowserProfile {
             farble_accept_language: false,
+            multipart: Some(crate::BoundaryStyle::Gecko),
             language_source: Some(LanguageSource::Device),
             header_family: Some(HeaderFamily::Firefox),
             ua_client_hints: None,
@@ -71,6 +72,7 @@ fn firefox_profile(major: u32, os: Os) -> BrowserProfile {
     quic.https_rr_doh_only = os == Os::MacOS && major <= 150;
     BrowserProfile {
         farble_accept_language: false,
+        multipart: Some(crate::BoundaryStyle::Gecko),
         language_source: Some(LanguageSource::Firefox { version: major }),
         header_family: Some(HeaderFamily::Firefox),
         ua_client_hints: None,

@@ -83,6 +83,11 @@ pub struct BrowserProfile {
     /// set the header themselves) sends that language as given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub language_source: Option<LanguageSource>,
+
+    /// How the client encodes a multipart body. Every built-in profile sets it; without one (custom
+    /// profile JSON) the [`header_family`](Self::header_family) decides.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub multipart: Option<crate::multipart::BoundaryStyle>,
 }
 
 /// The high-entropy User-Agent client hints and device hints of a Chromium browser, sent only to

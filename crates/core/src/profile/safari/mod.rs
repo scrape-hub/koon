@@ -684,6 +684,7 @@ fn safari_profile(entry: &SafariVersion, ios: bool) -> BrowserProfile {
     };
     BrowserProfile {
         farble_accept_language: false,
+        multipart: Some(crate::BoundaryStyle::WebKit),
         language_source: Some(LanguageSource::Apple { ios }),
         header_family: Some(HeaderFamily::Safari),
         ua_client_hints: None,

@@ -860,15 +860,19 @@ impl Client {
             .await
     }
 
-    /// The multipart boundary of the profile's browser: Firefox's, else Chromium's, which Safari
-    /// shares. Every binding encodes forms with it, as [`post_multipart`](Self::post_multipart)
-    /// does.
+    /// How the profile's browser encodes a multipart body
+    /// ([`BrowserProfile::multipart`](crate::BrowserProfile::multipart); without one Firefox's,
+    /// `OkHttp` 5's or Chromium's by the header family). Every binding encodes forms with it, as
+    /// [`post_multipart`](Self::post_multipart) does.
     #[must_use]
     pub fn boundary_style(&self) -> crate::multipart::BoundaryStyle {
-        match headers::Family::of(&self.profile) {
-            headers::Family::Firefox => crate::multipart::BoundaryStyle::Gecko,
-            _ => crate::multipart::BoundaryStyle::WebKit,
-        }
+        self.profile
+            .multipart
+            .unwrap_or_else(|| match headers::Family::of(&self.profile) {
+                headers::Family::Firefox => crate::multipart::BoundaryStyle::Gecko,
+                headers::Family::OkHttp => crate::multipart::BoundaryStyle::OkHttp5,
+                _ => crate::multipart::BoundaryStyle::WebKit,
+            })
     }
 
     /// Sends a POST request with a `multipart/form-data` body, whose boundary follows the profile's

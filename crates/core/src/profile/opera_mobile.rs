@@ -107,6 +107,7 @@ fn opera_mobile_profile(
     http2.max_concurrent_streams = Some(1000);
     BrowserProfile {
         farble_accept_language: false,
+        multipart: Some(crate::BoundaryStyle::WebKit),
         language_source: Some(LanguageSource::OperaAndroid),
         header_family: Some(HeaderFamily::Chromium),
         ua_client_hints: Some(hints),

@@ -95,6 +95,7 @@ fn brave_profile(major: u32, os: Os) -> BrowserProfile {
     );
     BrowserProfile {
         farble_accept_language: true,
+        multipart: Some(crate::BoundaryStyle::WebKit),
         language_source: Some(match os {
             Os::Android => LanguageSource::DeviceThenTable(UiTable::ChromiumAndroid),
             _ => LanguageSource::UiTable(UiTable::Chromium),

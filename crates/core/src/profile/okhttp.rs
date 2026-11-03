@@ -53,6 +53,11 @@ fn okhttp_profile(major: u32) -> BrowserProfile {
     BrowserProfile {
         farble_accept_language: false,
         language_source: None,
+        multipart: Some(if major == 4 {
+            crate::BoundaryStyle::OkHttp4
+        } else {
+            crate::BoundaryStyle::OkHttp5
+        }),
         header_family: Some(HeaderFamily::OkHttp),
         ua_client_hints: None,
         tls: okhttp_tls(major),

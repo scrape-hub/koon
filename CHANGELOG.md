@@ -15,9 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Rust only:
 
-- `Error` and `SameSite` are `#[non_exhaustive]`, with the new variants
-  `Error::ResponseTooLarge` and `SameSite::Unspecified`.
-- `Cookie` has a `partition_key` field.
+- `Error`, `SameSite` and `BoundaryStyle` are `#[non_exhaustive]`, with the new
+  variants `Error::ResponseTooLarge`, `SameSite::Unspecified`,
+  `BoundaryStyle::OkHttp4` and `BoundaryStyle::OkHttp5`.
+- `Cookie` has a `partition_key` field, `BrowserProfile` a `multipart` field.
 - `ServerPaddingTrial` has an `ends_at` field, and `draw` takes the time.
 - A request's transport failure is `Error::InPhase`; `Error::phase()`
   gives the phase, `Error::kind()` the error to match on. `code()` and the
@@ -91,6 +92,8 @@ Rust only:
   browsers do, not one after the other.
 - Idle connections stay pooled as long as the profile's browser keeps them,
   instead of 90 s for every browser.
+- OkHttp profiles encode multipart forms as OkHttp does: a UUID as boundary,
+  and in OkHttp 4 a Content-Length in every part.
 
 **Responses and errors**
 

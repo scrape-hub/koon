@@ -62,6 +62,7 @@ fn opera_profile(
     let tls = chromium_tls(chromium, trust_anchor_ids);
     BrowserProfile {
         farble_accept_language: false,
+        multipart: Some(crate::BoundaryStyle::WebKit),
         language_source: Some(LanguageSource::UiTable(UiTable::Opera)),
         header_family: Some(HeaderFamily::Chromium),
         ua_client_hints: Some(chromium_ua_client_hints(

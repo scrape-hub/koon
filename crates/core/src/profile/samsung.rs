@@ -127,6 +127,7 @@ fn samsung_profile(row: (u32, u32, &'static str, &'static str)) -> BrowserProfil
     hints.network_quality = Some(SAMSUNG_NETWORK_QUALITY);
     BrowserProfile {
         farble_accept_language: false,
+        multipart: Some(crate::BoundaryStyle::WebKit),
         language_source: Some(LanguageSource::Samsung),
         header_family: Some(HeaderFamily::Chromium),
         ua_client_hints: Some(hints),

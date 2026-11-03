@@ -1,4 +1,5 @@
 use rand::Rng;
+use serde::{Deserialize, Serialize};
 
 /// A single part of a `multipart/form-data` body.
 #[derive(Debug, Clone)]
@@ -14,14 +15,21 @@ pub enum Part {
     },
 }
 
-/// How a browser generates multipart boundaries.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// How a browser or client encodes a multipart body: its boundary, and for `OkHttp` the part
+/// headers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum BoundaryStyle {
     /// Chromium and Safari: `----WebKitFormBoundary` + 16 random characters (Blink
     /// `FormDataEncoder::GenerateUniqueBoundaryString`).
     WebKit,
     /// Firefox: `----geckoformboundary` + two random 64-bit numbers in hex (`FSMultipartFormData`).
     Gecko,
+    /// `OkHttp` 4: a random UUID (`MultipartBody.Builder`) and a Content-Length in every part.
+    OkHttp4,
+    /// `OkHttp` 5: a random UUID, no Content-Length in the parts.
+    OkHttp5,
 }
 
 impl BoundaryStyle {
@@ -42,6 +50,20 @@ impl BoundaryStyle {
                 rng.random::<u64>(),
                 rng.random::<u64>()
             ),
+            Self::OkHttp4 | Self::OkHttp5 => {
+                let mut bytes: [u8; 16] = rng.random();
+                bytes[6] = (bytes[6] & 0x0f) | 0x40;
+                bytes[8] = (bytes[8] & 0x3f) | 0x80;
+                let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+                format!(
+                    "{}-{}-{}-{}-{}",
+                    &hex[..8],
+                    &hex[8..12],
+                    &hex[12..16],
+                    &hex[16..20],
+                    &hex[20..]
+                )
+            }
         }
     }
 }
@@ -116,13 +138,13 @@ impl Multipart {
         self.build_with(BoundaryStyle::WebKit)
     }
 
-    /// Build the body with the given browser's boundary style.
+    /// Build the body as the given browser or client encodes it.
     #[must_use]
     pub fn build_with(self, style: BoundaryStyle) -> (Vec<u8>, String) {
-        self.build_with_boundary(&style.generate())
+        self.build_with_boundary(&style.generate(), style == BoundaryStyle::OkHttp4)
     }
 
-    fn build_with_boundary(self, boundary: &str) -> (Vec<u8>, String) {
+    fn build_with_boundary(self, boundary: &str, part_lengths: bool) -> (Vec<u8>, String) {
         let mut body = Vec::new();
         for part in &self.parts {
             body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
@@ -130,11 +152,12 @@ impl Multipart {
                 Part::Text { name, value } => {
                     body.extend_from_slice(
                         format!(
-                            "Content-Disposition: form-data; name=\"{}\"\r\n\r\n",
+                            "Content-Disposition: form-data; name=\"{}\"\r\n",
                             escape(name)
                         )
                         .as_bytes(),
                     );
+                    end_part_headers(&mut body, part_lengths, value.len());
                     body.extend_from_slice(value.as_bytes());
                 }
                 Part::File {
@@ -157,9 +180,8 @@ impl Multipart {
                     } else {
                         content_type.as_str()
                     };
-                    body.extend_from_slice(
-                        format!("Content-Type: {content_type}\r\n\r\n").as_bytes(),
-                    );
+                    body.extend_from_slice(format!("Content-Type: {content_type}\r\n").as_bytes());
+                    end_part_headers(&mut body, part_lengths, data.len());
                     body.extend_from_slice(data);
                 }
             }
@@ -168,6 +190,13 @@ impl Multipart {
         body.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
         (body, format!("multipart/form-data; boundary={boundary}"))
     }
+}
+
+fn end_part_headers(body: &mut Vec<u8>, part_lengths: bool, length: usize) {
+    if part_lengths {
+        body.extend_from_slice(format!("Content-Length: {length}\r\n").as_bytes());
+    }
+    body.extend_from_slice(b"\r\n");
 }
 
 /// Escape a field name or filename like browsers do (HTML Standard, multipart/form-data encoding):
@@ -229,6 +258,51 @@ mod tests {
             suffix
                 .bytes()
                 .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+        );
+    }
+
+    #[test]
+    fn okhttp_boundary_is_a_uuid() {
+        for style in [BoundaryStyle::OkHttp4, BoundaryStyle::OkHttp5] {
+            let (_, ct) = Multipart::new().text("a", "b").build_with(style);
+            let boundary = boundary_of(&ct);
+            let groups: Vec<usize> = boundary.split('-').map(str::len).collect();
+            assert_eq!(groups, [8, 4, 4, 4, 12], "{boundary}");
+            assert_eq!(&boundary[14..15], "4");
+            assert!(matches!(&boundary[19..20], "8" | "9" | "a" | "b"));
+            assert!(
+                boundary
+                    .bytes()
+                    .all(|b| b == b'-' || (b.is_ascii_hexdigit() && !b.is_ascii_uppercase()))
+            );
+        }
+    }
+
+    /// `MultipartBody.writeOrCountBytes` of `OkHttp` 4.12.0 and 5.5.0.
+    #[test]
+    fn okhttp_part_headers() {
+        let form = || {
+            Multipart::new().text("field", "value").file(
+                "upload",
+                "a.txt",
+                "text/plain",
+                b"hello".to_vec(),
+            )
+        };
+        let (body, ct) = form().build_with_boundary("b", true);
+        assert_eq!(ct, "multipart/form-data; boundary=b");
+        assert_eq!(
+            String::from_utf8(body).unwrap(),
+            "--b\r\nContent-Disposition: form-data; name=\"field\"\r\nContent-Length: 5\r\n\r\n\
+             value\r\n--b\r\nContent-Disposition: form-data; name=\"upload\"; filename=\"a.txt\"\r\n\
+             Content-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello\r\n--b--\r\n"
+        );
+        let (body, _) = form().build_with_boundary("b", false);
+        assert_eq!(
+            String::from_utf8(body).unwrap(),
+            "--b\r\nContent-Disposition: form-data; name=\"field\"\r\n\r\nvalue\r\n--b\r\n\
+             Content-Disposition: form-data; name=\"upload\"; filename=\"a.txt\"\r\n\
+             Content-Type: text/plain\r\n\r\nhello\r\n--b--\r\n"
         );
     }
 
