@@ -169,7 +169,7 @@ Chrome Mobile and Firefox Mobile send their desktop counterpart's fingerprint wi
 - **Fingerprint self-test**: `koon verify` checks your installed koon against the real browsers' fingerprints (see [below](#fingerprint-self-test))
 - **TLS sessions and certificates**: session tickets per origin, used once, over TCP and QUIC; certificates verified against Mozilla's roots plus every trust anchor of the Chrome Root Store
 - **Cookies and sessions**: a jar with domain, path, expiry, Secure, HttpOnly, SameSite, `__Host-`/`__Secure-` prefixes and public-suffix protection; import and export as Playwright/CDP cookie objects; save and load cookies and TLS tickets as JSON
-- **Proxies**: HTTP, HTTPS and SOCKS5, round-robin rotation, custom CONNECT headers; retries switch the proxy and never send a POST twice; HTTP/3 goes direct
+- **Proxies**: HTTP, HTTPS and SOCKS5 (`socks5://` or `socks5h://`, both resolved by the proxy), round-robin rotation, custom CONNECT headers; retries switch the proxy and never send a POST twice; HTTP/3 goes direct
 - **MITM proxy server**: re-sends any program's traffic through koon; loopback only unless allowed, optional authentication, capped connections
 - **WebSocket**: `wss://` and `ws://` with the browser's handshake, over HTTP/2 where the browser uses it; send and receive concurrently
 - **Streaming**: response bodies read on demand with backpressure, uploads from a stream, multipart forms with the browser's boundary format

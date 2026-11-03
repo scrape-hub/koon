@@ -86,7 +86,8 @@ export interface KoonOptions {
   /** Custom browser profile as JSON string (see `exportProfile()`). Overrides `browser`. */
   profileJson?: string;
   /**
-   * Proxy URL (http://, https://, socks5://). An `https://` proxy is reached over TLS and
+   * Proxy URL (http://, https://, socks5:// or socks5h://, the same: the proxy resolves the
+   * host name). An `https://` proxy is reached over TLS and
    * its certificate is verified (see `proxyCaCerts`).
    */
   proxy?: string;

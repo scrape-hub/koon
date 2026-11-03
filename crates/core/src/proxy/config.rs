@@ -33,8 +33,8 @@ pub(crate) struct ProxyAuth {
 }
 
 impl ProxyConfig {
-    /// Parse a proxy URL string (`http(s)://[user:pass@]host:port` or `socks5://host:port`) into a
-    /// `ProxyConfig`.
+    /// Parse a proxy URL string (`http(s)://[user:pass@]host:port` or `socks5://host:port`, also
+    /// spelled `socks5h://`) into a `ProxyConfig`.
     ///
     /// # Errors
     /// Returns [`Error::Proxy`](crate::Error::Proxy) if `proxy_url` is not a valid URL or its
@@ -48,7 +48,9 @@ impl ProxyConfig {
         let kind = match url.scheme() {
             "http" => ProxyKind::Http,
             "https" => ProxyKind::Https,
-            "socks5" => ProxyKind::Socks5,
+            // koon hands SOCKS5 proxies the host name, so `socks5h` (resolved by the proxy, as
+            // curl and requests spell it) is the same.
+            "socks5" | "socks5h" => ProxyKind::Socks5,
             other => {
                 return Err(crate::Error::Proxy(
                     format!("Unsupported proxy scheme: {other}"),
@@ -151,6 +153,12 @@ mod tests {
         let auth = config.auth.unwrap();
         assert_eq!(auth.username, "us@er");
         assert_eq!(auth.password, "p@ss:w/%");
+    }
+
+    #[test]
+    fn socks5h_is_socks5() {
+        let config = ProxyConfig::parse("socks5h://127.0.0.1:1080").unwrap();
+        assert!(matches!(config.kind, ProxyKind::Socks5));
     }
 
     #[test]

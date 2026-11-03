@@ -212,7 +212,8 @@ class Koon:
                 "chrome-mobile152", "safari-mobile266", "firefox-mobile154", "brave",
                 "edge-mobile153", "samsung", "opera-mobile", "okhttp5").
             profile_json: Custom browser profile as JSON string (overrides ``browser``).
-            proxy: Proxy URL (``http://``, ``https://``, ``socks5://``). An ``https://``
+            proxy: Proxy URL (``http://``, ``https://``, ``socks5://`` or
+                ``socks5h://``, the same: the proxy resolves the host name). An ``https://``
                 proxy is reached over TLS and its certificate is verified (see
                 ``proxy_ca_certs``).
             proxies: List of proxy URLs for round-robin rotation. Takes priority over ``proxy``.
