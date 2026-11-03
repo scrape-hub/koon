@@ -62,6 +62,8 @@ Rust only:
 - A client takes about 9 KiB of memory instead of 280 KiB.
 - Brave profiles vary Accept-Language by the page's site also when only Origin
   names the page.
+- A host's addresses and its DNS HTTPS record are looked up at once, as
+  browsers do, not one after the other.
 
 **Responses and errors**
 

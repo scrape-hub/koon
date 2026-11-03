@@ -8,12 +8,14 @@
 mod common;
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use btls::ssl::Ssl;
 use common::h3::{h3_server, h3_server_with_socket};
 use hickory_proto::op::Message;
+use hickory_proto::rr::RecordType;
 use hickory_proto::rr::rdata::svcb::{Alpn, SvcParamKey, SvcParamValue};
 use hickory_proto::serialize::binary::{BinDecodable, BinEncodable};
 use koon_core::dns::{DohConfig, DohResolver, NativeHttpsResolver};
@@ -398,6 +400,19 @@ async fn truncated_udp_answer_retries_over_tcp() {
 /// local test server cannot present, so this is the one part of the DoH
 /// path the native resolver's tests above cannot stand in for.
 async fn doh_server(host: &str, alpn: &[&str]) -> (u16, Vec<u8>) {
+    doh_server_with(host, alpn, Duration::ZERO, Arc::default()).await
+}
+
+/// The queries a DoH server received, with when.
+type Queries = Arc<Mutex<Vec<(RecordType, Instant)>>>;
+
+/// [`doh_server`] that answers HTTPS queries after `https_delay` and records every query in `seen`.
+async fn doh_server_with(
+    host: &str,
+    alpn: &[&str],
+    https_delay: Duration,
+    seen: Queries,
+) -> (u16, Vec<u8>) {
     let dir = common::temp_dir("doh-test");
     let ca = CertAuthority::load_or_generate(dir.path().to_path_buf()).unwrap();
     let (cert, key) = ca.get_or_create_leaf(host).unwrap();
@@ -415,7 +430,7 @@ async fn doh_server(host: &str, alpn: &[&str]) -> (u16, Vec<u8>) {
             let Ok(mut tls) = tokio_btls::SslStream::new(ssl, tcp) else {
                 continue;
             };
-            let (host, params) = (host.clone(), params.clone());
+            let (host, params, seen) = (host.clone(), params.clone(), seen.clone());
             tokio::spawn(async move {
                 if std::pin::Pin::new(&mut tls).accept().await.is_err() {
                     return;
@@ -424,7 +439,7 @@ async fn doh_server(host: &str, alpn: &[&str]) -> (u16, Vec<u8>) {
                     return;
                 };
                 while let Some(Ok((request, mut respond))) = h2.accept().await {
-                    let (host, params) = (host.clone(), params.clone());
+                    let (host, params, seen) = (host.clone(), params.clone(), seen.clone());
                     tokio::spawn(async move {
                         let mut body = request.into_body();
                         let mut data = Vec::new();
@@ -436,6 +451,11 @@ async fn doh_server(host: &str, alpn: &[&str]) -> (u16, Vec<u8>) {
                         let Ok(query) = Message::from_bytes(&data) else {
                             return;
                         };
+                        let kind = query.queries()[0].query_type();
+                        seen.lock().unwrap().push((kind, Instant::now()));
+                        if kind == RecordType::HTTPS {
+                            tokio::time::sleep(https_delay).await;
+                        }
                         let Ok(wire) = common::https_answer(&query, &host, params).to_bytes()
                         else {
                             return;
@@ -455,6 +475,40 @@ async fn doh_server(host: &str, alpn: &[&str]) -> (u16, Vec<u8>) {
         }
     });
     (port, ca_pem)
+}
+
+/// Browsers ask for a host's addresses alongside its HTTPS record: the address query does not wait
+/// for the record's answer.
+#[tokio::test]
+async fn addresses_are_looked_up_alongside_the_https_record() {
+    let seen = Queries::default();
+    let (port, ca_pem) =
+        doh_server_with(HOST, &["h2"], Duration::from_millis(200), seen.clone()).await;
+    let config = DohConfig {
+        server_ip: IpAddr::V4(Ipv4Addr::LOCALHOST),
+        server_hostname: HOST.to_string(),
+        server_port: port,
+    };
+    let resolver = DohResolver::with_extra_roots(config, &ca_pem).unwrap();
+    let client = Client::builder(Chrome::latest())
+        .doh(resolver)
+        .build()
+        .unwrap();
+    // The host has no addresses here; only when the queries go out matters.
+    let _ = client.get(&format!("https://{HOST}/")).await;
+    let seen = seen.lock().unwrap().clone();
+    let at = |kinds: &[RecordType]| {
+        seen.iter()
+            .find(|(kind, _)| kinds.contains(kind))
+            .map(|(_, at)| *at)
+            .unwrap_or_else(|| panic!("no {kinds:?} query: {seen:?}"))
+    };
+    let https = at(&[RecordType::HTTPS]);
+    let address = at(&[RecordType::A, RecordType::AAAA]);
+    assert!(
+        address < https + Duration::from_millis(150),
+        "the address query waited for the HTTPS answer: {seen:?}"
+    );
 }
 
 /// The DoH resolver's own connection (TLS to a server outside koon's

@@ -843,7 +843,12 @@ impl super::Client {
             && self.follows_https_rr()
             && !self.h3_broken(&key.host, key.port)
         {
-            h3_port = self.https_rr_h3_port(&key.host, key.port).await;
+            // Browsers ask for the addresses alongside the record, not after it.
+            let (port, ()) = tokio::join!(
+                self.https_rr_h3_port(&key.host, key.port),
+                self.prefetch_addresses(&key.host, key.port)
+            );
+            h3_port = port;
             h3_via_https_rr = h3_port.is_some();
         }
         // Safari opens straight on QUIC from the record, no parallel TCP attempt (captured on

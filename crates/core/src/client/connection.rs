@@ -174,6 +174,16 @@ impl super::Client {
         Ok(addrs)
     }
 
+    /// Look up `host`'s addresses into the host cache ahead of connecting; a failure shows when the
+    /// connection resolves them.
+    pub(super) async fn prefetch_addresses(&self, host: &str, port: u16) {
+        if self.resolve_override(host, port).is_none()
+            && strip_brackets(host).parse::<IpAddr>().is_err()
+        {
+            let _ = self.lookup(host, true).await;
+        }
+    }
+
     /// The addresses [`ClientBuilder::resolve`](super::ClientBuilder::resolve) set for `host` and
     /// `port`.
     fn resolve_override(&self, host: &str, port: u16) -> Option<Vec<IpAddr>> {
