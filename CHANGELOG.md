@@ -53,6 +53,7 @@ Rust only:
 - Chromium, Firefox and Safari profiles open at most 6 HTTP/1.1 connections per
   host.
 - A request whose response has arrived is not retried.
+- An IPv4 address is a site of its own.
 - Proxy credentials in the URL are percent-decoded.
 - Proxy URLs may start with `socks5h://`.
 - Chrome profiles no longer join the ended handshake-padding trial.

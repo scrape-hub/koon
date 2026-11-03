@@ -18,6 +18,10 @@ pub(crate) fn lock_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 /// without one (an IP address, `localhost`) is its own site.
 pub(crate) fn site(host: &str) -> String {
     let host = host.to_ascii_lowercase();
+    // psl would take the last two numbers of an IPv4 address for its domain.
+    if host.parse::<std::net::Ipv4Addr>().is_ok() {
+        return host;
+    }
     psl::domain_str(&host).map(str::to_string).unwrap_or(host)
 }
 
@@ -69,5 +73,19 @@ impl<K: std::hash::Hash + Eq, V> GrowingLru<K, V> {
     #[cfg(test)]
     pub(crate) fn len(&self) -> usize {
         self.cache.len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_ip_address_is_its_own_site() {
+        assert_eq!(site("127.0.0.1"), "127.0.0.1");
+        assert!(!same_site("127.0.0.1", "192.168.0.1"));
+        assert_eq!(site("[::1]"), "[::1]");
+        assert_eq!(site("www.Example.co.uk"), "example.co.uk");
+        assert!(same_site("a.example.com", "b.example.com"));
     }
 }
