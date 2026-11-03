@@ -10,7 +10,7 @@ Description: HTTP client that connects like a real browser: the TLS, HTTP/2
     captures from the real browsers.
 License: MIT + file LICENSE
 SystemRequirements: Cargo (Rust's package manager), rustc >= 1.85, CMake,
-    libclang, git, GNU make
+    GNU make
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Suggests: jsonlite, knitr, processx, rmarkdown, testthat (>= 3.0.0), withr

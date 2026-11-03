@@ -118,7 +118,7 @@ dependencies = [
 [[package]]
 name = "btls"
 version = "0.5.5"
-source = "git+https://github.com/scrape-hub/btls.git?tag=koon-1.0.0#aa1f43773da59efee4a001f162eb01651ec3a32b"
+source = "git+https://github.com/scrape-hub/btls.git?tag=koon-1.3.0#90905f3f655f0e6cbda31605b445ec24c9832808"
 dependencies = [
  "bitflags",
  "btls-sys",
@@ -130,7 +130,7 @@ dependencies = [
 [[package]]
 name = "btls-sys"
 version = "0.5.5"
-source = "git+https://github.com/scrape-hub/btls.git?tag=koon-1.0.0#aa1f43773da59efee4a001f162eb01651ec3a32b"
+source = "git+https://github.com/scrape-hub/btls.git?tag=koon-1.3.0#90905f3f655f0e6cbda31605b445ec24c9832808"
 dependencies = [
  "bindgen",
  "cmake",
@@ -1190,7 +1190,7 @@ dependencies = [
 [[package]]
 name = "quinn-btls"
 version = "0.1.0"
-source = "git+https://github.com/scrape-hub/btls.git?tag=koon-1.0.0#aa1f43773da59efee4a001f162eb01651ec3a32b"
+source = "git+https://github.com/scrape-hub/btls.git?tag=koon-1.3.0#90905f3f655f0e6cbda31605b445ec24c9832808"
 dependencies = [
  "btls",
  "btls-sys",
@@ -1623,7 +1623,7 @@ dependencies = [
 [[package]]
 name = "tokio-btls"
 version = "0.5.5"
-source = "git+https://github.com/scrape-hub/btls.git?tag=koon-1.0.0#aa1f43773da59efee4a001f162eb01651ec3a32b"
+source = "git+https://github.com/scrape-hub/btls.git?tag=koon-1.3.0#90905f3f655f0e6cbda31605b445ec24c9832808"
 dependencies = [
  "btls",
  "tokio",

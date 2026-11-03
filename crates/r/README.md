@@ -23,8 +23,7 @@ Everywhere else the package builds from source:
 remotes::install_github("scrape-hub/koon", subdir = "crates/r")
 ```
 
-That needs Rust 1.85+, CMake, libclang, git and GNU make, on Windows also
-Rtools, LLVM (which brings libclang) and
+That needs Rust 1.85+, CMake and GNU make, on Windows also Rtools and
 `rustup target add x86_64-pc-windows-gnu`. The first build takes a few
 minutes, later ones are faster.
 

@@ -51,6 +51,9 @@ Rust only:
 - CLI: the flags of the options and their help come from the bindings' option
   table; `--doh`, `--header-mode` and `--ip-version` take any case and the same
   names, such as `--ip-version v4`.
+- Building from source needs neither libclang nor git: BoringSSL's patches
+  are applied without git, and its bindings come prebuilt for Linux, macOS and
+  Windows on x64 and arm64.
 
 ### Fixed
 
