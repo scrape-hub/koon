@@ -504,7 +504,7 @@ impl super::Client {
                 HeaderSource::Profile => (&hop.client_headers[..], &hop.request_headers[..]),
             };
             headers::cookie_context(
-                headers::Family::of(&self.profile),
+                headers::cookie_rules(&self.profile),
                 &hop.method,
                 &hop.url,
                 client,

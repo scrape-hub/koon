@@ -5,7 +5,8 @@ use http::{Method, Uri};
 use super::order::host_header;
 use super::util::{header_value, is_get_or_head, merge_caller_headers, page_url, remove, set};
 use super::{Family, Mode};
-use crate::cookie::{CookieContext, SameSiteRules, ThirdPartyCookies, top_level_site};
+use crate::cookie::{CookieContext, CookieRules, SameSiteRules, ThirdPartyCookies, top_level_site};
+use crate::profile::{BrowserProfile, SafariLayout, SafariStack};
 use crate::util::same_site;
 
 /// The kind of request a browser would make with this method and these caller headers.
@@ -74,7 +75,7 @@ pub fn is_navigation(method: &Method, headers: &[(String, String)]) -> bool {
 /// that is no navigation belongs to its page's top-level site; `navigation` overrides what the
 /// headers say (a WebSocket handshake is none).
 pub(crate) fn cookie_context(
-    family: Family,
+    rules: CookieRules,
     method: &Method,
     uri: &Uri,
     client: &[(String, String)],
@@ -82,15 +83,6 @@ pub(crate) fn cookie_context(
     cross_site_redirect: bool,
     navigation: Option<bool>,
 ) -> CookieContext {
-    let (rules, third_party_cookies) = match family {
-        Family::Chromium => (SameSiteRules::Chromium, ThirdPartyCookies::Allowed),
-        Family::Firefox => (
-            SameSiteRules::UnspecifiedIsNone,
-            ThirdPartyCookies::Partitioned,
-        ),
-        Family::Safari => (SameSiteRules::UnspecifiedIsNone, ThirdPartyCookies::Blocked),
-        _ => (SameSiteRules::Ignored, ThirdPartyCookies::Allowed),
-    };
     let caller = merge_caller_headers(client, request);
     let top_level_navigation =
         navigation.unwrap_or_else(|| match header_value(&caller, "sec-fetch-mode") {
@@ -108,14 +100,14 @@ pub(crate) fn cookie_context(
         .as_deref()
         .and_then(|origin| origin.parse::<Uri>().ok());
     let same_site = initiator.is_none_or(|initiator| {
-        if rules == SameSiteRules::Chromium {
+        if rules.same_site == SameSiteRules::Chromium {
             compute_fetch_site(uri, &initiator) != "cross-site"
         } else {
             page.as_ref()
                 .and_then(|page| Some(same_site(page.host()?, uri.host()?)))
                 .unwrap_or(false)
         }
-    }) && !(cross_site_redirect && rules != SameSiteRules::Chromium);
+    }) && !(cross_site_redirect && rules.same_site != SameSiteRules::Chromium);
     let top_level = page
         .as_ref()
         .filter(|_| !top_level_navigation)
@@ -123,7 +115,8 @@ pub(crate) fn cookie_context(
     let third_party = top_level
         .host()
         .zip(uri.host())
-        .is_some_and(|(top, host)| !crate::util::same_site(top, host));
+        .is_some_and(|(top, host)| !crate::util::same_site(top, host))
+        || (rules.redirect_is_third_party && cross_site_redirect && !top_level_navigation);
     CookieContext {
         same_site,
         top_level_navigation,
@@ -131,7 +124,34 @@ pub(crate) fn cookie_context(
         rules,
         top_level_site: top_level_site(top_level),
         third_party,
-        third_party_cookies,
+    }
+}
+
+/// The cookie rules of `profile`'s browser engine.
+pub(crate) fn cookie_rules(profile: &BrowserProfile) -> CookieRules {
+    match Family::of(profile) {
+        Family::Chromium => CookieRules {
+            same_site: SameSiteRules::Chromium,
+            third_party: ThirdPartyCookies::Allowed,
+            chips: true,
+            redirect_is_third_party: false,
+        },
+        Family::Firefox => CookieRules {
+            same_site: SameSiteRules::UnspecifiedIsNone,
+            third_party: ThirdPartyCookies::Partitioned,
+            chips: true,
+            redirect_is_third_party: false,
+        },
+        Family::Safari => {
+            let layout = SafariLayout::of(profile);
+            CookieRules {
+                same_site: SameSiteRules::UnspecifiedIsNone,
+                third_party: ThirdPartyCookies::Blocked,
+                chips: layout.chips,
+                redirect_is_third_party: layout.stack != SafariStack::Tahoe,
+            }
+        }
+        _ => CookieRules::NONE,
     }
 }
 

@@ -75,6 +75,9 @@ pub(crate) struct SafariLayout {
     /// 16.0/16.1 simulators: a captured header *set* changes `CFNetwork`'s hash order, and fetch
     /// metadata is the biggest such change within the Sonoma stack.
     pub(crate) fetch_metadata: bool,
+    /// Whether `Partitioned` cookies (CHIPS) are kept apart: in Safari 18.4, then off until 26.2
+    /// (WebKit bug 292975); without, the attribute is ignored (captured on macOS 14.8 and 15.8).
+    pub(crate) chips: bool,
 }
 
 impl SafariLayout {
@@ -99,10 +102,17 @@ impl SafariLayout {
             .headers
             .iter()
             .any(|(k, _)| k.eq_ignore_ascii_case("sec-fetch-mode"));
+        let chips = match (major, minor) {
+            (Some(18), Some(4)) => true,
+            (Some(26), minor) => minor.unwrap_or(0) >= 2,
+            (Some(major), _) => major > 26,
+            (None, _) => true,
+        };
         Self {
             stack,
             ios,
             fetch_metadata,
+            chips,
         }
     }
 }

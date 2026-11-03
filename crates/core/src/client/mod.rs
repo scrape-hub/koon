@@ -959,7 +959,7 @@ impl Client {
         // and the partition.
         let cookie_context = self.cookie_jar.is_some().then(|| {
             headers::cookie_context(
-                headers::Family::of(&self.profile),
+                headers::cookie_rules(&self.profile),
                 &http::Method::GET,
                 &http_uri,
                 &self.custom_headers,

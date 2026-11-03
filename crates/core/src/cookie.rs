@@ -102,6 +102,28 @@ pub(crate) enum ThirdPartyCookies {
     Blocked,
 }
 
+/// How a browser engine treats cookies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CookieRules {
+    pub same_site: SameSiteRules,
+    pub third_party: ThirdPartyCookies,
+    /// The `Partitioned` attribute (CHIPS) keeps a cookie apart; without, it is ignored.
+    pub chips: bool,
+    /// A request that is no navigation and went through a cross-site redirect is a third-party
+    /// request (Safari before macOS and iOS 26, captured on macOS 14.8 and 15.8).
+    pub redirect_is_third_party: bool,
+}
+
+impl CookieRules {
+    /// A client without browser cookie rules.
+    pub(crate) const NONE: Self = Self {
+        same_site: SameSiteRules::Ignored,
+        third_party: ThirdPartyCookies::Allowed,
+        chips: false,
+        redirect_is_third_party: false,
+    };
+}
+
 /// The request a cookie would go with, as `SameSite` and cookie partitioning see it (RFC 6265bis
 /// §5.8.3).
 #[derive(Debug, Clone)]
@@ -113,13 +135,12 @@ pub(crate) struct CookieContext {
     /// The method is GET, HEAD, OPTIONS or TRACE (`HttpUtil::IsMethodSafe`,
     /// `nsHttpRequestHead::IsSafeMethod`).
     pub safe_method: bool,
-    pub rules: SameSiteRules,
+    pub rules: CookieRules,
     /// The site of the top-level page with its scheme ([`top_level_site`]): the request's own for a
     /// navigation or a request from no page, else the page's. Partitioned cookies are keyed by it.
     pub top_level_site: String,
     /// The request goes to another site than its top-level page, compared without the scheme.
     pub third_party: bool,
-    pub third_party_cookies: ThirdPartyCookies,
 }
 
 impl CookieContext {
@@ -129,10 +150,9 @@ impl CookieContext {
             same_site: true,
             top_level_navigation: true,
             safe_method: true,
-            rules: SameSiteRules::Ignored,
+            rules: CookieRules::NONE,
             top_level_site: top_level_site(url),
             third_party: false,
-            third_party_cookies: ThirdPartyCookies::Allowed,
         }
     }
 
@@ -140,12 +160,12 @@ impl CookieContext {
     fn includes(&self, cookie: &Cookie, now: SystemTime) -> bool {
         let in_partition = match &cookie.partition_key {
             Some(key) => *key == self.top_level_site,
-            None => !self.third_party || self.third_party_cookies == ThirdPartyCookies::Allowed,
+            None => !self.third_party || self.rules.third_party == ThirdPartyCookies::Allowed,
         };
         if !in_partition {
             return false;
         }
-        if self.same_site || self.rules == SameSiteRules::Ignored {
+        if self.same_site || self.rules.same_site == SameSiteRules::Ignored {
             return true;
         }
         let lax = self.top_level_navigation && self.safe_method;
@@ -153,7 +173,7 @@ impl CookieContext {
             SameSite::Strict => false,
             SameSite::Lax => lax,
             SameSite::None => true,
-            SameSite::Unspecified => match self.rules {
+            SameSite::Unspecified => match self.rules.same_site {
                 SameSiteRules::Chromium => {
                     lax || (self.top_level_navigation
                         && now
@@ -169,27 +189,30 @@ impl CookieContext {
     /// cross-site request that is no top-level navigation sets only `SameSite=None` cookies, an
     /// unspecified one counting as `Lax` for Chromium.
     fn may_set(&self, cookie: &Cookie) -> bool {
-        if self.same_site || self.top_level_navigation || self.rules == SameSiteRules::Ignored {
+        if self.same_site
+            || self.top_level_navigation
+            || self.rules.same_site == SameSiteRules::Ignored
+        {
             return true;
         }
         match cookie.same_site {
             SameSite::None => true,
-            SameSite::Unspecified => self.rules != SameSiteRules::Chromium,
+            SameSite::Unspecified => self.rules.same_site != SameSiteRules::Chromium,
             SameSite::Strict | SameSite::Lax => false,
         }
     }
 
     /// The partition a cookie from the response to this request goes to (`Some(None)`: none), or
     /// `None` when the browser drops it. `partitioned` is its `Partitioned` attribute (CHIPS), which
-    /// requires `Secure` and which clients without browser cookie rules ignore.
+    /// requires `Secure` where the browser keeps such cookies apart.
     fn partition_for(&self, cookie: &Cookie, partitioned: bool) -> Option<Option<String>> {
-        if partitioned && self.rules != SameSiteRules::Ignored {
+        if partitioned && self.rules.chips {
             return cookie.secure.then(|| Some(self.top_level_site.clone()));
         }
         if !self.third_party {
             return Some(None);
         }
-        match self.third_party_cookies {
+        match self.rules.third_party {
             ThirdPartyCookies::Allowed => Some(None),
             ThirdPartyCookies::Partitioned => Some(Some(self.top_level_site.clone())),
             ThirdPartyCookies::Blocked => None,
@@ -1271,6 +1294,19 @@ mod tests {
         }
     }
 
+    /// The cookie rules of the newest profile of `family`.
+    fn rules(family: crate::profile::HeaderFamily) -> CookieRules {
+        use crate::profile::HeaderFamily::{Chromium, Firefox, OkHttp, Safari};
+        let profile = match family {
+            Chromium => crate::profile::Chrome::latest(),
+            Firefox => crate::profile::Firefox::latest(),
+            Safari => crate::profile::Safari::latest(),
+            OkHttp => crate::profile::OkHttp::latest(),
+            _ => return CookieRules::NONE,
+        };
+        crate::client::headers::cookie_rules(&profile)
+    }
+
     /// The cookies a request from `referer` (none: typed URL) with `method` to `url` carries, for a
     /// jar that got `set_cookies` from `url` `age` ago.
     fn sent(
@@ -1292,7 +1328,7 @@ mod tests {
             .collect();
         let method: http::Method = method.parse().unwrap();
         let context = crate::client::headers::cookie_context(
-            family,
+            rules(family),
             &method,
             &uri(url),
             &[],
@@ -1377,7 +1413,7 @@ mod tests {
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
         crate::client::headers::cookie_context(
-            family,
+            rules(family),
             &method.parse().unwrap(),
             &uri(url),
             &[],
@@ -1499,6 +1535,68 @@ mod tests {
     }
 
     #[test]
+    fn safari_keeps_partitioned_cookies_apart_in_18_4_and_from_26_2() {
+        use crate::profile::{Os, Safari};
+        let url = "https://example.com/";
+        let rules_of = |version| {
+            crate::client::headers::cookie_rules(&Safari::version(version, Os::MacOS).unwrap())
+        };
+        for (version, chips) in [
+            ("17.6", false),
+            ("18.4", true),
+            ("18.6", false),
+            ("26.1", false),
+            ("26.2", true),
+        ] {
+            assert_eq!(rules_of(version).chips, chips, "{version}");
+        }
+        let context = |rules, headers: &[(&str, &str)], cross_site_redirect| {
+            let headers: Vec<(String, String)> = headers
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect();
+            crate::client::headers::cookie_context(
+                rules,
+                &http::Method::GET,
+                &uri(url),
+                &[],
+                &headers,
+                cross_site_redirect,
+                None,
+            )
+        };
+        // Without CHIPS the attribute is ignored, Secure or not (macOS 14.8 and 15.8).
+        let old = rules_of("18.6");
+        let response: Vec<(String, String)> = [
+            "chips=1; SameSite=None; Secure; Partitioned",
+            "insecure=1; Partitioned",
+        ]
+        .iter()
+        .map(|value| ("set-cookie".to_string(), value.to_string()))
+        .collect();
+        let mut jar = CookieJar::new();
+        jar.store_from_response_in(&uri(url), &response, &context(old, &[], false));
+        assert_eq!(jar.cookies().len(), 2);
+        assert!(jar.cookies().iter().all(|c| c.partition_key.is_none()));
+        // An image of the site's own page through a cross-site redirect: a third-party request
+        // before macOS 26.
+        let image = [
+            ("Referer", "https://example.com/page"),
+            ("Sec-Fetch-Mode", "no-cors"),
+            ("Sec-Fetch-Dest", "image"),
+        ];
+        assert_eq!(
+            jar.cookie_header_for(&uri(url), &context(old, &image, true)),
+            None
+        );
+        let new = context(rules_of("26.6"), &image, true);
+        assert_eq!(
+            jar.cookie_header_for(&uri(url), &new).as_deref(),
+            Some("chips=1; insecure=1")
+        );
+    }
+
+    #[test]
     fn a_partitioned_cookie_keeps_its_partition_in_a_saved_jar() {
         let mut jar = CookieJar::new();
         store_in(
@@ -1548,8 +1646,15 @@ mod tests {
         let method = http::Method::GET;
         let url = uri("https://example.com/");
         for (family, same_site) in [(Chromium, true), (Firefox, false), (Safari, false)] {
-            let context =
-                crate::client::headers::cookie_context(family, &method, &url, &[], &[], true, None);
+            let context = crate::client::headers::cookie_context(
+                rules(family),
+                &method,
+                &url,
+                &[],
+                &[],
+                true,
+                None,
+            );
             assert_eq!(context.same_site, same_site, "{family:?}");
             assert!(context.top_level_navigation && context.safe_method);
         }

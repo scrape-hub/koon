@@ -41,7 +41,7 @@ Rust only:
 - Third-party cookies follow each browser: Chrome allows them, Firefox
   partitions them, Safari blocks them.
 - `Partitioned` cookies (CHIPS) stay with their top-level site, also in imports
-  and exports.
+  and exports; Safari profiles only in 18.4 and from 26.2.
 - Cross-site responses that are no navigation set no `SameSite=Strict` or
   `Lax` cookies.
 - Cookies from an IP address host are host-only.

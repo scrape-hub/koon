@@ -1065,13 +1065,10 @@ mod tests {
             for (os, release) in [(Os::MacOS, Some(entry.macos)), (Os::Ios, ios_release)] {
                 let Some(release) = release else { continue };
                 let profile = Safari::version(entry.tag, os).unwrap();
+                let layout = SafariLayout::of(&profile);
                 assert_eq!(
-                    SafariLayout::of(&profile),
-                    SafariLayout {
-                        stack: release.http,
-                        ios: os == Os::Ios,
-                        fetch_metadata: entry.fetch_metadata
-                    },
+                    (layout.stack, layout.ios, layout.fetch_metadata),
+                    (release.http, os == Os::Ios, entry.fetch_metadata),
                     "{} {os}",
                     entry.version
                 );
@@ -1234,7 +1231,8 @@ mod tests {
             SafariLayout {
                 stack: Stack::Sonoma,
                 ios: false,
-                fetch_metadata: true
+                fetch_metadata: true,
+                chips: false,
             }
         );
         assert_eq!(
