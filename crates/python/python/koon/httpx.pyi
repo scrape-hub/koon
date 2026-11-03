@@ -31,7 +31,9 @@ HTTP/2 and header fingerprint:
   multipart body with a boundary you chose in Content-Type is sent as it
   is. koon decodes the response body (gzip, deflate, br, zstd); the
   response then has no Content-Encoding and Content-Length, so httpx does
-  not decode it again. ``client.stream()`` reads the body from koon as it
+  not decode it again. A compressed body that decodes past the client's
+  ``max_response_body`` (100 MiB by default) raises ``httpx.ReadError``.
+  ``client.stream()`` reads the body from koon as it
   arrives, and closing the response (leaving the ``with`` block) drops
   the rest of it at once.
 - Timeouts: koon has one timeout, until the response head arrives and then

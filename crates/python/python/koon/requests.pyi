@@ -29,7 +29,10 @@ request with the browser's TLS, HTTP/2 and header fingerprint:
   part headers are dropped); a multipart body with a boundary you chose in
   Content-Type is sent as it is. koon decodes the response body (gzip,
   deflate, br, zstd); the response then has no Content-Encoding and
-  Content-Length. ``stream=True`` reads the body from koon as it arrives
+  Content-Length. A compressed body that decodes past the adapter's
+  ``max_response_body`` (100 MiB by default) raises
+  ``ChunkedEncodingError``.
+  ``stream=True`` reads the body from koon as it arrives
   (``iter_content()``, ``iter_lines()``, ``raw.read()``), and
   ``response.close()`` drops the rest of it at once.
 - Timeouts: koon has one timeout, until the response head arrives and then

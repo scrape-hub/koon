@@ -68,7 +68,7 @@ const HTTP_ERROR_EXIT: u8 = 22;
 #[command(
     name = "koon",
     about = "Browser-impersonating HTTP client",
-    long_about = "HTTP client that impersonates real browser TLS, HTTP/2, and HTTP/3 fingerprints.\nPasses Akamai, Cloudflare, and other bot detection systems.",
+    long_about = "HTTP client that impersonates real browser TLS, HTTP/2, and HTTP/3 fingerprints.",
     version,
     after_help = AFTER_HELP
 )]

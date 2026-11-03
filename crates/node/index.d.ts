@@ -687,7 +687,8 @@ export interface KoonFetch {
  *   `credentials: 'omit'` rejects: create the client with `cookieJar: false` instead.
  * - Response: the body is read from koon as it is consumed (`body` stream, `text()`,
  *   `json()`, `arrayBuffer()`, ...) and arrives decoded, so the response has no
- *   Content-Encoding and Content-Length. `url` is the final URL and `redirected` whether it
+ *   Content-Encoding and Content-Length. A compressed body that decodes past the client's
+ *   `maxResponseBody` (100 MiB by default) errors the stream with `BODY_ERROR`. `url` is the final URL and `redirected` whether it
  *   differs from the one requested; a status outside 200-599 (e.g. 999) is kept, with
  *   `ok` false. `blockedBy(response, body)` names the bot protection that answered.
  * - `signal`: an abort before the response head cancels the request, one during the body
