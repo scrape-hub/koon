@@ -159,8 +159,8 @@ jobs:
           path: crates/node/koon.linux-${{ matrix.arch }}-gnu.node
 
   # ─── Node.js binary and CLI (Linux x64 and arm64, musl) ───────────
-  # A Node addon links musl dynamically (crt-static off), and so does the CLI
-  # of the same build: both run where musl is the C library, as on Alpine.
+  # A Node addon links musl dynamically (crt-static off); the CLI is a static
+  # binary, which also runs on an Alpine without libstdc++ and libgcc.
   build-linux-musl:
     strategy:
       matrix:
@@ -181,13 +181,14 @@ jobs:
         run: |
           docker run --rm -v "$PWD":/io -w /io rust:1-alpine sh -euc '
             apk add -q clang-dev cmake make g++ go perl linux-headers git
-            RUSTFLAGS="-C target-feature=-crt-static" cargo build --release -p koon-node -p koon-cli
+            RUSTFLAGS="-C target-feature=-crt-static" cargo build --release -p koon-node
+            cargo build --release -p koon-cli --target ${{ matrix.triple }}
           '
 
       - name: Rename binaries
         run: |
           cp target/release/libkoon_node.so "crates/node/koon.linux-${{ matrix.arch }}-musl.node"
-          cp target/release/koon "koon-linux-${{ matrix.arch }}-musl"
+          cp target/${{ matrix.triple }}/release/koon "koon-linux-${{ matrix.arch }}-musl"
 
       - name: Upload node artifact
         uses: actions/upload-artifact@v7
@@ -299,19 +300,33 @@ jobs:
           go-version: stable
 
       # One abi3 wheel covers 3.11 and later; free-threaded Python cannot load
-      # abi3 modules, so 3.14t and 3.15t get wheels of their own.
+      # abi3 modules, so 3.14t and 3.15t get wheels of their own, which maturin
+      # builds only for the interpreters it is given.
+      - uses: actions/setup-python@v7
+        id: py314t
+        with:
+          python-version: "3.14t"
+
+      - uses: actions/setup-python@v7
+        id: py315t
+        with:
+          python-version: "3.15t"
+
       - uses: actions/setup-python@v7
         with:
-          python-version: |
-            3.11
-            3.14t
-            3.15t
+          python-version: "3.11"
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.triple }}
           args: --release --out dist --find-interpreter --manifest-path crates/python/Cargo.toml
+
+      - name: Build free-threaded wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.triple }}
+          args: --release --out dist --manifest-path crates/python/Cargo.toml -i "${{ steps.py314t.outputs.python-path }}" -i "${{ steps.py315t.outputs.python-path }}"
 
       - name: Upload wheels
         uses: actions/upload-artifact@v7
@@ -402,19 +417,33 @@ jobs:
           go-version: stable
 
       # One abi3 wheel covers 3.11 and later; free-threaded Python cannot load
-      # abi3 modules, so 3.14t and 3.15t get wheels of their own.
+      # abi3 modules, so 3.14t and 3.15t get wheels of their own, which maturin
+      # builds only for the interpreters it is given.
+      - uses: actions/setup-python@v7
+        id: py314t
+        with:
+          python-version: "3.14t"
+
+      - uses: actions/setup-python@v7
+        id: py315t
+        with:
+          python-version: "3.15t"
+
       - uses: actions/setup-python@v7
         with:
-          python-version: |
-            3.11
-            3.14t
-            3.15t
+          python-version: "3.11"
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: aarch64-apple-darwin
           args: --release --out dist --find-interpreter --manifest-path crates/python/Cargo.toml
+
+      - name: Build free-threaded wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: aarch64-apple-darwin
+          args: --release --out dist --manifest-path crates/python/Cargo.toml -i "${{ steps.py314t.outputs.python-path }}" -i "${{ steps.py315t.outputs.python-path }}"
 
       - name: Upload wheels
         uses: actions/upload-artifact@v7
@@ -443,19 +472,33 @@ jobs:
           go-version: stable
 
       # One abi3 wheel covers 3.11 and later; free-threaded Python cannot load
-      # abi3 modules, so 3.14t and 3.15t get wheels of their own.
+      # abi3 modules, so 3.14t and 3.15t get wheels of their own, which maturin
+      # builds only for the interpreters it is given.
+      - uses: actions/setup-python@v7
+        id: py314t
+        with:
+          python-version: "3.14t"
+
+      - uses: actions/setup-python@v7
+        id: py315t
+        with:
+          python-version: "3.15t"
+
       - uses: actions/setup-python@v7
         with:
-          python-version: |
-            3.11
-            3.14t
-            3.15t
+          python-version: "3.11"
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: x86_64-apple-darwin
           args: --release --out dist --find-interpreter --manifest-path crates/python/Cargo.toml
+
+      - name: Build free-threaded wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: x86_64-apple-darwin
+          args: --release --out dist --manifest-path crates/python/Cargo.toml -i "${{ steps.py314t.outputs.python-path }}" -i "${{ steps.py315t.outputs.python-path }}"
 
       - name: Upload wheels
         uses: actions/upload-artifact@v7
