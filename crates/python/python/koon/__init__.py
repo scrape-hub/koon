@@ -8,7 +8,6 @@ documented in ``__init__.pyi``.
 import json as _json
 
 from koon._native import (
-    KoonError,
     KoonProxy,
     KoonResponse,
     KoonStreamingResponse,
@@ -36,6 +35,21 @@ __all__ = [
     "browsers",
     "verify",
 ]
+
+
+class KoonError(RuntimeError):
+    """Structured error raised by every failing koon operation.
+
+    Carries a machine-readable ``code`` (e.g. ``"TIMEOUT"``, ``"TLS_ERROR"``,
+    ``"INVALID_COOKIE"``) alongside the usual exception message, which has the
+    form ``"[CODE] description"``. Picklable: the code is parsed back from the
+    message."""
+
+    @property
+    def code(self):
+        message = str(self.args[0]) if self.args else ""
+        code, closed, _ = message[1:].partition("]")
+        return code if message.startswith("[") and closed else "UNKNOWN"
 
 
 class KoonInvalidArgument(KoonError, ValueError):

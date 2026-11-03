@@ -27,6 +27,7 @@ Rust only:
 
 ### Changed
 
+- Python: one abi3 wheel per platform for Python 3.11 and later.
 - Rust: `doh` is a default feature of `koon-core`.
 - Building the Node addon from source needs Rust 1.88.
 

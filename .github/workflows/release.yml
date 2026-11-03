@@ -233,16 +233,12 @@ jobs:
         with:
           go-version: stable
 
-      # Every version requires-python admits: --find-interpreter builds for
-      # the interpreters installed here, not for the runner image's.
+      # One abi3 wheel covers 3.11 and later; free-threaded Python cannot load
+      # abi3 modules, so 3.14t and 3.15t get wheels of their own.
       - uses: actions/setup-python@v7
         with:
           python-version: |
             3.11
-            3.12
-            3.13
-            3.14
-            3.15
             3.14t
             3.15t
 
@@ -326,16 +322,12 @@ jobs:
         with:
           go-version: stable
 
-      # Every version requires-python admits: --find-interpreter builds for
-      # the interpreters installed here, not for the runner image's.
+      # One abi3 wheel covers 3.11 and later; free-threaded Python cannot load
+      # abi3 modules, so 3.14t and 3.15t get wheels of their own.
       - uses: actions/setup-python@v7
         with:
           python-version: |
             3.11
-            3.12
-            3.13
-            3.14
-            3.15
             3.14t
             3.15t
 
@@ -371,16 +363,12 @@ jobs:
         with:
           go-version: stable
 
-      # Every version requires-python admits: --find-interpreter builds for
-      # the interpreters installed here, not for the runner image's.
+      # One abi3 wheel covers 3.11 and later; free-threaded Python cannot load
+      # abi3 modules, so 3.14t and 3.15t get wheels of their own.
       - uses: actions/setup-python@v7
         with:
           python-version: |
             3.11
-            3.12
-            3.13
-            3.14
-            3.15
             3.14t
             3.15t
 

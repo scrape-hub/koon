@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use pyo3::IntoPyObjectExt;
 use pyo3::call::PyCallArgs;
-use pyo3::exceptions::{PyKeyError, PyRuntimeError, PyStopAsyncIteration, PyValueError};
+use pyo3::exceptions::{PyKeyError, PyStopAsyncIteration, PyValueError};
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBytes, PyDict, PyList, PyMapping, PyString};
@@ -30,37 +30,13 @@ const SIGNAL_CHECK_INTERVAL: Duration = Duration::from_millis(100);
 // Errors
 // ---------------------------------------------------------------------
 
-/// Structured error raised by every failing koon operation.
-///
-/// Carries a machine-readable `.code` (e.g. `"TIMEOUT"`, `"TLS_ERROR"`,
-/// `"INVALID_COOKIE"`) alongside the usual exception message, which has the
-/// form `"[CODE] description"`. Picklable: the code is parsed back from the
-/// message.
-#[pyclass(extends = PyRuntimeError, subclass, frozen, module = "koon")]
-struct KoonError {
-    #[pyo3(get)]
-    code: String,
-}
-
-#[pymethods]
-impl KoonError {
-    #[new]
-    fn new(message: &str) -> Self {
-        let code = message
-            .strip_prefix('[')
-            .and_then(|rest| rest.split_once(']'))
-            .map_or("UNKNOWN", |(code, _)| code);
-        Self {
-            code: code.to_string(),
-        }
-    }
-}
-
 const INVALID_ARGUMENT: &str = "INVALID_ARGUMENT";
 
-// `class KoonInvalidArgument(KoonError, ValueError)` in `koon/__init__.py`:
-// a pyclass cannot have two bases, a Python class can. Imported lazily, when
-// the first such error is raised.
+// `class KoonError(RuntimeError)` and `class KoonInvalidArgument(KoonError,
+// ValueError)` in `koon/__init__.py`: under the stable ABI a pyclass can
+// extend a built-in exception only from Python 3.12 on, and a pyclass cannot
+// have two bases. Imported lazily, when the first error is raised.
+pyo3::import_exception!(koon, KoonError);
 pyo3::import_exception!(koon, KoonInvalidArgument);
 
 /// A [`KoonError`] with an explicit code, for failures detected here.
@@ -1589,6 +1565,5 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<KoonSyncStreamingResponse>()?;
     m.add_class::<KoonWebSocket>()?;
     m.add_class::<KoonProxy>()?;
-    m.add_class::<KoonError>()?;
     Ok(())
 }
