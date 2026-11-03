@@ -1,8 +1,9 @@
 name: Freshness
 
 # Weekly: are koon's newest profiles the browsers' current stable releases, and are Chrome's
-# network field trials the reviewed ones (crates/core/tests/network_freshness.rs)? A failure means
-# a profile update or a review is due.
+# network field trials the reviewed ones (crates/core/tests/network_freshness.rs)? Are the full
+# versions in crates/core/data/releases.toml the last releases of their majors? A failure means a
+# profile update or a review is due.
 on:
   schedule:
     - cron: "0 6 * * 1"
@@ -40,3 +41,17 @@ jobs:
 
       - name: Check
         run: cargo test -p koon-core --test network_freshness -- --ignored
+
+  full-versions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Check
+        run: |
+          python -m pip install koon
+          python crates/core/data/update.py --check

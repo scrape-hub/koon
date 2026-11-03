@@ -209,9 +209,13 @@ mod tests {
             .collect();
         assert_eq!(headers, captured);
         let hints = profile.ua_client_hints.unwrap();
+        let full = &hints.full_version;
+        assert!(full.starts_with("155.0.8059."), "{full}");
         assert_eq!(
             hints.full_version_list,
-            "\"Google Chrome\";v=\"155.0.8059.12\", \"Chromium\";v=\"155.0.8059.12\", \"Not(A:Brand\";v=\"24.0.0.0\""
+            format!(
+                "\"Google Chrome\";v=\"{full}\", \"Chromium\";v=\"{full}\", \"Not(A:Brand\";v=\"24.0.0.0\""
+            )
         );
         // Chrome 154 did not list JPEG XL yet.
         let accept = |major| {

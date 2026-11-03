@@ -4,7 +4,7 @@
 
 [chrome]
 source = "Chromium Dash fetch_releases?channel=Stable&platform=...: the last release of each milestone, per platform"
-updated = 2026-09-28
+updated = 2026-11-03
 releases = [
   { major = 131, windows = "131.0.6778.267", macos = "131.0.6778.267", linux = "131.0.6778.264", android = "131.0.6778.261" },
   { major = 132, windows = "132.0.6834.197", macos = "132.0.6834.162", linux = "132.0.6834.159", android = "132.0.6834.165" },
@@ -29,8 +29,8 @@ releases = [
   { major = 151, windows = "151.0.7922.176", macos = "151.0.7922.176", linux = "151.0.7922.173", android = "151.0.7922.175" },
   { major = 152, windows = "152.0.7977.85", macos = "152.0.7977.85", linux = "152.0.7977.82", android = "152.0.7977.84" },
   { major = 153, windows = "153.0.8010.55", macos = "153.0.8010.55", linux = "153.0.8010.52", android = "153.0.8010.53" },
-  { major = 154, windows = "154.0.8037.58", macos = "154.0.8037.58", linux = "154.0.8037.57", android = "154.0.8037.58" },
-  { major = 155, windows = "155.0.8059.12", macos = "155.0.8059.12", linux = "155.0.8059.12", android = "155.0.8059.16" },
+  { major = 154, windows = "154.0.8037.100", macos = "154.0.8037.100", linux = "154.0.8037.97", android = "154.0.8037.127" },
+  { major = 155, windows = "155.0.8059.86", macos = "155.0.8059.86", linux = "155.0.8059.84", android = "155.0.8059.88" },
 ]
 
 # Edge's full version (Windows and macOS alike) and the Chromium full version it reports for the
@@ -69,7 +69,7 @@ releases = [
 # both.
 [opera]
 source = "get.geo.opera.com/pub/opera/desktop/: the last Stable release of each major; Chromium from Opera's changelog"
-updated = 2026-09-28
+updated = 2026-11-03
 releases = [
   { major = 124, chromium = 140, full = "124.0.5705.65", chromium_full = "140.0.7339.249" },
   { major = 125, chromium = 141, full = "125.0.5729.49", chromium_full = "141.0.7390.125" },
@@ -83,7 +83,7 @@ releases = [
   { major = 133, chromium = 149, full = "133.0.5932.85", chromium_full = "149.0.7827.201" },
   { major = 134, chromium = 150, full = "134.0.5954.66", chromium_full = "150.0.7871.212" },
   { major = 135, chromium = 151, full = "135.0.5973.142", chromium_full = "151.0.7922.170" },
-  { major = 136, chromium = 152, full = "136.0.6008.52", chromium_full = "152.0.7977.130" },
+  { major = 136, chromium = 152, full = "136.0.6008.80", chromium_full = "152.0.7977.134" },
 ]
 
 # Opera for Android's major, its Chromium major, the desktop Opera major its Opera brand reports, and
@@ -101,10 +101,10 @@ releases = [
 # provenance.
 [brave]
 source = "GitHub brave/brave-browser release titles (Release v1.96.59 (Chromium 154.0.8037.58))"
-updated = 2026-09-28
+updated = 2026-11-03
 releases = [
   { chromium = 153, brave = "1.95.104", chromium_full = "153.0.8010.53" },
-  { chromium = 154, brave = "1.96.59", chromium_full = "154.0.8037.58" },
+  { chromium = 154, brave = "1.96.62", chromium_full = "154.0.8037.98" },
 ]
 
 # Samsung Internet's major, the Chromium major it builds on, and the full versions its client hints

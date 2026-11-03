@@ -1,6 +1,6 @@
 // Generated from crates/core/data/releases.toml by crates/core/tests/generated.rs (KOON_BLESS=1); edit that file.
 
-/// Chrome: the last Stable release of each major on Windows, macOS, Linux and Android. Source: Chromium Dash fetch_releases?channel=Stable&platform=...: the last release of each milestone, per platform; updated 2026-09-28.
+/// Chrome: the last Stable release of each major on Windows, macOS, Linux and Android. Source: Chromium Dash fetch_releases?channel=Stable&platform=...: the last release of each milestone, per platform; updated 2026-11-03.
 pub(crate) const CHROME_FULL_VERSIONS: &[(u32, [&str; 4])] = &[
     (131, ["131.0.6778.267", "131.0.6778.267", "131.0.6778.264", "131.0.6778.261"]),
     (132, ["132.0.6834.197", "132.0.6834.162", "132.0.6834.159", "132.0.6834.165"]),
@@ -25,8 +25,8 @@ pub(crate) const CHROME_FULL_VERSIONS: &[(u32, [&str; 4])] = &[
     (151, ["151.0.7922.176", "151.0.7922.176", "151.0.7922.173", "151.0.7922.175"]),
     (152, ["152.0.7977.85", "152.0.7977.85", "152.0.7977.82", "152.0.7977.84"]),
     (153, ["153.0.8010.55", "153.0.8010.55", "153.0.8010.52", "153.0.8010.53"]),
-    (154, ["154.0.8037.58", "154.0.8037.58", "154.0.8037.57", "154.0.8037.58"]),
-    (155, ["155.0.8059.12", "155.0.8059.12", "155.0.8059.12", "155.0.8059.16"]),
+    (154, ["154.0.8037.100", "154.0.8037.100", "154.0.8037.97", "154.0.8037.127"]),
+    (155, ["155.0.8059.86", "155.0.8059.86", "155.0.8059.84", "155.0.8059.88"]),
 ];
 
 /// Edge: the last Stable release of each major, and the Chromium version its Chromium brand reports. Source: edgeupdates.microsoft.com/api/products: the last Stable release of each major; Chromium version from a capture; updated 2026-09-28.
@@ -57,7 +57,7 @@ pub(crate) const EDGE_FULL_VERSIONS: &[(u32, &str, &str)] = &[
     (154, "154.0.4258.37", "154.0.8037.58"),
 ];
 
-/// Opera: its major, the Chromium major it builds on, and the full versions of both. Source: get.geo.opera.com/pub/opera/desktop/: the last Stable release of each major; Chromium from Opera's changelog; updated 2026-09-28.
+/// Opera: its major, the Chromium major it builds on, and the full versions of both. Source: get.geo.opera.com/pub/opera/desktop/: the last Stable release of each major; Chromium from Opera's changelog; updated 2026-11-03.
 pub(crate) const OPERA_CHROMIUM: &[(u32, u32, &str, &str)] = &[
     (124, 140, "124.0.5705.65", "140.0.7339.249"),
     (125, 141, "125.0.5729.49", "141.0.7390.125"),
@@ -71,7 +71,7 @@ pub(crate) const OPERA_CHROMIUM: &[(u32, u32, &str, &str)] = &[
     (133, 149, "133.0.5932.85", "149.0.7827.201"),
     (134, 150, "134.0.5954.66", "150.0.7871.212"),
     (135, 151, "135.0.5973.142", "151.0.7922.170"),
-    (136, 152, "136.0.6008.52", "152.0.7977.130"),
+    (136, 152, "136.0.6008.80", "152.0.7977.134"),
 ];
 
 /// Opera for Android: its major, its Chromium major, the desktop Opera major its Opera brand reports, and the full versions of OperaMobile, Opera and Chromium. Source: a capture of the release on Android; updated 2026-09-28.
@@ -79,10 +79,10 @@ pub(crate) const OPERA_MOBILE_CHROMIUM: &[(u32, u32, u32, &str, &str, &str)] = &
     (102, 152, 137, "102.1.5206.90382", "137.0.6010.1", "152.0.7977.82"),
 ];
 
-/// Brave: the Chromium major (the profile's version), the last Brave release on it and its Chromium full version. Source: GitHub brave/brave-browser release titles (Release v1.96.59 (Chromium 154.0.8037.58)); updated 2026-09-28.
+/// Brave: the Chromium major (the profile's version), the last Brave release on it and its Chromium full version. Source: GitHub brave/brave-browser release titles (Release v1.96.59 (Chromium 154.0.8037.58)); updated 2026-11-03.
 pub(crate) const BRAVE_CHROMIUM: &[(u32, &str, &str)] = &[
     (153, "1.95.104", "153.0.8010.53"),
-    (154, "1.96.59", "154.0.8037.58"),
+    (154, "1.96.62", "154.0.8037.98"),
 ];
 
 /// Samsung Internet: its major, the Chromium major it builds on, and the full versions of both. Source: a capture of the release on a Galaxy A33 5G; Chromium version from libterrace.so; updated 2026-09-28.

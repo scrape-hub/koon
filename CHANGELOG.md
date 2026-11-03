@@ -54,6 +54,8 @@ Rust only:
 - Building from source needs neither libclang nor git: BoringSSL's patches
   are applied without git, and its bindings come prebuilt for Linux, macOS and
   Windows on x64 and arm64.
+- Chrome 154 and 155 and Opera 136 report the full versions of their latest
+  releases in client hints.
 
 ### Fixed
 

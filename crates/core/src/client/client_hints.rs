@@ -779,9 +779,14 @@ mod tests {
         assert_eq!(value(&linux, Hint::Dpr, false), "1");
         assert_eq!(value(&linux, Hint::ViewportWidth, true), "1265");
         assert_eq!(value(&linux, Hint::ViewportHeight, false), "1333");
+        let hints = linux.ua_client_hints.as_ref().unwrap();
+        let full = &hints.full_version;
+        assert!(full.starts_with("154.0.8037."), "{full}");
         assert_eq!(
-            linux.ua_client_hints.as_ref().unwrap().full_version_list,
-            "\"Chromium\";v=\"154.0.8037.57\", \"Google Chrome\";v=\"154.0.8037.57\", \"Not A(Brand\";v=\"99.0.0.0\""
+            hints.full_version_list,
+            format!(
+                "\"Chromium\";v=\"{full}\", \"Google Chrome\";v=\"{full}\", \"Not A(Brand\";v=\"99.0.0.0\""
+            )
         );
         let android = crate::profile::Chrome::version(155, crate::profile::Os::Android).unwrap();
         assert_eq!(value(&android, Hint::DeviceMemoryLegacy, true), "8");
