@@ -1060,6 +1060,7 @@ dependencies = [
  "httparse",
  "koon-core",
  "lru",
+ "percent-encoding",
  "psl",
  "quinn",
  "quinn-btls",

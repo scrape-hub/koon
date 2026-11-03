@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+**Requests and connections**
+
+- Proxy credentials in the URL are percent-decoded.
+
 **Bindings and CLI**
 
 - Node and the CLI on Linux need glibc 2.28 instead of 2.38.

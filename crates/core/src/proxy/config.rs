@@ -57,10 +57,24 @@ impl ProxyConfig {
             }
         };
 
-        let auth = (!url.username().is_empty()).then(|| ProxyAuth {
-            username: url.username().to_string(),
-            password: url.password().unwrap_or("").to_string(),
-        });
+        // The URL keeps credentials percent-encoded; the proxy expects them decoded.
+        let decode = |part: &str| {
+            percent_encoding::percent_decode_str(part)
+                .decode_utf8()
+                .map(std::borrow::Cow::into_owned)
+                .map_err(|e| {
+                    let message = format!("Invalid proxy URL: credentials are not UTF-8: {e}");
+                    crate::Error::Proxy(message, crate::error::boxed(e))
+                })
+        };
+        let auth = if url.username().is_empty() {
+            None
+        } else {
+            Some(ProxyAuth {
+                username: decode(url.username())?,
+                password: decode(url.password().unwrap_or(""))?,
+            })
+        };
 
         Ok(Self { url, kind, auth })
     }
@@ -124,5 +138,24 @@ impl ProxyRotation {
     pub fn next(&self) -> (usize, &ProxyConfig) {
         let idx = self.index.fetch_add(1, Ordering::Relaxed) % self.proxies.len();
         (idx, &self.proxies[idx])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn credentials_are_percent_decoded() {
+        let config = ProxyConfig::parse("http://us%40er:p%40ss%3Aw%2F%25@127.0.0.1:8080").unwrap();
+        let auth = config.auth.unwrap();
+        assert_eq!(auth.username, "us@er");
+        assert_eq!(auth.password, "p@ss:w/%");
+    }
+
+    #[test]
+    fn credentials_that_decode_to_invalid_utf8_are_rejected() {
+        let err = ProxyConfig::parse("socks5://user:%FF@127.0.0.1:1080").unwrap_err();
+        assert!(matches!(err, crate::Error::Proxy(..)), "{err:?}");
     }
 }

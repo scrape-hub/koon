@@ -912,6 +912,7 @@ dependencies = [
  "http2",
  "httparse",
  "lru",
+ "percent-encoding",
  "psl",
  "quinn",
  "quinn-btls",
