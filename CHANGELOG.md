@@ -25,6 +25,7 @@ Rust only:
 
 - Cookies without SameSite count as Lax for Chromium profiles, as None for
   Firefox and Safari.
+- Cookies from an IP address host are host-only.
 
 **Requests and connections**
 

@@ -663,11 +663,16 @@ pub(crate) fn normalize_domain(domain: &str) -> String {
 /// request hosts are compared in.
 pub(crate) fn validate_imported(cookie: &mut Cookie) -> Result<(), &'static str> {
     validate_name_value(&cookie.name, &cookie.value)?;
-    cookie.domain = match url::Host::parse(cookie.domain.trim_start_matches('.')) {
-        Ok(host) => host.to_string(),
+    let host = match url::Host::parse(cookie.domain.trim_start_matches('.')) {
+        Ok(host) => host,
         Err(url::ParseError::EmptyHost) => return Err("domain cannot be empty"),
         Err(_) => return Err("domain is not a valid host name"),
     };
+    // An IP address matches only itself (RFC 6265 §5.1.3).
+    if !matches!(host, url::Host::Domain(_)) {
+        cookie.host_only = true;
+    }
+    cookie.domain = host.to_string();
     if !cookie.path.starts_with('/') {
         return Err("path must start with '/'");
     }
@@ -797,7 +802,8 @@ fn parse_set_cookie(
             if !domain_matches(host, domain) {
                 return None;
             }
-            if is_public_suffix(domain) {
+            // An IP host's Domain can only be the host itself, which makes no domain cookie.
+            if is_ip(host) || is_public_suffix(domain) {
                 if domain != host {
                     return None;
                 }
@@ -1066,10 +1072,21 @@ pub(crate) fn is_public_suffix(domain: &str) -> bool {
 /// Domain matching per RFC 6265 §5.1.3: the host equals the cookie domain, or ends with `.` + the
 /// cookie domain. Both must be lowercase.
 fn domain_matches(host: &str, domain: &str) -> bool {
+    // RFC 6265 §5.1.3: the suffix rule is for host names; an IP address matches only itself.
     host == domain
-        || host
-            .strip_suffix(domain)
-            .is_some_and(|rest| rest.ends_with('.'))
+        || (!is_ip(host)
+            && host
+                .strip_suffix(domain)
+                .is_some_and(|rest| rest.ends_with('.')))
+}
+
+/// Whether `host`, as a request URL writes it (IPv6 in brackets), is an IP address.
+fn is_ip(host: &str) -> bool {
+    host.strip_prefix('[')
+        .and_then(|h| h.strip_suffix(']'))
+        .unwrap_or(host)
+        .parse::<IpAddr>()
+        .is_ok()
 }
 
 /// Path matching per RFC 6265: the cookie path must be a prefix of the request path.
@@ -1265,6 +1282,34 @@ mod tests {
             assert_eq!(context.same_site, same_site, "{family:?}");
             assert!(context.top_level_navigation && context.safe_method);
         }
+    }
+
+    #[test]
+    fn an_ip_host_gets_no_domain_cookies() {
+        let mut jar = CookieJar::new();
+        store(
+            &mut jar,
+            "http://127.0.0.1/",
+            &["suffix=1; Domain=0.1", "own=1; Domain=127.0.0.1"],
+        );
+        assert_eq!(jar.cookies().len(), 1);
+        assert!(jar.cookies()[0].host_only);
+        assert_eq!(jar.cookie_header(&uri("http://127.10.0.1/")), None);
+        assert_eq!(
+            jar.cookie_header(&uri("http://127.0.0.1/")).as_deref(),
+            Some("own=1")
+        );
+    }
+
+    #[test]
+    fn an_imported_ip_domain_cookie_becomes_host_only() {
+        let mut cookie = test_cookie("a", ".127.0.0.1", "/", false);
+        validate_imported(&mut cookie).unwrap();
+        assert_eq!(cookie.domain, "127.0.0.1");
+        assert!(cookie.host_only);
+        let mut v6 = test_cookie("b", "[::1]", "/", false);
+        validate_imported(&mut v6).unwrap();
+        assert!(v6.host_only);
     }
 
     fn epoch_secs(date: SystemTime) -> u64 {
