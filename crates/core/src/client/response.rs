@@ -163,9 +163,6 @@ pub struct ContentDecoder {
     stages: Vec<Stage>,
     /// Whether any of the body has arrived: an empty body (HEAD, 204, 304) is no truncated stream.
     started: bool,
-    /// Bytes decoded so far, checked against `max` after every [`decode`](Self::decode)/
-    /// [`finish`](Self::finish) call.
-    decoded: u64,
     /// Set with [`limit`](Self::limit); `u64::MAX` (no cap) otherwise.
     max: u64,
 }
@@ -192,7 +189,6 @@ impl ContentDecoder {
         Some(Self {
             stages,
             started: false,
-            decoded: 0,
             max: u64::MAX,
         })
     }
@@ -212,6 +208,9 @@ impl ContentDecoder {
     #[must_use]
     pub fn limit(mut self, max: u64) -> Self {
         self.max = max;
+        for stage in &mut self.stages {
+            stage.set_limit(max);
+        }
         self
     }
 
@@ -229,24 +228,12 @@ impl ContentDecoder {
             .stages
             .split_first_mut()
             .expect("a decoder has a stage per coding");
-        let mut decoded = first.decode(data)?;
+        let max = self.max;
+        let mut decoded = first.decode(data).map_err(|e| first.error(e, max))?;
         for stage in later {
-            decoded = stage.decode(&decoded)?;
+            decoded = stage.decode(&decoded).map_err(|e| stage.error(e, max))?;
         }
-        self.check_limit(decoded.len())?;
         Ok(decoded)
-    }
-
-    /// Accounts for `len` more decoded bytes; [`Error::Body`] once the running total exceeds `max`.
-    fn check_limit(&mut self, len: usize) -> Result<(), Error> {
-        self.decoded += len as u64;
-        if self.decoded > self.max {
-            return Err(Error::Body(
-                format!("decompressed response body exceeded {} bytes", self.max),
-                None,
-            ));
-        }
-        Ok(())
     }
 
     /// End the body, returning the rest of what it decodes to.
@@ -258,38 +245,112 @@ impl ContentDecoder {
         if !self.started {
             return Ok(Vec::new());
         }
+        let max = self.max;
         let mut rest = Vec::new();
         for stage in &mut self.stages {
-            let mut out = stage.decode(&rest)?;
-            out.extend(stage.finish()?);
+            let mut out = stage.decode(&rest).map_err(|e| stage.error(e, max))?;
+            out.extend(stage.finish().map_err(|e| stage.error(e, max))?);
             rest = out;
         }
-        self.check_limit(rest.len())?;
         Ok(rest)
     }
 }
 
-/// The decoder for one content coding. Each writes into its own buffer, which is emptied after
-/// every call.
+/// The output buffer of a decoding stage. It refuses a write that would take the stage's output
+/// past `max`, so decoding stops at the cap instead of after the whole input (a decompression
+/// bomb never fills memory first).
+struct Capped {
+    buf: Vec<u8>,
+    written: u64,
+    max: u64,
+    exceeded: bool,
+}
+
+impl Capped {
+    const fn new(max: u64) -> Self {
+        Self {
+            buf: Vec::new(),
+            written: 0,
+            max,
+            exceeded: false,
+        }
+    }
+
+    fn take(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.buf)
+    }
+}
+
+impl std::io::Write for Capped {
+    fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+        let written = self.written.saturating_add(data.len() as u64);
+        if written > self.max {
+            self.exceeded = true;
+            return Err(std::io::Error::other("decoding limit reached"));
+        }
+        self.written = written;
+        self.buf.extend_from_slice(data);
+        Ok(data.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// The decoder for one content coding. Each writes into its own [`Capped`] buffer, which is
+/// emptied after every call; every stage's output counts against the decoder's cap.
 enum Stage {
-    Gzip(flate2::write::MultiGzDecoder<Vec<u8>>),
+    Gzip(flate2::write::MultiGzDecoder<Capped>),
     Deflate(Deflate),
-    Brotli(Box<brotli::DecompressorWriter<Vec<u8>>>),
-    Zstd(Box<zstd::stream::zio::Writer<Vec<u8>, zstd::stream::raw::Decoder<'static>>>),
+    Brotli(Box<brotli::DecompressorWriter<Capped>>),
+    Zstd(Box<zstd::stream::zio::Writer<Capped, zstd::stream::raw::Decoder<'static>>>),
 }
 
 impl Stage {
     fn new(coding: &str) -> Option<Self> {
+        let sink = Capped::new(u64::MAX);
         Some(match coding {
-            "gzip" | "x-gzip" => Self::Gzip(flate2::write::MultiGzDecoder::new(Vec::new())),
-            "deflate" => Self::Deflate(Deflate::Undecided(Vec::new())),
-            "br" => Self::Brotli(Box::new(brotli::DecompressorWriter::new(Vec::new(), 8192))),
+            "gzip" | "x-gzip" => Self::Gzip(flate2::write::MultiGzDecoder::new(sink)),
+            "deflate" => Self::Deflate(Deflate::Undecided(Vec::new(), u64::MAX)),
+            "br" => Self::Brotli(Box::new(brotli::DecompressorWriter::new(sink, 8192))),
             "zstd" => Self::Zstd(Box::new(zstd::stream::zio::Writer::new(
-                Vec::new(),
+                sink,
                 zstd::stream::raw::Decoder::new().ok()?,
             ))),
             _ => return None,
         })
+    }
+
+    /// The stage's output buffer; `None` while `deflate` has not seen its first two bytes.
+    fn sink(&mut self) -> Option<&mut Capped> {
+        match self {
+            Self::Gzip(decoder) => Some(decoder.get_mut()),
+            Self::Deflate(deflate) => deflate.sink(),
+            Self::Brotli(decoder) => Some(decoder.get_mut()),
+            Self::Zstd(decoder) => Some(decoder.writer_mut()),
+        }
+    }
+
+    fn set_limit(&mut self, max: u64) {
+        if let Self::Deflate(Deflate::Undecided(_, limit)) = self {
+            *limit = max;
+        } else if let Some(sink) = self.sink() {
+            sink.max = max;
+        }
+    }
+
+    /// The error for a failed `decode`/`finish`: [`Error::Body`] when the cap stopped it,
+    /// [`Error::Io`] for data that does not decode.
+    fn error(&mut self, e: std::io::Error, max: u64) -> Error {
+        if self.sink().is_some_and(|sink| sink.exceeded) {
+            Error::Body(
+                format!("decompressed response body exceeded {max} bytes"),
+                None,
+            )
+        } else {
+            Error::Io(e)
+        }
     }
 
     fn decode(&mut self, data: &[u8]) -> std::io::Result<Vec<u8>> {
@@ -298,17 +359,17 @@ impl Stage {
             Self::Gzip(decoder) => {
                 feed(decoder, data)?;
                 decoder.flush()?;
-                Ok(std::mem::take(decoder.get_mut()))
+                Ok(decoder.get_mut().take())
             }
             Self::Deflate(deflate) => deflate.decode(data),
             Self::Brotli(decoder) => {
                 feed(decoder.as_mut(), data)?;
-                Ok(std::mem::take(decoder.get_mut()))
+                Ok(decoder.get_mut().take())
             }
             Self::Zstd(decoder) => {
                 feed(decoder.as_mut(), data)?;
                 decoder.flush()?;
-                Ok(std::mem::take(decoder.writer_mut()))
+                Ok(decoder.writer_mut().take())
             }
         }
     }
@@ -318,16 +379,16 @@ impl Stage {
         match self {
             Self::Gzip(decoder) => {
                 decoder.try_finish()?;
-                Ok(std::mem::take(decoder.get_mut()))
+                Ok(decoder.get_mut().take())
             }
             Self::Deflate(deflate) => deflate.finish(),
             Self::Brotli(decoder) => {
                 decoder.close()?;
-                Ok(std::mem::take(decoder.get_mut()))
+                Ok(decoder.get_mut().take())
             }
             Self::Zstd(decoder) => {
                 decoder.finish()?;
-                Ok(std::mem::take(decoder.writer_mut()))
+                Ok(decoder.writer_mut().take())
             }
         }
     }
@@ -350,39 +411,48 @@ fn feed(decoder: &mut impl std::io::Write, mut data: &[u8]) -> std::io::Result<(
 /// HTTP `deflate`: zlib-wrapped (RFC 1950) as specified, or raw deflate as some servers send it,
 /// told apart by the zlib header in the first two bytes.
 enum Deflate {
-    /// Fewer than two bytes have arrived.
-    Undecided(Vec<u8>),
-    Zlib(flate2::write::ZlibDecoder<Vec<u8>>),
-    Raw(flate2::write::DeflateDecoder<Vec<u8>>),
+    /// Fewer than two bytes have arrived, with the cap for the decoder they decide on.
+    Undecided(Vec<u8>, u64),
+    Zlib(flate2::write::ZlibDecoder<Capped>),
+    Raw(flate2::write::DeflateDecoder<Capped>),
 }
 
 impl Deflate {
+    fn sink(&mut self) -> Option<&mut Capped> {
+        match self {
+            Self::Undecided(..) => None,
+            Self::Zlib(decoder) => Some(decoder.get_mut()),
+            Self::Raw(decoder) => Some(decoder.get_mut()),
+        }
+    }
+
     fn decode(&mut self, data: &[u8]) -> std::io::Result<Vec<u8>> {
         use std::io::Write;
         match self {
-            Self::Undecided(head) => {
+            Self::Undecided(head, max) => {
                 head.extend_from_slice(data);
                 if head.len() < 2 {
                     return Ok(Vec::new());
                 }
                 let head = std::mem::take(head);
+                let sink = Capped::new(*max);
                 let (cmf, flg) = (u16::from(head[0]), u16::from(head[1]));
                 *self = if cmf & 0x0f == 8 && ((cmf << 8) | flg) % 31 == 0 {
-                    Self::Zlib(flate2::write::ZlibDecoder::new(Vec::new()))
+                    Self::Zlib(flate2::write::ZlibDecoder::new(sink))
                 } else {
-                    Self::Raw(flate2::write::DeflateDecoder::new(Vec::new()))
+                    Self::Raw(flate2::write::DeflateDecoder::new(sink))
                 };
                 self.decode(&head)
             }
             Self::Zlib(decoder) => {
                 feed(decoder, data)?;
                 decoder.flush()?;
-                Ok(std::mem::take(decoder.get_mut()))
+                Ok(decoder.get_mut().take())
             }
             Self::Raw(decoder) => {
                 feed(decoder, data)?;
                 decoder.flush()?;
-                Ok(std::mem::take(decoder.get_mut()))
+                Ok(decoder.get_mut().take())
             }
         }
     }
@@ -390,20 +460,20 @@ impl Deflate {
     fn finish(&mut self) -> std::io::Result<Vec<u8>> {
         match self {
             // A single byte is no zlib stream.
-            Self::Undecided(head) => {
+            Self::Undecided(head, max) => {
                 let head = std::mem::take(head);
-                *self = Self::Raw(flate2::write::DeflateDecoder::new(Vec::new()));
+                *self = Self::Raw(flate2::write::DeflateDecoder::new(Capped::new(*max)));
                 let mut out = self.decode(&head)?;
                 out.extend(self.finish()?);
                 Ok(out)
             }
             Self::Zlib(decoder) => {
                 decoder.try_finish()?;
-                Ok(std::mem::take(decoder.get_mut()))
+                Ok(decoder.get_mut().take())
             }
             Self::Raw(decoder) => {
                 decoder.try_finish()?;
-                Ok(std::mem::take(decoder.get_mut()))
+                Ok(decoder.get_mut().take())
             }
         }
     }
@@ -471,6 +541,24 @@ mod tests {
             b"hi"
         );
         assert!(decompress_body(gzip(b"hi"), Some("gzip"), 1).is_err());
+    }
+
+    #[test]
+    fn a_decompression_bomb_stops_at_the_cap() {
+        const MAX: u64 = 1 << 18;
+        let bomb = vec![0u8; 8 << 20];
+        for (encoding, encoded) in encodings(&bomb) {
+            let mut decoder = ContentDecoder::new(encoding).unwrap().limit(MAX);
+            let err = decoder.decode(&encoded).unwrap_err();
+            assert_eq!(err.code(), "BODY_ERROR", "{encoding}");
+            // The output buffer never grew past the cap: decoding stopped there.
+            let sink = decoder.stages[0].sink().unwrap();
+            assert!(
+                sink.written <= MAX && sink.exceeded,
+                "{encoding}: {}",
+                sink.written
+            );
+        }
     }
 
     /// `text` in every coding koon decodes, with the Content-Encoding value.

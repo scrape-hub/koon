@@ -34,6 +34,11 @@ Rust only:
 
 - Node and the CLI on Linux need glibc 2.28 instead of 2.38.
 
+### Security
+
+- Decompression stops at `max_response_body`, so a decompression bomb no longer
+  fills memory.
+
 ## [1.2.2] - 2026-11-02
 
 ### Fixed
