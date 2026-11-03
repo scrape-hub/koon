@@ -137,6 +137,9 @@ pub fn apply_fingerprint(builder: &mut SslContextBuilder, config: &TlsConfig) ->
     if config.preserve_tls13_cipher_order {
         builder.set_preserve_tls13_cipher_list(true);
     }
+    // Every captured browser ran on AES hardware and put AES-GCM first; a BoringSSL built without
+    // assembly (the R package's Windows toolchain) detects none and would put ChaCha20 first.
+    builder.set_aes_hw_override(true);
     builder.set_cipher_list(&config.cipher_list)?;
     builder.set_curves_list(&config.curves)?;
 

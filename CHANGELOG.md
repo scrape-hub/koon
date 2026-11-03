@@ -105,6 +105,9 @@ Rust only:
 - Python: `None` keeps the default for every option, also for
   `follow_redirects`, `retries` and the like, which raised `TypeError`.
 - R: `Koon$new(browser = NULL)` keeps the default profile instead of failing.
+- R on Windows: Chrome, Edge, Opera, Brave, Samsung and OkHttp profiles put
+  AES-GCM before ChaCha20 in TLS 1.3, as the browsers do; the package's
+  BoringSSL, built without assembly, put ChaCha20 first.
 
 ### Security
 
