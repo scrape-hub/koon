@@ -55,6 +55,16 @@ jobs:
       - name: Run tests
         run: cargo test -p koon-core -p koon-cli
 
+      # The README's examples, checked against the API they show (.github/readme/check.py).
+      - name: README CLI flags
+        run: python3 .github/readme/check.py cli target/debug/koon
+
+      - name: README Rust examples
+        run: |
+          python3 .github/readme/check.py rust "$RUNNER_TEMP/readme-rs"
+          cp Cargo.lock "$RUNNER_TEMP/readme-rs/"
+          CARGO_TARGET_DIR=target cargo check --manifest-path "$RUNNER_TEMP/readme-rs/Cargo.toml"
+
   # The oldest Rust the README promises (Cargo.toml `rust-version`); the Node addon needs 1.88.
   msrv:
     runs-on: ubuntu-latest
@@ -117,6 +127,14 @@ jobs:
         working-directory: crates/node
         run: npm run test:offline
 
+      - name: README JavaScript examples
+        if: matrix.runner == 'ubuntu-latest'
+        run: |
+          python3 .github/readme/check.py js "$RUNNER_TEMP/readme-js"
+          cd "$RUNNER_TEMP/readme-js"
+          npm install --silent --no-audit --no-fund typescript@5 @types/node@24
+          npx tsc -p .
+
   python:
     strategy:
       fail-fast: false
@@ -168,6 +186,12 @@ jobs:
       - name: Run tests
         working-directory: crates/python
         run: pytest -q
+
+      - name: README Python examples
+        run: |
+          pip install mypy
+          python .github/readme/check.py python "$RUNNER_TEMP/readme-py"
+          mypy --ignore-missing-imports --allow-redefinition "$RUNNER_TEMP/readme-py"
 
   r:
     runs-on: ubuntu-latest
@@ -225,3 +249,8 @@ jobs:
       # (tests/testthat/testserver.py) run too.
       - name: Run tests
         run: Rscript -e 'testthat::test_local("crates/r", load_package = "installed", stop_on_failure = TRUE)'
+
+      - name: README R examples
+        run: |
+          python3 .github/readme/check.py r "$RUNNER_TEMP/readme-r"
+          Rscript "$RUNNER_TEMP/readme-r/check.R"
