@@ -29,6 +29,8 @@ Rust only:
   kind, default and docs, and the checks they share.
 - Node: `Koon.verify()` takes the connection options of `new Koon()`; `ipVersion`
   also takes names such as `"v4"`.
+- Python: `verify()` takes the connection options of `Koon`; `ip_version` also
+  takes names such as `"v4"`.
 
 ### Changed
 
@@ -91,6 +93,8 @@ Rust only:
 - CLI: `--timeout` covers the body.
 - CLI: `koon --help` no longer claims to pass every bot protection.
 - Node: `postMultipart()` and `Koon.verify()` reject unknown option keys too.
+- Python: `None` keeps the default for every option, also for
+  `follow_redirects`, `retries` and the like, which raised `TypeError`.
 
 ### Security
 

@@ -57,10 +57,11 @@ class KoonInvalidArgument(KoonError, ValueError):
     ``INVALID_ARGUMENT`` that is also a ``ValueError``."""
 
 
-def verify(browser="chrome", proxy=None):
+def verify(browser="chrome", **options):
     """Check that koon still produces the real browser's fingerprint for the
-    profile ``browser``; returns the report as a dict (blocking)."""
-    return _json.loads(_verify(browser, proxy))
+    profile ``browser``; returns the report as a dict (blocking). ``options``
+    are the connection options of ``Koon``."""
+    return _json.loads(_verify(browser, **options))
 
 
 def blocked_by(response, body):
@@ -122,13 +123,10 @@ class Koon(_Client):
         """Perform an HTTP POST request with a multipart/form-data body."""
         return await self._request(_Mode.Await, "POST", url, None, fields, **options)
 
-    async def request_streaming(self, method, url, body=None, *, decode=True, **options):
+    async def request_streaming(self, method, url, body=None, **options):
         """Perform an HTTP request and return a KoonStreamingResponse; its
         body is decoded (Content-Encoding) unless ``decode=False``."""
-        response = await self._request(_Mode.Stream, method, url, body, **options)
-        if decode:
-            response._decode_content()
-        return response
+        return await self._request(_Mode.Stream, method, url, body, **options)
 
     async def websocket(self, url, headers=None):
         """Open a WebSocket connection to a ws:// or wss:// URL."""
@@ -190,14 +188,11 @@ class KoonSync(_Client):
         """Perform a blocking HTTP POST request with a multipart/form-data body."""
         return self._request(_Mode.Block, "POST", url, None, fields, **options)
 
-    def request_streaming(self, method, url, body=None, *, decode=True, **options):
+    def request_streaming(self, method, url, body=None, **options):
         """Perform a blocking HTTP request and return a
         KoonSyncStreamingResponse once the response head has arrived; its body
         is decoded (Content-Encoding) unless ``decode=False``."""
-        response = self._request(_Mode.BlockStream, method, url, body, **options)
-        if decode:
-            response._decode_content()
-        return response
+        return self._request(_Mode.BlockStream, method, url, body, **options)
 
     def shutdown(self):
         """Shut the client down as a browser does, e.g. before the program

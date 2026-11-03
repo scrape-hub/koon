@@ -571,10 +571,18 @@ def test_malformed_profile_json_is_json_error():
     assert exc_info.value.code == "JSON_ERROR"
 
 
-@pytest.mark.parametrize("kwargs", [{"timeout": "soon"}, {"max_redirects": 1.5}, {"retries": "2"}])
+@pytest.mark.parametrize(
+    "kwargs", [{"timeout": "soon"}, {"max_redirects": "1"}, {"retries": "2"}, {"folow": True}]
+)
 def test_option_of_the_wrong_type_is_a_type_error(kwargs):
     with pytest.raises(TypeError):
         KoonSync(**kwargs)
+
+
+def test_counts_take_whole_floats_and_none():
+    KoonSync(max_redirects=2.0, retries=None, follow_redirects=None, ip_version="v4")
+    with pytest.raises(KoonInvalidArgument):
+        KoonSync(max_redirects=1.5)
 
 
 def test_client_timeout_takes_fractions_and_none(base_url):

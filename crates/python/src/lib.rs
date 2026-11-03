@@ -5,22 +5,23 @@
 //! through `_Client._request`, which returns an awaitable or blocks.
 
 use std::future::Future;
-use std::net::IpAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use pyo3::IntoPyObjectExt;
 use pyo3::call::PyCallArgs;
-use pyo3::exceptions::{PyKeyError, PyStopAsyncIteration, PyValueError};
+use pyo3::exceptions::{PyKeyError, PyStopAsyncIteration, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyBytes, PyDict, PyList, PyMapping, PyString};
+use pyo3::types::{
+    PyBool, PyByteArray, PyBytes, PyDict, PyFloat, PyInt, PyList, PyMapping, PyMemoryView, PyString,
+};
 
+use koon_core::options::{Hook, Kind, OptionError, Options, Scope, Target, Value};
 use koon_core::{
-    Body, BrowserProfile, ClientBuilder, CookieParams, HeaderMode, IpVersion, Multipart,
-    OnRedirectHook, OnRequestHook, OnResponseHook, PartitionKey, ProxyServer, ProxyServerConfig,
-    RequestOptions, SkippedCookie, WsMessage,
+    Body, BrowserProfile, CookieParams, Multipart, PartitionKey, ProxyServer, SkippedCookie,
+    WsMessage,
 };
 
 /// How often a blocking request checks for Ctrl+C.
@@ -318,80 +319,9 @@ impl From<SkippedCookie> for SkippedCookieDict {
     }
 }
 
-/// The options for the connections to origins and proxies, which a client
-/// and the upstream client of a `KoonProxy` share.
-struct ConnectionOptions<'a> {
-    proxy: Option<&'a str>,
-    proxies: Option<Vec<String>>,
-    ignore_tls_errors: bool,
-    proxy_ca_certs: Option<Payload>,
-    ignore_proxy_tls_errors: bool,
-    session_resumption: bool,
-    doh: Option<&'a str>,
-    local_address: Option<IpAddr>,
-    retries: u32,
-    locale: Option<&'a str>,
-    proxy_headers: Option<Headers>,
-    ip_version: Option<IpVersion>,
-    resolve: Option<Vec<String>>,
-    max_response_body: u64,
-    server_padding: Option<&'a str>,
-}
-
-impl ConnectionOptions<'_> {
-    /// A client builder for `profile` with these options.
-    fn client_builder(self, profile: BrowserProfile) -> PyResult<ClientBuilder> {
-        let proxy_ca_certs = self.proxy_ca_certs.map(|pem| match pem {
-            Payload::Text(text) => text.into_bytes(),
-            Payload::Bytes(bytes) => bytes,
-        });
-        let doh = self
-            .doh
-            .map(|provider| provider.parse().map_err(to_koon_err))
-            .transpose()?;
-        let server_padding = self
-            .server_padding
-            .map(|padding| padding.parse().map_err(to_koon_err))
-            .transpose()?;
-        let connection = koon_core::ConnectionOptions {
-            ignore_tls_errors: self.ignore_tls_errors,
-            proxy: self.proxy.map(str::to_string),
-            proxies: self.proxies.unwrap_or_default(),
-            proxy_ca_certs,
-            ignore_proxy_tls_errors: self.ignore_proxy_tls_errors,
-            proxy_headers: self.proxy_headers.unwrap_or_default().0,
-            session_resumption: self.session_resumption,
-            doh,
-            local_address: self.local_address,
-            retries: self.retries,
-            locale: self.locale.map(str::to_string),
-            ip_version: self.ip_version,
-            resolve: self.resolve.unwrap_or_default(),
-            max_response_body: self.max_response_body,
-            server_padding,
-        };
-        connection.apply(profile).map_err(to_koon_err)
-    }
-}
-
-/// A timeout in seconds; `0` means no timeout.
-fn timeout_duration(secs: f64) -> PyResult<Duration> {
-    Duration::try_from_secs_f64(secs).map_err(|_| {
-        koon_err(
-            INVALID_ARGUMENT,
-            format!("Invalid timeout: {secs}. Must be a finite number of seconds >= 0"),
-        )
-    })
-}
-
-/// The client timeout: `None` keeps the default of 30 seconds, as an unset
-/// timeout does in the other bindings.
-fn client_timeout(secs: Option<f64>) -> PyResult<Duration> {
-    secs.map_or(Ok(Duration::from_secs(30)), timeout_duration)
-}
-
-/// A whole number in the range of `T`, e.g. `max_redirects`: a negative or
-/// too large value is `KoonInvalidArgument` rather than an `OverflowError`.
+/// A whole number in the range of `T`, e.g. a WebSocket close code: a
+/// negative or too large value is `KoonInvalidArgument` rather than an
+/// `OverflowError`.
 fn whole_number<T: TryFrom<i64>>(name: &str, value: i64) -> PyResult<T> {
     T::try_from(value).map_err(|_| {
         koon_err(
@@ -401,39 +331,78 @@ fn whole_number<T: TryFrom<i64>>(name: &str, value: i64) -> PyResult<T> {
     })
 }
 
-fn ip_version(version: Option<i64>) -> PyResult<Option<IpVersion>> {
-    version
-        .map(|v| {
-            let version = u8::try_from(v).unwrap_or(0);
-            IpVersion::try_from(version).map_err(|_| {
-                koon_err(
-                    INVALID_ARGUMENT,
-                    format!("Invalid IP version: {v}. Must be 4 or 6"),
-                )
-            })
-        })
-        .transpose()
+/// Keyword options as the core's [`Options`] for `scope`: every name is checked against the
+/// option table, and `None` keeps the default.
+fn read_options(scope: Scope, options: Option<&Bound<'_, PyDict>>) -> PyResult<Options> {
+    let mut read = Options::new(scope, Target::Python);
+    for (key, value) in options.into_iter().flatten() {
+        let key: String = key.extract()?;
+        set_option(&mut read, &key, &value)?;
+    }
+    Ok(read)
 }
 
-/// `local_address`: an IP address as a string or an `ipaddress` object.
-fn local_address(value: Option<&Bound<'_, PyAny>>) -> PyResult<Option<IpAddr>> {
-    let Some(value) = value else {
-        return Ok(None);
-    };
-    value.extract::<IpAddr>().map(Some).map_err(|e| {
-        if e.is_instance_of::<PyValueError>(value.py()) {
-            koon_err(
-                INVALID_ARGUMENT,
-                format!("Invalid local_address {value}: not an IP address"),
-            )
-        } else {
-            e
+fn set_option(options: &mut Options, key: &str, value: &Bound<'_, PyAny>) -> PyResult<()> {
+    let spec = options.spec(key).map_err(option_error)?;
+    let value = py_value(value, spec.kind)?;
+    options.set_option(spec, value).map_err(option_error)
+}
+
+/// An unknown option or a value of the wrong type is a `TypeError`, as for
+/// a Python function's arguments; an invalid value keeps the core's code.
+fn option_error(error: OptionError) -> PyErr {
+    match error {
+        OptionError::Unknown(message) | OptionError::Type(message) => PyTypeError::new_err(message),
+        OptionError::Invalid(error) => to_koon_err(error),
+    }
+}
+
+/// A Python value as the core's option [`Value`]; a value no option takes is
+/// [`Value::Other`], which the core reports with the type it expected.
+fn py_value(value: &Bound<'_, PyAny>, kind: Kind) -> PyResult<Value> {
+    if value.is_none() {
+        return Ok(Value::Null);
+    }
+    match kind {
+        Kind::Hook(hook) if value.is_callable() => {
+            let callback = value.clone().unbind();
+            return Ok(match hook {
+                Hook::Request => Value::RequestHook(Arc::new(request_hook(callback))),
+                Hook::Response => Value::ResponseHook(Arc::new(response_hook(callback))),
+                Hook::Redirect => Value::RedirectHook(Arc::new(redirect_hook(callback))),
+            });
         }
+        Kind::Headers if !value.is_instance_of::<PyString>() => {
+            return Ok(Value::Pairs(value.extract::<Headers>()?.0));
+        }
+        _ => {}
+    }
+    Ok(if let Ok(flag) = value.cast::<PyBool>() {
+        Value::Bool(flag.is_true())
+    } else if value.is_instance_of::<PyInt>() {
+        value.extract::<i64>().map_or(Value::Other, Value::Int)
+    } else if value.is_instance_of::<PyFloat>() {
+        Value::Float(value.extract()?)
+    } else if let Ok(text) = value.cast::<PyString>() {
+        Value::Text(text.to_str()?.to_owned())
+    } else if value.is_instance_of::<PyBytes>()
+        || value.is_instance_of::<PyByteArray>()
+        || value.is_instance_of::<PyMemoryView>()
+    {
+        let bytes = value.py().get_type::<PyBytes>().call1((value,))?;
+        Value::Bytes(bytes.cast::<PyBytes>()?.as_bytes().to_vec())
+    } else if value.get_type().module()?.to_str()? == "ipaddress" {
+        Value::Text(value.str()?.to_str()?.to_owned())
+    } else if let Ok(mapping) = value.cast::<PyMapping>() {
+        mapping
+            .items()?
+            .extract::<Vec<(String, String)>>()
+            .map_or(Value::Other, Value::Pairs)
+    } else {
+        value
+            .extract::<Vec<String>>()
+            .map_or(Value::Other, Value::Texts)
     })
-}
-
-fn load_profile(browser: &str, profile_json: Option<&str>) -> PyResult<BrowserProfile> {
-    BrowserProfile::from_name_or_json(browser, profile_json).map_err(to_koon_err)
 }
 
 // ---------------------------------------------------------------------
@@ -562,71 +531,16 @@ struct NativeClient {
 #[pymethods]
 impl NativeClient {
     #[new]
-    #[pyo3(signature = (browser="chrome", *, profile_json=None, proxy=None, proxies=None, timeout=30.0, ignore_tls_errors=false, proxy_ca_certs=None, ignore_proxy_tls_errors=false, headers=None, follow_redirects=true, max_redirects=10, cookie_jar=true, session_resumption=true, doh=None, local_address=None, on_request=None, on_response=None, on_redirect=None, retries=0, locale=None, proxy_headers=None, ip_version=None, resolve=None, max_response_body=None, server_padding=None))]
-    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (browser=None, **options))]
     fn new(
-        browser: &str,
-        profile_json: Option<&str>,
-        proxy: Option<&str>,
-        proxies: Option<Vec<String>>,
-        timeout: Option<f64>,
-        ignore_tls_errors: bool,
-        proxy_ca_certs: Option<Payload>,
-        ignore_proxy_tls_errors: bool,
-        headers: Option<Headers>,
-        follow_redirects: bool,
-        max_redirects: i64,
-        cookie_jar: bool,
-        session_resumption: bool,
-        doh: Option<&str>,
-        local_address: Option<&Bound<'_, PyAny>>,
-        on_request: Option<Py<PyAny>>,
-        on_response: Option<Py<PyAny>>,
-        on_redirect: Option<Py<PyAny>>,
-        retries: i64,
-        locale: Option<&str>,
-        proxy_headers: Option<Headers>,
-        ip_version: Option<i64>,
-        resolve: Option<Vec<String>>,
-        max_response_body: Option<i64>,
-        server_padding: Option<&str>,
+        browser: Option<&Bound<'_, PyAny>>,
+        options: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Self> {
-        let connection = ConnectionOptions {
-            proxy,
-            proxies,
-            ignore_tls_errors,
-            proxy_ca_certs,
-            ignore_proxy_tls_errors,
-            session_resumption,
-            doh,
-            local_address: self::local_address(local_address)?,
-            retries: whole_number("retries", retries)?,
-            locale,
-            proxy_headers,
-            ip_version: self::ip_version(ip_version)?,
-            resolve,
-            max_response_body: max_response_body
-                .map(|n| whole_number("max_response_body", n))
-                .transpose()?
-                .unwrap_or_else(|| koon_core::ConnectionOptions::default().max_response_body),
-            server_padding,
-        };
-        let mut builder = connection
-            .client_builder(load_profile(browser, profile_json)?)?
-            .timeout(client_timeout(timeout)?)
-            .headers(headers.unwrap_or_default().0)
-            .follow_redirects(follow_redirects)
-            .max_redirects(whole_number("max_redirects", max_redirects)?)
-            .cookie_jar(cookie_jar);
-        if let Some(callback) = on_request {
-            builder = builder.on_request(request_hook(callback));
+        let mut read = read_options(Scope::Client, options)?;
+        if let Some(browser) = browser {
+            set_option(&mut read, "browser", browser)?;
         }
-        if let Some(callback) = on_response {
-            builder = builder.on_response(response_hook(callback));
-        }
-        if let Some(callback) = on_redirect {
-            builder = builder.on_redirect(redirect_hook(callback));
-        }
+        let builder = read.client_builder().map_err(to_koon_err)?;
         Ok(Self {
             client: Arc::new(builder.build().map_err(to_koon_err)?),
         })
@@ -732,7 +646,7 @@ impl NativeClient {
     /// field dicts) sends a multipart form. The verbs forward their keyword
     /// arguments here, so everything that is not a request option is
     /// positional-only: passing it by keyword is a `TypeError`.
-    #[pyo3(name = "_request", signature = (mode, method, url, body=None, form=None, /, *, headers=None, timeout=None, proxy=None, follow_redirects=None, max_redirects=None, on_request=None, on_response=None, on_redirect=None))]
+    #[pyo3(name = "_request", signature = (mode, method, url, body=None, form=None, /, **options))]
     #[allow(clippy::too_many_arguments)]
     fn request<'py>(
         &self,
@@ -742,34 +656,30 @@ impl NativeClient {
         url: String,
         body: Option<Payload>,
         form: Option<Vec<Bound<'py, PyAny>>>,
-        headers: Option<Headers>,
-        timeout: Option<f64>,
-        proxy: Option<String>,
-        follow_redirects: Option<bool>,
-        max_redirects: Option<i64>,
-        on_request: Option<Py<PyAny>>,
-        on_response: Option<Py<PyAny>>,
-        on_redirect: Option<Py<PyAny>>,
+        options: Option<&Bound<'py, PyDict>>,
     ) -> PyResult<Py<PyAny>> {
         let method = koon_core::parse_method(method).map_err(to_koon_err)?;
         let body = body.map_or_else(Body::empty, Body::from);
         let form = form.map(build_multipart).transpose()?;
-        let options = RequestOptions {
-            headers: headers.unwrap_or_default().0,
-            proxy,
-            timeout: timeout.map(timeout_duration).transpose()?,
-            follow_redirects,
-            max_redirects: max_redirects
-                .map(|n| whole_number("max_redirects", n))
-                .transpose()?,
-            on_request: on_request.map(|cb| Arc::new(request_hook(cb)) as OnRequestHook),
-            on_response: on_response.map(|cb| Arc::new(response_hook(cb)) as OnResponseHook),
-            on_redirect: on_redirect.map(|cb| Arc::new(redirect_hook(cb)) as OnRedirectHook),
-        };
+        let streaming = matches!(mode, Mode::Stream | Mode::BlockStream);
+        let options = read_options(
+            if streaming {
+                Scope::Stream
+            } else {
+                Scope::Request
+            },
+            options,
+        )?;
+        let decode = options.decode();
+        let options = options.request_options();
         let client = self.client.clone();
-        if matches!(mode, Mode::Stream | Mode::BlockStream) {
+        if streaming {
             return run(py, mode == Mode::BlockStream, async move {
-                let response = client.send_streaming(method, &url, body, options).await?;
+                let mut response = client.send_streaming(method, &url, body, options).await?;
+                // Before the caller can read the first chunk.
+                if decode {
+                    response.decode_content();
+                }
                 Ok(Streaming {
                     response,
                     blocking: mode == Mode::BlockStream,
@@ -1412,77 +1322,14 @@ struct KoonProxy {
 impl KoonProxy {
     /// Start a new MITM proxy server.
     #[staticmethod]
-    #[pyo3(signature = (*, browser="chrome", profile_json=None, listen_addr=None, header_mode=None, ca_dir=None, timeout=30.0, allow_non_loopback=false, auth=None, max_connections=None, proxy=None, proxies=None, ignore_tls_errors=false, proxy_ca_certs=None, ignore_proxy_tls_errors=false, session_resumption=true, doh=None, local_address=None, retries=0, locale=None, proxy_headers=None, ip_version=None, resolve=None, max_response_body=None, server_padding=None))]
-    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (**options))]
     fn start<'py>(
         py: Python<'py>,
-        browser: &str,
-        profile_json: Option<&str>,
-        listen_addr: Option<String>,
-        header_mode: Option<&str>,
-        ca_dir: Option<String>,
-        timeout: Option<f64>,
-        allow_non_loopback: bool,
-        auth: Option<(String, String)>,
-        max_connections: Option<i64>,
-        proxy: Option<&str>,
-        proxies: Option<Vec<String>>,
-        ignore_tls_errors: bool,
-        proxy_ca_certs: Option<Payload>,
-        ignore_proxy_tls_errors: bool,
-        session_resumption: bool,
-        doh: Option<&str>,
-        local_address: Option<&Bound<'py, PyAny>>,
-        retries: i64,
-        locale: Option<&str>,
-        proxy_headers: Option<Headers>,
-        ip_version: Option<i64>,
-        resolve: Option<Vec<String>>,
-        max_response_body: Option<i64>,
-        server_padding: Option<&str>,
+        options: Option<&Bound<'py, PyDict>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        // The upstream client takes the connection options as a client
-        // does; the proxy turns redirects and the cookie jar off.
-        let connection = ConnectionOptions {
-            proxy,
-            proxies,
-            ignore_tls_errors,
-            proxy_ca_certs,
-            ignore_proxy_tls_errors,
-            session_resumption,
-            doh,
-            local_address: self::local_address(local_address)?,
-            retries: whole_number("retries", retries)?,
-            locale,
-            proxy_headers,
-            ip_version: self::ip_version(ip_version)?,
-            resolve,
-            max_response_body: max_response_body
-                .map(|n| whole_number("max_response_body", n))
-                .transpose()?
-                .unwrap_or_else(|| koon_core::ConnectionOptions::default().max_response_body),
-            server_padding,
-        };
-        let client = connection
-            .client_builder(load_profile(browser, profile_json)?)?
-            .timeout(client_timeout(timeout)?);
-        let mut config = ProxyServerConfig {
-            listen_addr: listen_addr.unwrap_or_else(|| "127.0.0.1:0".to_string()),
-            header_mode: header_mode
-                .map(str::parse::<HeaderMode>)
-                .transpose()
-                .map_err(to_koon_err)?
-                .unwrap_or_default(),
-            ca_dir,
-            client,
-            allow_non_loopback,
-            auth: auth
-                .map(|(username, password)| koon_core::ProxyServerAuth { username, password }),
-            ..ProxyServerConfig::default()
-        };
-        if let Some(max) = max_connections {
-            config.max_connections = whole_number("max_connections", max)?;
-        }
+        let config = read_options(Scope::Proxy, options)?
+            .proxy_config()
+            .map_err(to_koon_err)?;
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let server = ProxyServer::start(config).await.map_err(to_koon_err)?;
             let proxy = Self {
@@ -1538,9 +1385,15 @@ fn browsers() -> Vec<String> {
 /// The fingerprint self-test of `koon_core::verify` for one profile, as the
 /// report's JSON (`koon.verify` parses it). Blocks with the GIL released.
 #[pyfunction]
-#[pyo3(signature = (browser, proxy=None))]
-fn _verify(py: Python<'_>, browser: &str, proxy: Option<&str>) -> PyResult<String> {
-    block_on(py, koon_core::verify::verify(browser, proxy))?
+#[pyo3(signature = (browser, **options))]
+fn _verify(
+    py: Python<'_>,
+    browser: &Bound<'_, PyAny>,
+    options: Option<&Bound<'_, PyDict>>,
+) -> PyResult<String> {
+    let mut read = read_options(Scope::Verify, options)?;
+    set_option(&mut read, "browser", browser)?;
+    block_on(py, koon_core::verify::verify_options(read))?
         .map(|report| report.to_json())
         .map_err(to_koon_err)
 }

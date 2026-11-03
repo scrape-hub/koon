@@ -84,10 +84,11 @@ CookieDict = Dict[str, Any]
 # the list given, 0-based), "name": str, "reason": str}.
 SkippedCookie = Dict[str, Any]
 
+# BEGIN GENERATED option dicts (crates/core/tests/generated.rs)
 class RequestOptions(TypedDict, total=False):
-    """Per-request keyword options every verb (``get`` through
-    ``request_streaming``) accepts; unset ones fall back to the client's.
-    See ``Koon.__init__`` for what each one does."""
+    """Per-request keyword options every verb (``get`` through ``request_streaming``)
+    accepts; unset ones fall back to the client's. See ``Koon.__init__`` for what each
+    one does."""
 
     headers: Optional[HeaderInput]
     timeout: Optional[float]
@@ -98,8 +99,33 @@ class RequestOptions(TypedDict, total=False):
     on_response: Optional[Callable[[int, str, Sequence[Tuple[str, str]]], None]]
     on_redirect: Optional[Callable[[int, str, Sequence[Tuple[str, str]]], Optional[bool]]]
 
-__version__: str
-"""The koon version, e.g. ``"1.0.1"``."""
+class StreamingOptions(RequestOptions, total=False):
+    """The keyword options of ``request_streaming``: those of every request, and
+    ``decode``."""
+
+    decode: Optional[bool]
+
+class VerifyOptions(TypedDict, total=False):
+    """The keyword options of ``verify``: how its client connects to the fingerprint
+    services, as for ``Koon``."""
+
+    proxy: Optional[str]
+    proxies: Optional[Sequence[str]]
+    timeout: Optional[float]
+    ignore_tls_errors: Optional[bool]
+    proxy_ca_certs: Optional[Union[str, bytes]]
+    ignore_proxy_tls_errors: Optional[bool]
+    session_resumption: Optional[bool]
+    doh: Optional[str]
+    local_address: Optional[LocalAddress]
+    retries: Optional[int]
+    locale: Optional[str]
+    proxy_headers: Optional[HeaderInput]
+    ip_version: Optional[Union[int, str]]
+    resolve: Optional[Sequence[str]]
+    max_response_body: Optional[int]
+    server_padding: Optional[Union[str, int]]
+# END GENERATED option dicts
 
 def browsers() -> List[str]:
     """Every built-in browser profile name, one per profile: every browser
@@ -109,15 +135,16 @@ def browsers() -> List[str]:
     impersonate Windows, Safari macOS (``"firefox154"``)."""
     ...
 
-def verify(browser: str = "chrome", proxy: Optional[str] = None) -> Dict[str, Any]:
+def verify(browser: str = "chrome", **options: Unpack[VerifyOptions]) -> Dict[str, Any]:
     """Check that the installed koon still produces the real browser's
     fingerprint for the profile ``browser`` (blocking).
 
     Connects to tls.browserleaks.com (tls.peet.ws as fallback) and, where a
     QUIC reference exists, over HTTP/3 to quic.browserleaks.com, and compares
     JA4, JA3N, JA3, the Akamai HTTP/2 fingerprint and the QUIC JA4 with the
-    values captured from the real browser. ``proxy`` routes the check through
-    a proxy (HTTP/3 is then not used).
+    values captured from the real browser. ``options`` are the connection
+    options of ``Koon`` (``proxy``, ``doh``, ``timeout``, ...); through a
+    proxy, HTTP/3 is not used.
 
     Returns the report: ``profile`` (e.g. ``"chrome154-windows"``),
     ``koon_version``, ``outcome`` (``"match"``, ``"mismatch"``,
@@ -170,111 +197,118 @@ class Koon:
     (``shutdown()``) when the block is left.
     """
 
+    # BEGIN GENERATED Koon.__init__ (crates/core/tests/generated.rs)
     def __init__(
         self,
-        browser: str = "chrome",
+        browser: Optional[str] = "chrome",
         *,
         profile_json: Optional[str] = None,
         proxy: Optional[str] = None,
-        proxies: Optional[list[str]] = None,
+        proxies: Optional[Sequence[str]] = None,
         timeout: Optional[float] = 30,
-        ignore_tls_errors: bool = False,
+        ignore_tls_errors: Optional[bool] = False,
         proxy_ca_certs: Optional[Union[str, bytes]] = None,
-        ignore_proxy_tls_errors: bool = False,
+        ignore_proxy_tls_errors: Optional[bool] = False,
         headers: Optional[HeaderInput] = None,
-        follow_redirects: bool = True,
-        max_redirects: int = 10,
-        cookie_jar: bool = True,
-        session_resumption: bool = True,
+        follow_redirects: Optional[bool] = True,
+        max_redirects: Optional[int] = 10,
+        cookie_jar: Optional[bool] = True,
+        session_resumption: Optional[bool] = True,
         doh: Optional[str] = None,
         local_address: Optional[LocalAddress] = None,
         on_request: Optional[Callable[[str, str], None]] = None,
         on_response: Optional[Callable[[int, str, Sequence[Tuple[str, str]]], None]] = None,
         on_redirect: Optional[Callable[[int, str, Sequence[Tuple[str, str]]], Optional[bool]]] = None,
-        retries: int = 0,
+        retries: Optional[int] = 0,
         locale: Optional[str] = None,
         proxy_headers: Optional[HeaderInput] = None,
-        ip_version: Optional[int] = None,
+        ip_version: Optional[Union[int, str]] = None,
         resolve: Optional[Sequence[str]] = None,
         max_response_body: Optional[int] = None,
-        server_padding: Optional[str] = None,
+        server_padding: Optional[Union[str, int]] = None,
     ) -> None:
         """Create a new Koon HTTP client with browser fingerprint impersonation.
 
-        Invalid option values (an unknown browser or version, ``ip_version``,
-        ``doh`` provider, a negative ``timeout``, ``max_redirects`` or
-        ``retries``, an invalid ``local_address`` or ``resolve`` entry) raise
-        ``KoonInvalidArgument``; a value of the wrong type raises
+        An option left ``None`` keeps its default. An invalid value raises
+        ``KoonInvalidArgument``, an unknown option or a value of the wrong type
         ``TypeError``.
 
         Args:
-            browser: Browser to impersonate (e.g. "chrome", "firefox154", "safari266",
-                "chrome-mobile152", "safari-mobile266", "firefox-mobile154", "brave",
-                "edge-mobile153", "samsung", "opera-mobile", "okhttp5").
-            profile_json: Custom browser profile as JSON string (overrides ``browser``).
-            proxy: Proxy URL (``http://``, ``https://``, ``socks5://`` or
-                ``socks5h://``, the same: the proxy resolves the host name). An ``https://``
-                proxy is reached over TLS and its certificate is verified (see
-                ``proxy_ca_certs``).
-            proxies: List of proxy URLs for round-robin rotation. Takes priority over ``proxy``.
-            timeout: Request timeout in seconds, fractions allowed. ``0`` means no
-                timeout; ``None`` keeps the default of 30 seconds.
-            ignore_tls_errors: Skip TLS certificate verification of origins. ``https://``
-                proxies are still verified (see ``ignore_proxy_tls_errors``).
-            proxy_ca_certs: Certificates (PEM, one or more, as ``str`` or ``bytes``)
-                trusted for the TLS connection to ``https://`` proxies, in addition to
-                the built-in roots, like curl's ``--proxy-cacert``: for a proxy with a
-                self-signed certificate or one from a private CA. Origins are still
-                verified against the built-in roots only. Invalid PEM raises
-                ``KoonInvalidArgument``.
+            browser: Browser profile to impersonate, such as ``chrome``,
+                ``firefox154``, ``chrome-macos``, ``safari-mobile266`` or ``okhttp5``.
+                Without a version it is the newest one, without an OS desktop browsers
+                impersonate Windows and Safari macOS. Default: ``"chrome"``.
+            profile_json: A custom browser profile as JSON, as ``export_profile()``
+                returns it. Overrides ``browser``. Malformed JSON fails with
+                ``KoonError`` (code ``JSON_ERROR``).
+            proxy: Proxy URL: ``http://``, ``https://``, ``socks5://`` or
+                ``socks5h://`` (the same: the proxy resolves the host name), optionally
+                with ``user:pass@``. An ``https://`` proxy is reached over TLS and its
+                certificate is verified (see ``proxy_ca_certs``).
+            proxies: Proxy URLs to rotate through: each request, and each retry,
+                takes the next one. Takes priority over ``proxy``.
+            timeout: Timeout of a whole request in seconds, fractions allowed:
+                connecting, redirects and the body. ``0`` means no timeout. Default: 30.
+            ignore_tls_errors: Skip certificate verification of origins.
+                ``https://`` proxies are still verified (see
+                ``ignore_proxy_tls_errors``). Default: ``False``.
+            proxy_ca_certs: Certificates (PEM, one or more) trusted for the TLS
+                connection to ``https://`` proxies in addition to the built-in roots,
+                like curl's ``--proxy-cacert``: for a proxy with a self-signed
+                certificate or one from a private CA. Origins are still verified against
+                the built-in roots only. Invalid PEM fails with ``KoonInvalidArgument``.
             ignore_proxy_tls_errors: Skip certificate verification of ``https://``
                 proxies, like curl's ``--proxy-insecure``. The connection stays
                 encrypted, but anyone on the way to the proxy can pose as it and read
                 the proxy credentials and the hosts requested. Origins are still
-                verified. Prefer ``proxy_ca_certs``.
-            headers: Additional headers, as a dict (insertion order) or a list of
-                ``(name, value)`` tuples.
-            follow_redirects: Automatically follow HTTP redirects.
-            max_redirects: Maximum number of redirects to follow.
-            cookie_jar: Enable automatic cookie storage.
-            session_resumption: Enable TLS session resumption.
-            doh: DNS-over-HTTPS provider (``"cloudflare"`` or ``"google"``, any case).
-            local_address: Bind outgoing connections to a specific local IP address
-                (a string or an ``ipaddress`` object).
-            on_request: Hook called before each HTTP request (including redirects).
-                Receives (method, url). An exception it raises fails the request
-                before it is sent.
-            on_response: Hook called after each HTTP response (including redirects).
-                Receives (status, url, headers) with headers as a list of (name, value)
-                tuples. An exception it raises fails the request.
-            on_redirect: Hook called before following a redirect. Receives (status, url, headers).
-                Return ``False`` to stop redirecting; any other return value (including
-                ``None``) continues. An exception it raises fails the request.
-            retries: Number of automatic retries on transport errors. With proxy rotation, each retry uses the next proxy.
-            locale: The user's language, such as ``"de-AT"``, to match the proxy's
-                country. The Accept-Language header becomes what the profile's
-                browser sends for it: Chrome the list of the UI language it picks
+                verified. Prefer ``proxy_ca_certs``. Default: ``False``.
+            headers: Headers sent with every request, in order. They replace the
+                profile's header of the same name at its browser position; a name given
+                twice is sent once, with the last value.
+            follow_redirects: Follow redirects. Default: ``True``.
+            max_redirects: Maximum number of redirects to follow. Default: 10.
+            cookie_jar: Keep cookies across requests. Default: ``True``.
+            session_resumption: Resume TLS sessions. Default: ``True``.
+            doh: DNS-over-HTTPS provider, any case: ``cloudflare`` or ``google``.
+            local_address: Local IP address outgoing connections are bound to.
+            on_request: Called before each request, including each redirect hop,
+                with the method and URL. An error it raises fails the request before it
+                is sent.
+            on_response: Called after each response, including each redirect hop,
+                once its cookies are stored, with the status, URL and headers. An error
+                it raises fails the request.
+            on_redirect: Called before a redirect is followed, with the status, URL
+                and headers. Return ``False`` to stop and get the 3xx response; any
+                other value follows it. An error it raises fails the request.
+            retries: Automatic retries on transport errors. With ``proxies``, each
+                retry takes the next proxy. A request that may already have reached the
+                server is retried only for idempotent methods. Default: 0.
+            locale: The user's language, such as ``de-AT``, to match the proxy's
+                country. The Accept-Language header becomes what the profile's browser
+                sends for it: Chrome the list of the UI language it picks
                 (``de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7``), Safari ``de-DE,de;q=0.9``.
-            proxy_headers: Custom headers for the HTTP CONNECT tunnel request (e.g. session IDs, geo-targeting).
-            ip_version: Restrict DNS resolution to IPv4 (4) or IPv6 (6).
+            proxy_headers: Headers of the HTTP CONNECT request to the proxy, in
+                order: session IDs, geo-targeting, authentication.
+            ip_version: Resolve hosts to IPv4 (``4``) or IPv6 (``6``) only, e.g. for
+                a proxy that speaks IPv4 alone. ``v4``, ``ipv6`` and the like work too.
             resolve: Entries in curl's ``--resolve`` format,
-                ``"host:port:address[,address...]"`` (IPv6 in brackets): requests to
-                that host and port connect to the address instead of resolving the
-                host; TLS name, Host header and cookies stay the host's.
+                ``host:port:address[,address...]`` (IPv6 in brackets): requests to that
+                host and port connect to the address instead of resolving the host. The
+                TLS server name, Host header and cookies stay the host's. An invalid
+                entry fails with ``KoonInvalidArgument``.
             max_response_body: Maximum response body size in bytes, decompressed:
                 past it, a response fails with ``KoonError`` (code ``BODY_ERROR``)
-                instead of growing the buffer further (also covers a compressed body
-                that decodes past the cap). Reading a streaming response chunk by
-                chunk without decoding it is not capped. ``0`` disables it; ``None``
-                keeps the default of 100 MiB.
+                instead of growing the buffer further, also when a compressed body
+                decodes past it. Reading a streaming response chunk by chunk without
+                decoding it is not capped. ``0`` disables it. Default: 100 MiB.
             server_padding: Pins Chrome 151+'s ``PqcBandwidthExperiment``
-                server-padding field trial group instead of drawing one when the
-                client is built: ``"none"`` (not in the study) or the bytes of
-                padding the group asks for (e.g. ``"6000"``). The study ended on
-                2026-10-30, so a client no longer draws one. No effect on a
-                profile without the trial.
+                server-padding field trial group instead of drawing one when the client
+                is built: ``none`` (not in the study) or the bytes of padding the group
+                asks for (e.g. ``6000``). The study ended on 2026-10-30, so a client no
+                longer draws one. No effect on a profile without the trial.
         """
         ...
+    # END GENERATED Koon.__init__
     @property
     def user_agent(self) -> Optional[str]:
         """The User-Agent string from the browser profile."""
@@ -428,9 +462,7 @@ class Koon:
         method: str,
         url: str,
         body: Optional[Union[str, bytes]] = None,
-        *,
-        decode: bool = True,
-        **options: Unpack[RequestOptions],
+        **options: Unpack[StreamingOptions],
     ) -> "KoonStreamingResponse":
         """Perform a streaming HTTP request.
 
@@ -744,83 +776,123 @@ class KoonProxy:
     def ca_cert_path(self) -> str:
         """Path to the generated CA certificate file."""
         ...
+    # BEGIN GENERATED KoonProxy.start (crates/core/tests/generated.rs)
     @staticmethod
     async def start(
         *,
-        browser: str = "chrome",
+        browser: Optional[str] = "chrome",
         profile_json: Optional[str] = None,
-        listen_addr: Optional[str] = None,
-        header_mode: Optional[str] = None,
-        ca_dir: Optional[str] = None,
-        timeout: Optional[float] = 30,
-        allow_non_loopback: bool = False,
-        auth: Optional[Tuple[str, str]] = None,
-        max_connections: Optional[int] = None,
         proxy: Optional[str] = None,
-        proxies: Optional[list[str]] = None,
-        ignore_tls_errors: bool = False,
+        proxies: Optional[Sequence[str]] = None,
+        ignore_tls_errors: Optional[bool] = False,
         proxy_ca_certs: Optional[Union[str, bytes]] = None,
-        ignore_proxy_tls_errors: bool = False,
-        session_resumption: bool = True,
+        ignore_proxy_tls_errors: Optional[bool] = False,
+        session_resumption: Optional[bool] = True,
         doh: Optional[str] = None,
         local_address: Optional[LocalAddress] = None,
-        retries: int = 0,
+        retries: Optional[int] = 0,
         locale: Optional[str] = None,
         proxy_headers: Optional[HeaderInput] = None,
-        ip_version: Optional[int] = None,
+        ip_version: Optional[Union[int, str]] = None,
         resolve: Optional[Sequence[str]] = None,
         max_response_body: Optional[int] = None,
-        server_padding: Optional[str] = None,
+        server_padding: Optional[Union[str, int]] = None,
+        listen_addr: Optional[str] = "127.0.0.1:0",
+        header_mode: Optional[str] = "impersonate",
+        ca_dir: Optional[str] = "~/.koon/ca",
+        timeout: Optional[float] = 30,
+        allow_non_loopback: Optional[bool] = False,
+        auth: Optional[Tuple[str, str]] = None,
+        max_connections: Optional[int] = 512,
     ) -> "KoonProxy":
         """Start a new MITM proxy server.
 
-        The forwarded requests connect as a ``Koon`` client with the same
-        options would (``proxy`` through ``ip_version`` below, see
-        ``Koon.__init__``), e.g. through an upstream (residential) proxy. The
-        proxy does not follow redirects and keeps no cookies: the proxied
-        client gets each redirect and keeps its own cookies.
+        The forwarded requests connect as those of a ``Koon`` client do; the proxy
+        follows no redirects and keeps no cookies, the proxied client does both itself.
+
+        An option left ``None`` keeps its default. An invalid value raises
+        ``KoonInvalidArgument``, an unknown option or a value of the wrong type
+        ``TypeError``.
 
         Args:
-            browser: Browser to impersonate (e.g. "chrome", "firefox154").
-            profile_json: Custom browser profile as JSON string (overrides ``browser``).
-            listen_addr: Address to listen on (default: "127.0.0.1:0" for random port).
-            header_mode: "impersonate" (default) or "passthrough"
-                (any case; anything else raises ``KoonInvalidArgument``).
-            ca_dir: Directory for CA certificate storage.
-            timeout: Timeout in seconds, fractions allowed, for a forwarded
-                request's response head and each wait for its body. ``0`` means no
-                timeout; ``None`` keeps the default of 30 seconds.
-            allow_non_loopback: Allow ``listen_addr`` to bind a non-loopback
-                address. Without it, the proxy relays through koon's fingerprinted
-                TLS/HTTP2 stack with no transport encryption of its own between it
-                and its client, so on a reachable interface it would otherwise be
-                an open relay for anyone who can reach the port unless ``auth`` is
-                also set.
-            auth: ``(username, password)`` required as HTTP Basic
-                ``Proxy-Authorization`` from every client.
-            max_connections: Connections accepted at once; further ones wait for
-                a slot to free up. ``None`` keeps the core's default (512).
-            proxy: Upstream proxy URL (``http://``, ``https://``, ``socks5://``).
-            proxies: Upstream proxy URLs for round-robin rotation. Take priority over ``proxy``.
-            ignore_tls_errors: Skip TLS certificate verification of origins.
-            proxy_ca_certs: Certificates trusted for an ``https://`` upstream proxy.
-            ignore_proxy_tls_errors: Skip certificate verification of an ``https://`` upstream proxy.
-            session_resumption: Enable TLS session resumption to origins.
-            doh: DNS-over-HTTPS provider (``"cloudflare"`` or ``"google"``, any case).
-            local_address: Bind outgoing connections to a specific local IP address.
-            retries: Automatic retries of forwarded requests on transport errors.
-            locale: The user's language for the Accept-Language header the profile
-                sends (e.g. ``"de-AT"``, see ``Koon``); in impersonate mode the
-                client's own is dropped.
-            proxy_headers: Headers for the CONNECT request to the upstream proxy.
-            ip_version: Restrict DNS resolution to IPv4 (4) or IPv6 (6).
-            resolve: Entries in curl's ``--resolve`` format, see ``Koon.__init__``.
-            max_response_body: Maximum forwarded response body size in bytes,
-                decompressed, see ``Koon.__init__``.
-            server_padding: Pins the forwarded requests' server-padding field
-                trial group, see ``Koon.__init__``.
+            browser: Browser profile to impersonate, such as ``chrome``,
+                ``firefox154``, ``chrome-macos``, ``safari-mobile266`` or ``okhttp5``.
+                Without a version it is the newest one, without an OS desktop browsers
+                impersonate Windows and Safari macOS. Default: ``"chrome"``.
+            profile_json: A custom browser profile as JSON, as ``export_profile()``
+                returns it. Overrides ``browser``. Malformed JSON fails with
+                ``KoonError`` (code ``JSON_ERROR``).
+            proxy: Proxy URL: ``http://``, ``https://``, ``socks5://`` or
+                ``socks5h://`` (the same: the proxy resolves the host name), optionally
+                with ``user:pass@``. An ``https://`` proxy is reached over TLS and its
+                certificate is verified (see ``proxy_ca_certs``).
+            proxies: Proxy URLs to rotate through: each request, and each retry,
+                takes the next one. Takes priority over ``proxy``.
+            ignore_tls_errors: Skip certificate verification of origins.
+                ``https://`` proxies are still verified (see
+                ``ignore_proxy_tls_errors``). Default: ``False``.
+            proxy_ca_certs: Certificates (PEM, one or more) trusted for the TLS
+                connection to ``https://`` proxies in addition to the built-in roots,
+                like curl's ``--proxy-cacert``: for a proxy with a self-signed
+                certificate or one from a private CA. Origins are still verified against
+                the built-in roots only. Invalid PEM fails with ``KoonInvalidArgument``.
+            ignore_proxy_tls_errors: Skip certificate verification of ``https://``
+                proxies, like curl's ``--proxy-insecure``. The connection stays
+                encrypted, but anyone on the way to the proxy can pose as it and read
+                the proxy credentials and the hosts requested. Origins are still
+                verified. Prefer ``proxy_ca_certs``. Default: ``False``.
+            session_resumption: Resume TLS sessions. Default: ``True``.
+            doh: DNS-over-HTTPS provider, any case: ``cloudflare`` or ``google``.
+            local_address: Local IP address outgoing connections are bound to.
+            retries: Automatic retries on transport errors. With ``proxies``, each
+                retry takes the next proxy. A request that may already have reached the
+                server is retried only for idempotent methods. Default: 0.
+            locale: The user's language, such as ``de-AT``, to match the proxy's
+                country. The Accept-Language header becomes what the profile's browser
+                sends for it: Chrome the list of the UI language it picks
+                (``de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7``), Safari ``de-DE,de;q=0.9``.
+            proxy_headers: Headers of the HTTP CONNECT request to the proxy, in
+                order: session IDs, geo-targeting, authentication.
+            ip_version: Resolve hosts to IPv4 (``4``) or IPv6 (``6``) only, e.g. for
+                a proxy that speaks IPv4 alone. ``v4``, ``ipv6`` and the like work too.
+            resolve: Entries in curl's ``--resolve`` format,
+                ``host:port:address[,address...]`` (IPv6 in brackets): requests to that
+                host and port connect to the address instead of resolving the host. The
+                TLS server name, Host header and cookies stay the host's. An invalid
+                entry fails with ``KoonInvalidArgument``.
+            max_response_body: Maximum response body size in bytes, decompressed:
+                past it, a response fails with ``KoonError`` (code ``BODY_ERROR``)
+                instead of growing the buffer further, also when a compressed body
+                decodes past it. Reading a streaming response chunk by chunk without
+                decoding it is not capped. ``0`` disables it. Default: 100 MiB.
+            server_padding: Pins Chrome 151+'s ``PqcBandwidthExperiment``
+                server-padding field trial group instead of drawing one when the client
+                is built: ``none`` (not in the study) or the bytes of padding the group
+                asks for (e.g. ``6000``). The study ended on 2026-10-30, so a client no
+                longer draws one. No effect on a profile without the trial.
+            listen_addr: Address to listen on; port ``0`` picks a free one. Default:
+                ``"127.0.0.1:0"``.
+            header_mode: How the headers of the proxy's clients are sent on, any
+                case: ``impersonate`` sends them as the profile's browser does, with its
+                identity headers in place of the client's (its Accept-Language from
+                ``locale``), ``passthrough`` as they came, only TLS and HTTP/2
+                fingerprinted. Default: ``"impersonate"``.
+            ca_dir: Directory of the proxy's CA certificate. Default:
+                ``"~/.koon/ca"``.
+            timeout: Timeout in seconds, fractions allowed, of a forwarded request's
+                response head and of each wait for its body. ``0`` means no timeout.
+                Default: 30.
+            allow_non_loopback: Allow ``listen_addr`` to be a non-loopback address.
+                The proxy has no transport encryption of its own between it and its
+                clients, so on a reachable interface it is an open relay for anyone who
+                can reach the port, unless ``auth`` is set too. Default: ``False``.
+            auth: ``Proxy-Authorization: Basic`` credentials every client of the
+                proxy must send.
+            max_connections: Connections accepted at once; further ones wait for a
+                slot to free up. Default: 512.
         """
         ...
+    # END GENERATED KoonProxy.start
     def ca_cert_pem(self) -> bytes:
         """CA certificate as PEM bytes."""
         ...
@@ -879,35 +951,37 @@ class KoonSync:
             print(resp.status)
     """
 
+    # BEGIN GENERATED KoonSync.__init__ (crates/core/tests/generated.rs)
     def __init__(
         self,
-        browser: str = "chrome",
+        browser: Optional[str] = "chrome",
         *,
         profile_json: Optional[str] = None,
         proxy: Optional[str] = None,
-        proxies: Optional[list[str]] = None,
+        proxies: Optional[Sequence[str]] = None,
         timeout: Optional[float] = 30,
-        ignore_tls_errors: bool = False,
+        ignore_tls_errors: Optional[bool] = False,
         proxy_ca_certs: Optional[Union[str, bytes]] = None,
-        ignore_proxy_tls_errors: bool = False,
+        ignore_proxy_tls_errors: Optional[bool] = False,
         headers: Optional[HeaderInput] = None,
-        follow_redirects: bool = True,
-        max_redirects: int = 10,
-        cookie_jar: bool = True,
-        session_resumption: bool = True,
+        follow_redirects: Optional[bool] = True,
+        max_redirects: Optional[int] = 10,
+        cookie_jar: Optional[bool] = True,
+        session_resumption: Optional[bool] = True,
         doh: Optional[str] = None,
         local_address: Optional[LocalAddress] = None,
         on_request: Optional[Callable[[str, str], None]] = None,
         on_response: Optional[Callable[[int, str, Sequence[Tuple[str, str]]], None]] = None,
         on_redirect: Optional[Callable[[int, str, Sequence[Tuple[str, str]]], Optional[bool]]] = None,
-        retries: int = 0,
+        retries: Optional[int] = 0,
         locale: Optional[str] = None,
         proxy_headers: Optional[HeaderInput] = None,
-        ip_version: Optional[int] = None,
+        ip_version: Optional[Union[int, str]] = None,
         resolve: Optional[Sequence[str]] = None,
         max_response_body: Optional[int] = None,
-        server_padding: Optional[str] = None,
+        server_padding: Optional[Union[str, int]] = None,
     ) -> None: ...
+    # END GENERATED KoonSync.__init__
     @property
     def user_agent(self) -> Optional[str]: ...
     def export_profile(self) -> str: ...
@@ -1009,9 +1083,7 @@ class KoonSync:
         method: str,
         url: str,
         body: Optional[Union[str, bytes]] = None,
-        *,
-        decode: bool = True,
-        **options: Unpack[RequestOptions],
+        **options: Unpack[StreamingOptions],
     ) -> KoonSyncStreamingResponse:
         """Perform a blocking streaming HTTP request: returns once the
         response head has arrived. The body is decoded as for
