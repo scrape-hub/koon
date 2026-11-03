@@ -1,0 +1,13 @@
+{
+  "name": "@koonjs/linux-x64-musl",
+  "version": "2.0.0",
+  "os": ["linux"],
+  "cpu": ["x64"],
+  "libc": ["musl"],
+  "main": "koon.linux-x64-musl.node",
+  "files": ["koon.linux-x64-musl.node", "THIRD-PARTY-LICENSES.md"],
+  "license": "MIT",
+  "author": "scrape-hub",
+  "description": "koonjs native binding for Linux x64 (musl, e.g. Alpine)",
+  "repository": { "type": "git", "url": "https://github.com/scrape-hub/koon.git" }
+}

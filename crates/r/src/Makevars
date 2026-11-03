@@ -1,0 +1,23 @@
+TARGET_DIR = ./rust/target
+LIBDIR = $(TARGET_DIR)/release
+STATLIB = $(LIBDIR)/libkoon_r.a
+
+NATIVE_LIBS = $(LIBDIR)/native-static-libs.txt
+PKG_LIBS = -L$(LIBDIR) -lkoon_r $(filter-out -lR,$(shell cat $(NATIVE_LIBS) 2>/dev/null))
+
+CARGO_ARGS = --lib --release --manifest-path=./rust/Cargo.toml --target-dir $(TARGET_DIR)
+
+all: $(SHLIB)
+
+.PHONY: $(STATLIB)
+
+$(SHLIB): $(STATLIB)
+
+$(STATLIB):
+	cd .. && "$(R_HOME)/bin/Rscript" bootstrap.R
+	test -s $(NATIVE_LIBS) || cargo clean --release -p koon-r --manifest-path=./rust/Cargo.toml --target-dir $(TARGET_DIR)
+	cargo rustc $(CARGO_ARGS) -- --print native-static-libs=$(CURDIR)/$(NATIVE_LIBS)
+	cargo run --release --manifest-path=./rust/Cargo.toml --target-dir $(TARGET_DIR) --bin document
+
+clean:
+	rm -Rf $(SHLIB) $(STATLIB) $(OBJECTS) $(TARGET_DIR)

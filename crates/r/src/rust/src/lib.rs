@@ -1,0 +1,1351 @@
+//! R binding for koon: a thin extendr wrapper around `koon_core::Client`.
+//!
+//! Errors never unwind or longjmp through Rust frames. With extendr's
+//! `result_condition` feature, a method returning `Err(RError)` hands R an
+//! `extendr_error` condition whose `value` describes the failure, and
+//! `koon_unwrap()` in `R/koon.R` raises it as a classed R condition.
+
+use extendr_api::prelude::*;
+use koon_core::options::{Hook, Kind, OptionError, Options, Scope, Target, Value};
+use koon_core::{
+    decode_body_text, parse_method, BrowserProfile, Client, CookieParams, HttpResponse, Multipart,
+    PartitionKey, RequestOptions, WsMessage,
+};
+use std::borrow::Cow;
+use std::os::raw::{c_int, c_void};
+use std::sync::{mpsc, Arc, OnceLock};
+use std::time::{Duration, Instant};
+use tokio::runtime::Runtime;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::task::{JoinError, JoinHandle};
+
+/// How often a running request checks for Ctrl-C / Esc.
+const INTERRUPT_POLL: Duration = Duration::from_millis(100);
+
+/// Shared tokio runtime for every `Koon` client in this R session.
+///
+/// Requests are I/O-bound and the R thread drives one at a time, so two
+/// workers suffice (the default would start one per CPU core). It must stay
+/// multi-threaded: the `on_redirect` bridge blocks a worker with
+/// `tokio::task::block_in_place`, which a current-thread runtime rejects.
+fn runtime() -> &'static Runtime {
+    static RUNTIME: OnceLock<Runtime> = OnceLock::new();
+    RUNTIME.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .thread_name("koon-r")
+            .enable_all()
+            .build()
+            .expect("failed to start the tokio runtime")
+    })
+}
+
+type RResult<T> = std::result::Result<T, RError>;
+
+/// Why a call failed. Becomes the `value` of the condition R receives, which
+/// `koon_unwrap()` in `R/koon.R` raises.
+enum RError {
+    /// A koon error: its code (`koon_core::Error::code()`, `INVALID_ARGUMENT`
+    /// for bad arguments), message and, for a request's transport failure,
+    /// phase.
+    Koon {
+        code: &'static str,
+        message: String,
+        phase: Option<&'static str>,
+    },
+    /// The condition an R callback raised; R re-raises it unchanged.
+    Callback(Robj),
+    /// The user pressed Ctrl-C / Esc during a request; R delivers the
+    /// interrupt once every Rust frame has returned.
+    Interrupt,
+}
+
+impl RError {
+    fn invalid(message: impl Into<String>) -> Self {
+        RError::Koon {
+            code: "INVALID_ARGUMENT",
+            message: message.into(),
+            phase: None,
+        }
+    }
+
+    fn internal(message: impl Into<String>) -> Self {
+        RError::Koon {
+            code: "INTERNAL_ERROR",
+            message: message.into(),
+            phase: None,
+        }
+    }
+}
+
+impl From<koon_core::Error> for RError {
+    fn from(e: koon_core::Error) -> Self {
+        RError::Koon {
+            code: e.code(),
+            message: e.to_string(),
+            phase: e.phase().map(koon_core::Phase::as_str),
+        }
+    }
+}
+
+impl From<RError> for Robj {
+    fn from(e: RError) -> Robj {
+        match e {
+            RError::Koon {
+                code,
+                message,
+                phase,
+            } => {
+                let phase = phase.map_or_else(|| Robj::from(()), Robj::from);
+                list!(code = code, message = message, phase = phase).into()
+            }
+            RError::Callback(condition) => list!(condition = condition).into(),
+            RError::Interrupt => list!(interrupt = true).into(),
+        }
+    }
+}
+
+extern "C" {
+    fn R_ToplevelExec(fun: Option<unsafe extern "C" fn(*mut c_void)>, data: *mut c_void) -> c_int;
+    fn R_CheckUserInterrupt();
+    fn Rf_onintr();
+}
+
+unsafe extern "C" fn check_user_interrupt(_data: *mut c_void) {
+    unsafe { R_CheckUserInterrupt() }
+}
+
+/// True if the user pressed Ctrl-C / Esc since the last check.
+fn interrupt_pending() -> bool {
+    unsafe { R_ToplevelExec(Some(check_user_interrupt), std::ptr::null_mut()) == 0 }
+}
+
+/// Raise the user interrupt that stopped a request.
+/// @noRd
+#[extendr]
+fn raise_interrupt() {
+    unsafe { Rf_onintr() }
+}
+
+/// An optional scalar argument; `NULL` (or `NA`) is `None`.
+fn opt<T>(x: &Robj, name: &str, expected: &str) -> RResult<Option<T>>
+where
+    for<'a> Option<T>: TryFrom<&'a Robj>,
+{
+    Option::<T>::try_from(x).map_err(|_| RError::invalid(format!("`{name}` must be {expected}")))
+}
+
+fn opt_string(x: &Robj, name: &str) -> RResult<Option<String>> {
+    opt(x, name, "a single string")
+}
+
+fn string(x: &Robj, name: &str) -> RResult<String> {
+    opt_string(x, name)?.ok_or_else(|| RError::invalid(format!("`{name}` must be a single string")))
+}
+
+/// A character vector without `NA`s.
+fn strings(x: &Robj, name: &str) -> RResult<Vec<String>> {
+    let invalid = || RError::invalid(format!("`{name}` must be a character vector without NA"));
+    Strings::try_from(x)
+        .map_err(|_| invalid())?
+        .iter()
+        .map(|s| {
+            if s.is_na() {
+                Err(invalid())
+            } else {
+                Ok(s.to_string())
+            }
+        })
+        .collect()
+}
+
+/// Headers as a named character vector, e.g. `c(Accept = "text/html")`,
+/// or a named list of single strings, e.g. `list(Accept = "text/html")`,
+/// kept in order: header order is part of a browser's fingerprint. A name
+/// may repeat; the last value is sent.
+fn headers(x: &Robj, name: &str) -> RResult<Vec<(String, String)>> {
+    if x.is_null() {
+        return Ok(Vec::new());
+    }
+    let invalid = || {
+        RError::invalid(format!(
+            "`{name}` must be a named character vector or a named list of strings, \
+             e.g. c(Accept = \"text/html\")"
+        ))
+    };
+    let values: Vec<String> = if let Ok(list) = List::try_from(x) {
+        list.values()
+            .map(|value| match <&str>::try_from(&value) {
+                Ok(text) if !value.is_na() => Ok(text.to_string()),
+                _ => Err(invalid()),
+            })
+            .collect::<RResult<_>>()?
+    } else {
+        let strings = Strings::try_from(x).map_err(|_| invalid())?;
+        strings
+            .iter()
+            .map(|value| {
+                if value.is_na() {
+                    Err(invalid())
+                } else {
+                    Ok(value.to_string())
+                }
+            })
+            .collect::<RResult<_>>()?
+    };
+    if values.is_empty() {
+        return Ok(Vec::new());
+    }
+    let names = x.names().ok_or_else(invalid)?;
+    names
+        .zip(values)
+        .map(|(name, value)| {
+            if name.is_empty() || name.is_na() {
+                Err(invalid())
+            } else {
+                Ok((name.to_string(), value))
+            }
+        })
+        .collect()
+}
+
+/// A request body: a single string or a raw vector.
+fn body(x: &Robj) -> RResult<Option<Vec<u8>>> {
+    if x.is_null() {
+        return Ok(None);
+    }
+    if let Some(bytes) = x.as_raw_slice() {
+        return Ok(Some(bytes.to_vec()));
+    }
+    <&str>::try_from(x)
+        .map(|s| Some(s.as_bytes().to_vec()))
+        .map_err(|_| RError::invalid("`body` must be a single string or a raw vector"))
+}
+
+fn callback(x: Robj, name: &str) -> RResult<Option<Robj>> {
+    if x.is_null() {
+        Ok(None)
+    } else if x.is_function() {
+        Ok(Some(x))
+    } else {
+        Err(RError::invalid(format!(
+            "`{name}` must be a function or NULL"
+        )))
+    }
+}
+
+/// Named options (`list(name = value, ...)`, which the R functions in
+/// `R/koon.R` build) as the core's [`Options`] for `scope`, and the
+/// callbacks among them, which run on the R thread instead of in the core.
+fn read_options(scope: Scope, options: &Robj) -> RResult<(Options, Callbacks)> {
+    let mut read = Options::new(scope, Target::R);
+    let mut callbacks = Callbacks::default();
+    if options.is_null() {
+        return Ok((read, callbacks));
+    }
+    let list =
+        List::try_from(options).map_err(|_| RError::invalid("the options must be a named list"))?;
+    for (key, value) in list.iter() {
+        let spec = read.spec(key).map_err(option_error)?;
+        match spec.kind {
+            Kind::Hook(hook) => {
+                let f = callback(value, spec.name)?;
+                match hook {
+                    Hook::Request => callbacks.on_request = f,
+                    Hook::Response => callbacks.on_response = f,
+                    Hook::Redirect => callbacks.on_redirect = f,
+                }
+            }
+            kind => {
+                let value = r_value(&value, kind, spec.name)?;
+                read.set_option(spec, value).map_err(option_error)?;
+            }
+        }
+    }
+    Ok((read, callbacks))
+}
+
+fn option_error(error: OptionError) -> RError {
+    match error {
+        OptionError::Unknown(message) | OptionError::Type(message) => RError::invalid(message),
+        OptionError::Invalid(error) => error.into(),
+    }
+}
+
+/// An R value as the core's option [`Value`]: `NULL` and `NA` are unset, a
+/// value no option takes is [`Value::Other`], which the core reports with
+/// the type it expected.
+fn r_value(x: &Robj, kind: Kind, name: &str) -> RResult<Value> {
+    if x.is_null() {
+        return Ok(Value::Null);
+    }
+    if kind == Kind::Headers {
+        return headers(x, name).map(Value::Pairs);
+    }
+    if let Some(bytes) = x.as_raw_slice() {
+        return Ok(Value::Bytes(bytes.to_vec()));
+    }
+    let scalar = x.len() == 1;
+    Ok(match x.rtype() {
+        Rtype::Logicals if scalar => Option::<bool>::try_from(x)
+            .ok()
+            .flatten()
+            .map_or(Value::Null, Value::Bool),
+        Rtype::Integers if scalar => Option::<i32>::try_from(x)
+            .ok()
+            .flatten()
+            .map_or(Value::Null, |n| Value::Int(n.into())),
+        Rtype::Doubles if scalar => Option::<f64>::try_from(x)
+            .ok()
+            .flatten()
+            .map_or(Value::Null, Value::Float),
+        Rtype::Strings if scalar && x.is_na() => Value::Null,
+        Rtype::Strings => match strings(x, name) {
+            Ok(mut texts) if texts.len() == 1 => Value::Text(texts.remove(0)),
+            Ok(texts) => Value::Texts(texts),
+            Err(_) => Value::Other,
+        },
+        Rtype::List => match strings(x, name) {
+            Ok(texts) => Value::Texts(texts),
+            Err(_) => Value::Other,
+        },
+        _ => Value::Other,
+    })
+}
+
+/// A list's element by name.
+fn field(list: &List, name: &str) -> Option<Robj> {
+    list.iter()
+        .find(|(n, _)| *n == name)
+        .map(|(_, value)| value)
+}
+
+/// The value of a data frame column in one row (0-based). A column that is
+/// itself a data frame (what `jsonlite::fromJSON()` makes of CDP's
+/// `partitionKey` objects) gives a named list of its columns' values.
+fn cell(column: &Robj, row: usize) -> Option<Robj> {
+    if column.inherits("data.frame") {
+        let columns = List::try_from(column).ok()?;
+        let names: Vec<&str> = columns.iter().map(|(name, _)| name).collect();
+        let values = columns
+            .values()
+            .map(|nested| cell(&nested, row))
+            .collect::<Option<Vec<Robj>>>()?;
+        return List::from_names_and_values(names, values)
+            .ok()
+            .map(Robj::from);
+    }
+    column.index((row + 1) as i32).ok()
+}
+
+/// The rows of a data frame: the length of any of its columns, or of the
+/// row names of a nested one.
+fn row_count(column: &Robj) -> usize {
+    if column.inherits("data.frame") {
+        List::try_from(column)
+            .ok()
+            .and_then(|columns| columns.values().next())
+            .map_or(0, |first| row_count(&first))
+    } else {
+        column.len()
+    }
+}
+
+/// Cookies in the Playwright/CDP shape: a data frame with one row per cookie
+/// (e.g. `jsonlite::fromJSON()` of Playwright's `cookies()`), or a list of
+/// named lists. Fields the core does not know are ignored.
+fn cookie_params(cookies: &Robj) -> RResult<Vec<CookieParams>> {
+    let shape = || {
+        RError::invalid(
+            "`cookies` must be a data frame or a list of named lists with Playwright cookie fields",
+        )
+    };
+    let list = List::try_from(cookies).map_err(|_| shape())?;
+    if cookies.inherits("data.frame") {
+        let rows = list.values().next().map_or(0, |column| row_count(&column));
+        (0..rows)
+            .map(|row| {
+                cookie(row, |name| {
+                    field(&list, name)
+                        .map(|column| cell(&column, row).ok_or_else(shape))
+                        .transpose()
+                })
+            })
+            .collect()
+    } else {
+        list.values()
+            .enumerate()
+            .map(|(index, record)| {
+                let record = List::try_from(&record).map_err(|_| shape())?;
+                cookie(index, |name| Ok(field(&record, name)))
+            })
+            .collect()
+    }
+}
+
+/// One cookie, reading its fields with `get`. `index` (0-based, like the
+/// core's own cookie errors) names it in error messages.
+fn cookie(index: usize, get: impl Fn(&str) -> RResult<Option<Robj>>) -> RResult<CookieParams> {
+    let invalid = |name: &str, expected: &str| RError::Koon {
+        code: "INVALID_ARGUMENT",
+        message: format!("cookie {index}: `{name}` must be {expected}"),
+        phase: None,
+    };
+    let text = |name: &str| -> RResult<Option<String>> {
+        get(name)?
+            .map_or(Ok(None), |x| Option::<String>::try_from(&x))
+            .map_err(|_| invalid(name, "a string"))
+    };
+    let flag = |name: &str| -> RResult<Option<bool>> {
+        get(name)?
+            .map_or(Ok(None), |x| Option::<bool>::try_from(&x))
+            .map_err(|_| invalid(name, "TRUE or FALSE"))
+    };
+    let required = |name: &str| text(name)?.ok_or_else(|| invalid(name, "given"));
+    Ok(CookieParams {
+        name: required("name")?,
+        value: required("value")?,
+        domain: text("domain")?,
+        path: text("path")?,
+        url: text("url")?,
+        expires: get("expires")?
+            .map_or(Ok(None), |x| Option::<f64>::try_from(&x))
+            .map_err(|_| invalid("expires", "a number"))?,
+        http_only: flag("httpOnly")?.unwrap_or(false),
+        secure: flag("secure")?.unwrap_or(false),
+        same_site: text("sameSite")?,
+        host_only: flag("hostOnly")?,
+        partition_key: if flag("partitionKeyOpaque")? == Some(true) {
+            Some(PartitionKey::Opaque)
+        } else {
+            let key = get("partitionKey")?;
+            let (site, ancestor) = match key.as_ref().map(List::try_from) {
+                Some(Ok(object)) => (
+                    field(&object, "topLevelSite"),
+                    field(&object, "hasCrossSiteAncestor"),
+                ),
+                _ => (key, get("_crHasCrossSiteAncestor")?),
+            };
+            let site = site
+                .map_or(Ok(None), |x| Option::<String>::try_from(&x))
+                .map_err(|_| invalid("partitionKey", "a string or a list with `topLevelSite`"))?;
+            let ancestor = ancestor
+                .map_or(Ok(None), |x| Option::<bool>::try_from(&x))
+                .map_err(|_| invalid("hasCrossSiteAncestor", "TRUE or FALSE"))?;
+            site.map(|top_level_site| PartitionKey::Site {
+                top_level_site,
+                cross_site_ancestor: ancestor.unwrap_or(false),
+            })
+        },
+    })
+}
+
+fn headers_data_frame(headers: &[(String, String)]) -> Robj {
+    let names: Vec<&str> = headers.iter().map(|(n, _)| n.as_str()).collect();
+    let values: Vec<&str> = headers.iter().map(|(_, v)| v.as_str()).collect();
+    data_frame!(name = names, value = values)
+}
+
+/// Media types whose bodies are never text.
+fn is_binary_media_type(content_type: &str) -> bool {
+    let essence = content_type
+        .split(';')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    let Some((kind, subtype)) = essence.split_once('/') else {
+        return false;
+    };
+    if subtype.ends_with("+xml") || subtype.ends_with("+json") {
+        return false;
+    }
+    matches!(kind, "image" | "audio" | "video" | "font")
+        || matches!(
+            essence.as_str(),
+            "application/octet-stream"
+                | "application/pdf"
+                | "application/zip"
+                | "application/gzip"
+                | "application/wasm"
+        )
+}
+
+/// The body as text, decoded with the Content-Type charset. `None` for a
+/// binary body: a binary media type, or a NUL character, which an R string
+/// cannot hold.
+fn body_text<'a>(body: &'a [u8], content_type: Option<&str>) -> Option<Cow<'a, str>> {
+    if content_type.is_some_and(is_binary_media_type) {
+        return None;
+    }
+    let text = decode_body_text(body, content_type);
+    (!text.contains('\0')).then_some(text)
+}
+
+fn string_or_null(value: Option<&str>) -> Robj {
+    value.map_or_else(|| ().into(), Robj::from)
+}
+
+fn response_to_list(resp: HttpResponse) -> List {
+    let content_type = resp
+        .headers
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
+        .map(|(_, v)| v.as_str());
+    let text = string_or_null(body_text(&resp.body, content_type).as_deref());
+    let content_type = string_or_null(content_type);
+    list!(
+        status = resp.status as i32,
+        status_code = resp.status as i32,
+        ok = (200..300).contains(&resp.status),
+        version = resp.version.as_str(),
+        url = resp.url.as_str(),
+        body = Raw::from_bytes(&resp.body),
+        text = text,
+        content_type = content_type,
+        headers = headers_data_frame(&resp.headers),
+        request_headers = headers_data_frame(&resp.request_headers),
+        bytes_sent = resp.bytes_sent as f64,
+        bytes_received = resp.bytes_received as f64,
+        tls_resumed = resp.tls_resumed,
+        connection_reused = resp.connection_reused,
+        remote_address = string_or_null(resp.remote_address.as_deref()),
+        blocked_by = string_or_null(resp.blocked_by())
+    )
+}
+
+/// A callback event raised from a core hook (on a tokio worker thread) and
+/// run on the R main thread. Each carries a reply channel: the core waits
+/// for the callback before it goes on, so that a failing `on_request` stops
+/// the request before it is sent. A reply that never comes (the callback
+/// failed, the user interrupted) fails the request.
+enum CallbackEvent {
+    Request {
+        method: String,
+        url: String,
+        reply: mpsc::Sender<()>,
+    },
+    Response {
+        status: u16,
+        url: String,
+        headers: Vec<(String, String)>,
+        reply: mpsc::Sender<()>,
+    },
+    Redirect {
+        status: u16,
+        url: String,
+        headers: Vec<(String, String)>,
+        reply: mpsc::Sender<bool>,
+    },
+}
+
+/// What a core hook fails with when its R callback failed: the R side keeps
+/// the condition and raises it, so this only ends the request.
+#[derive(Debug)]
+struct CallbackFailed;
+
+impl std::fmt::Display for CallbackFailed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("an R callback failed")
+    }
+}
+
+impl std::error::Error for CallbackFailed {}
+
+/// Send `event` to the R thread and wait for its reply.
+fn run_on_r_thread<T>(
+    tx: &UnboundedSender<CallbackEvent>,
+    event: impl FnOnce(mpsc::Sender<T>) -> CallbackEvent,
+) -> std::result::Result<T, koon_core::Error> {
+    let (reply, answer) = mpsc::channel();
+    tx.send(event(reply))
+        .ok()
+        .and_then(|()| tokio::task::block_in_place(|| answer.recv().ok()))
+        .ok_or_else(|| koon_core::Error::Hook(Box::new(CallbackFailed)))
+}
+
+/// What woke the R thread while a request runs.
+enum Step<T> {
+    Event(Option<CallbackEvent>),
+    Done(std::result::Result<T, JoinError>),
+    Tick,
+}
+
+/// The R callbacks of a client or of one request.
+#[derive(Clone, Default)]
+struct Callbacks {
+    on_request: Option<Robj>,
+    on_response: Option<Robj>,
+    on_redirect: Option<Robj>,
+}
+
+impl Callbacks {
+    /// These callbacks, each falling back to `client`'s.
+    fn or(self, client: &Callbacks) -> Callbacks {
+        Callbacks {
+            on_request: self.on_request.or_else(|| client.on_request.clone()),
+            on_response: self.on_response.or_else(|| client.on_response.clone()),
+            on_redirect: self.on_redirect.or_else(|| client.on_redirect.clone()),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.on_request.is_none() && self.on_response.is_none() && self.on_redirect.is_none()
+    }
+
+    /// Register these callbacks as per-request core hooks. The hooks forward
+    /// plain owned data through `tx` only: R values may only be touched on
+    /// the R main thread.
+    fn wire(&self, options: &mut RequestOptions, tx: &UnboundedSender<CallbackEvent>) {
+        if self.on_request.is_some() {
+            let tx = tx.clone();
+            options.on_request = Some(Arc::new(move |method: &str, url: &str| {
+                run_on_r_thread(&tx, |reply| CallbackEvent::Request {
+                    method: method.to_string(),
+                    url: url.to_string(),
+                    reply,
+                })
+            }));
+        }
+        if self.on_response.is_some() {
+            let tx = tx.clone();
+            options.on_response = Some(Arc::new(
+                move |status: u16, url: &str, headers: &[(String, String)]| {
+                    run_on_r_thread(&tx, |reply| CallbackEvent::Response {
+                        status,
+                        url: url.to_string(),
+                        headers: headers.to_vec(),
+                        reply,
+                    })
+                },
+            ));
+        }
+        if self.on_redirect.is_some() {
+            let tx = tx.clone();
+            options.on_redirect = Some(Arc::new(
+                move |status: u16, url: &str, headers: &[(String, String)]| {
+                    run_on_r_thread(&tx, |reply| CallbackEvent::Redirect {
+                        status,
+                        url: url.to_string(),
+                        headers: headers.to_vec(),
+                        reply,
+                    })
+                },
+            ));
+        }
+    }
+}
+
+/// `koon_run_callback()` from the package namespace, which runs an R
+/// callback and returns `list(value = ...)` or the condition that stopped it.
+fn callback_runner() -> RResult<Robj> {
+    let namespace = find_namespace("koon")
+        .map_err(|e| RError::internal(format!("koon namespace not found: {e}")))?;
+    sym!(koon_run_callback)
+        .eval_with_env(&namespace)
+        .ok()
+        .filter(Robj::is_function)
+        .ok_or_else(|| RError::internal("koon_run_callback() not found"))
+}
+
+/// Runs the callbacks of one request on the R main thread.
+struct CallbackRunner {
+    callbacks: Callbacks,
+    runner: Robj,
+}
+
+impl CallbackRunner {
+    /// Run the R callback `f` with `args` through `koon_run_callback()`.
+    fn run(&self, f: &Robj, args: &[Robj]) -> RResult<Robj> {
+        let call_args = std::iter::once(f).chain(args).map(|arg| ("", arg.clone()));
+        let result = self
+            .runner
+            .call(Pairlist::from_pairs(call_args.collect::<Vec<_>>()))
+            .map_err(|e| RError::internal(format!("an R callback could not be run: {e}")))?;
+        if result.inherits("interrupt") {
+            return Err(RError::Interrupt);
+        }
+        if result.inherits("error") {
+            return Err(RError::Callback(result));
+        }
+        List::try_from(&result)
+            .ok()
+            .and_then(|list| list.elt(0).ok())
+            .ok_or_else(|| RError::internal("an R callback returned an unexpected result"))
+    }
+
+    /// Run the R callback matching `event` and reply to the waiting hook.
+    /// On failure the reply channel is dropped unanswered, which fails the
+    /// request in the core.
+    fn dispatch(&self, event: CallbackEvent) -> RResult<()> {
+        match event {
+            CallbackEvent::Request { method, url, reply } => {
+                if let Some(f) = &self.callbacks.on_request {
+                    self.run(f, &[method.into(), url.into()])?;
+                }
+                let _ = reply.send(());
+            }
+            CallbackEvent::Response {
+                status,
+                url,
+                headers,
+                reply,
+            } => {
+                if let Some(f) = &self.callbacks.on_response {
+                    let args = [
+                        (status as i32).into(),
+                        url.into(),
+                        headers_data_frame(&headers),
+                    ];
+                    self.run(f, &args)?;
+                }
+                let _ = reply.send(());
+            }
+            CallbackEvent::Redirect {
+                status,
+                url,
+                headers,
+                reply,
+            } => {
+                let mut follow = true;
+                if let Some(f) = &self.callbacks.on_redirect {
+                    let args = [
+                        (status as i32).into(),
+                        url.into(),
+                        headers_data_frame(&headers),
+                    ];
+                    let answer = self.run(f, &args)?;
+                    follow = !matches!(bool::try_from(&answer), Ok(false));
+                }
+                let _ = reply.send(follow);
+            }
+        }
+        Ok(())
+    }
+}
+
+/// The main Koon HTTP client with browser fingerprint impersonation. The R
+/// documentation lives in `R/koon.R`.
+#[extendr]
+struct Koon {
+    client: Arc<Client>,
+    callbacks: Callbacks,
+}
+
+/// Drive `handle` to completion on the R main thread, running callbacks as
+/// their events arrive and checking for Ctrl-C / Esc every
+/// [`INTERRUPT_POLL`]. On an interrupt or a failing callback the task is
+/// aborted and `rx` dropped with the events still queued in it, so no
+/// callback runs after that and a waiting hook returns.
+fn poll_until_done<T: Send + 'static>(
+    mut handle: JoinHandle<T>,
+    mut rx: UnboundedReceiver<CallbackEvent>,
+    callbacks: Option<CallbackRunner>,
+) -> RResult<T> {
+    let mut events_open = true;
+    let mut next_check = Instant::now() + INTERRUPT_POLL;
+    loop {
+        let step = runtime().block_on(async {
+            tokio::select! {
+                biased;
+                event = rx.recv(), if events_open => Step::Event(event),
+                joined = &mut handle => Step::Done(joined),
+                () = tokio::time::sleep_until(next_check.into()) => Step::Tick,
+            }
+        });
+        match step {
+            Step::Done(joined) => {
+                return joined
+                    .map_err(|e| RError::internal(format!("the request task failed: {e}")));
+            }
+            Step::Event(Some(event)) => {
+                let dispatched = match &callbacks {
+                    Some(runner) => runner.dispatch(event),
+                    None => Ok(()),
+                };
+                if let Err(e) = dispatched {
+                    handle.abort();
+                    return Err(e);
+                }
+            }
+            Step::Event(None) => events_open = false,
+            Step::Tick => {}
+        }
+        if Instant::now() >= next_check {
+            if interrupt_pending() {
+                handle.abort();
+                return Err(RError::Interrupt);
+            }
+            next_check = Instant::now() + INTERRUPT_POLL;
+        }
+    }
+}
+
+#[extendr]
+impl Koon {
+    /// The options of `Koon$new()` in `R/koon.R`, as a named list.
+    fn new(
+        #[default = "\"chrome\""] browser: Robj,
+        #[default = "NULL"] options: Robj,
+    ) -> RResult<Self> {
+        let (mut read, callbacks) = read_options(Scope::Client, &options)?;
+        let browser = r_value(&browser, Kind::Browser, "browser")?;
+        read.set("browser", browser).map_err(option_error)?;
+        Ok(Koon {
+            client: Arc::new(read.client_builder()?.build()?),
+            callbacks,
+        })
+    }
+
+    /// Send a request and wait for the response, interruptibly. The HTTP
+    /// verbs (`get`, `post`, ...) are defined on top of this in R/koon.R,
+    /// which passes the options as a named list.
+    fn request(
+        &self,
+        method: Robj,
+        url: Robj,
+        #[default = "NULL"] body: Robj,
+        #[default = "NULL"] options: Robj,
+    ) -> RResult<List> {
+        let method = parse_method(&string(&method, "method")?)?;
+        let url = string(&url, "url")?;
+        let body = self::body(&body)?;
+        let (read, callbacks) = read_options(Scope::Request, &options)?;
+        let response = self.run(read, callbacks, move |client, options| async move {
+            client.send(method, &url, body, options).await
+        })?;
+        Ok(response_to_list(response))
+    }
+
+    /// Send a multipart/form-data POST; `$post_multipart()` in R/koon.R
+    /// passes the options as a named list.
+    fn post_multipart(
+        &self,
+        url: Robj,
+        fields: Robj,
+        #[default = "NULL"] options: Robj,
+    ) -> RResult<List> {
+        let url = string(&url, "url")?;
+        let form = multipart(&fields)?;
+        let (read, callbacks) = read_options(Scope::Request, &options)?;
+        let response = self.run(read, callbacks, move |client, options| async move {
+            client.post_multipart(&url, form, options).await
+        })?;
+        Ok(response_to_list(response))
+    }
+
+    /// Send a request and return once its head has arrived, the body behind
+    /// `stream`; `$request_streaming()` in R/koon.R passes the options as a
+    /// named list.
+    fn request_streaming(
+        &self,
+        method: Robj,
+        url: Robj,
+        #[default = "NULL"] body: Robj,
+        #[default = "NULL"] options: Robj,
+    ) -> RResult<List> {
+        let method = parse_method(&string(&method, "method")?)?;
+        let url = string(&url, "url")?;
+        let body = self::body(&body)?;
+        let (read, callbacks) = read_options(Scope::Stream, &options)?;
+        let decode = read.decode();
+        let mut response = self.run(read, callbacks, move |client, options| async move {
+            client.send_streaming(method, &url, body, options).await
+        })?;
+        if decode {
+            response.decode_content();
+        }
+        Ok(streaming_to_list(response))
+    }
+
+    /// Open a WebSocket connection, interruptibly.
+    fn websocket(&self, url: Robj, #[default = "NULL"] headers: Robj) -> RResult<KoonWebSocket> {
+        let url = string(&url, "url")?;
+        let headers = self::headers(&headers, "headers")?;
+        let client = Arc::clone(&self.client);
+        let ws = block_on_r(async move { client.websocket_with_headers(&url, headers).await })?;
+        Ok(KoonWebSocket { ws: Arc::new(ws) })
+    }
+
+    fn save_session_to_file(&self, path: Robj) -> RResult<()> {
+        Ok(self.client.save_session_to_file(&string(&path, "path")?)?)
+    }
+
+    fn load_session_from_file(&self, path: Robj) -> RResult<()> {
+        Ok(self
+            .client
+            .load_session_from_file(&string(&path, "path")?)?)
+    }
+
+    fn save_session(&self) -> RResult<String> {
+        Ok(self.client.save_session()?)
+    }
+
+    /// `json` may also be the lines of a saved file, as `readLines()` gives
+    /// them.
+    fn load_session(&self, json: Robj) -> RResult<()> {
+        Ok(self
+            .client
+            .load_session(&strings(&json, "json")?.join("\n"))?)
+    }
+
+    /// Import cookies in the Playwright/CDP shape; see `cookie_params()`.
+    /// Returns the skipped ones as a data frame: `index` (the row or element
+    /// of `cookies`, 1-based), `name` and `reason`.
+    fn set_cookies(&self, cookies: Robj) -> RResult<Robj> {
+        let skipped = self.client.set_cookie_params(cookie_params(&cookies)?)?;
+        Ok(data_frame!(
+            index = skipped
+                .iter()
+                .map(|s| i32::try_from(s.index + 1).unwrap_or(i32::MAX))
+                .collect::<Vec<i32>>(),
+            name = skipped
+                .iter()
+                .map(|s| s.name.as_str())
+                .collect::<Vec<&str>>(),
+            reason = skipped
+                .iter()
+                .map(|s| s.reason.as_str())
+                .collect::<Vec<&str>>()
+        ))
+    }
+
+    /// Every stored cookie as a data frame with Playwright's field names,
+    /// which `set_cookies()` takes back.
+    fn cookies(&self) -> Robj {
+        let cookies = self.client.cookie_params();
+        let text = |get: fn(&CookieParams) -> Option<&str>| -> Vec<&str> {
+            cookies.iter().map(|c| get(c).unwrap_or_default()).collect()
+        };
+        let mut same_site = Strings::new(cookies.len());
+        let mut partition_key = Strings::new(cookies.len());
+        for (i, c) in cookies.iter().enumerate() {
+            same_site.set_elt(i, Rstr::from(c.same_site.clone()));
+            let site = match &c.partition_key {
+                Some(PartitionKey::Site { top_level_site, .. }) => Some(top_level_site.clone()),
+                _ => None,
+            };
+            partition_key.set_elt(i, Rstr::from(site));
+        }
+        data_frame!(
+            name = text(|c| Some(&c.name)),
+            value = text(|c| Some(&c.value)),
+            domain = text(|c| c.domain.as_deref()),
+            path = text(|c| c.path.as_deref()),
+            expires = cookies
+                .iter()
+                .map(|c| c.expires.unwrap_or(-1.0))
+                .collect::<Vec<f64>>(),
+            httpOnly = cookies.iter().map(|c| c.http_only).collect::<Vec<bool>>(),
+            secure = cookies.iter().map(|c| c.secure).collect::<Vec<bool>>(),
+            sameSite = same_site,
+            hostOnly = cookies
+                .iter()
+                .map(|c| c.host_only.unwrap_or(false))
+                .collect::<Vec<bool>>(),
+            partitionKey = partition_key
+        )
+    }
+
+    fn export_profile(&self) -> RResult<String> {
+        self.client
+            .profile()
+            .to_json_pretty()
+            .map_err(|e| koon_core::Error::from(e).into())
+    }
+
+    fn total_bytes_sent(&self) -> f64 {
+        self.client.total_bytes_sent() as f64
+    }
+
+    fn total_bytes_received(&self) -> f64 {
+        self.client.total_bytes_received() as f64
+    }
+
+    fn reset_counters(&self) {
+        self.client.reset_counters();
+    }
+
+    fn user_agent(&self) -> Option<String> {
+        self.client.user_agent().map(str::to_string)
+    }
+
+    fn clear_cookies(&self) {
+        self.client.clear_cookies();
+    }
+
+    /// Close the pooled connections without waiting; the client stays
+    /// usable.
+    fn close(&self) {
+        self.client.close();
+    }
+
+    fn shutdown(&self) {
+        runtime().block_on(self.client.shutdown());
+    }
+}
+
+impl Koon {
+    /// Run a request built by `send` with `read`'s options and the request's
+    /// callbacks (each falling back to the client's), interruptibly.
+    fn run<T, Fut>(
+        &self,
+        read: Options,
+        callbacks: Callbacks,
+        send: impl FnOnce(Arc<Client>, RequestOptions) -> Fut,
+    ) -> RResult<T>
+    where
+        Fut:
+            std::future::Future<Output = std::result::Result<T, koon_core::Error>> + Send + 'static,
+        T: Send + 'static,
+    {
+        let mut options = read.request_options();
+        let callbacks = callbacks.or(&self.callbacks);
+        let (tx, rx) = unbounded_channel();
+        callbacks.wire(&mut options, &tx);
+        drop(tx);
+        let runner = if callbacks.is_empty() {
+            None
+        } else {
+            Some(CallbackRunner {
+                callbacks,
+                runner: callback_runner()?,
+            })
+        };
+        let handle = runtime().spawn(send(Arc::clone(&self.client), options));
+        Ok(poll_until_done(handle, rx, runner)??)
+    }
+}
+
+/// Run `future` on the runtime and wait for it on the R thread,
+/// interruptibly (no callbacks).
+fn block_on_r<T: Send + 'static>(
+    future: impl std::future::Future<Output = std::result::Result<T, koon_core::Error>> + Send + 'static,
+) -> RResult<T> {
+    let (tx, rx) = unbounded_channel();
+    drop(tx);
+    Ok(poll_until_done(runtime().spawn(future), rx, None)??)
+}
+
+/// The fields of `$post_multipart()`: a list of named lists, each with
+/// `name` and either `value` (text) or `file_data` (a raw vector), plus an
+/// optional `filename` and `content_type` for a file.
+fn multipart(fields: &Robj) -> RResult<Multipart> {
+    let list = List::try_from(fields)
+        .map_err(|_| RError::invalid("`fields` must be a list of named lists"))?;
+    list.values()
+        .enumerate()
+        .try_fold(Multipart::new(), |form, (index, field)| {
+            let number = index + 1;
+            let field = List::try_from(&field)
+                .map_err(|_| RError::invalid(format!("field {number} must be a named list")))?;
+            let get = |name: &str| self::field(&field, name).unwrap_or_else(|| ().into());
+            let name = string(&get("name"), "name")
+                .map_err(|_| RError::invalid(format!("field {number} needs a `name`")))?;
+            let value = opt_string(&get("value"), "value")?;
+            let file_data = get("file_data");
+            let file_data = if file_data.is_null() {
+                None
+            } else {
+                Some(
+                    file_data
+                        .as_raw_slice()
+                        .map(<[u8]>::to_vec)
+                        .ok_or_else(|| {
+                            RError::invalid(format!(
+                                "field '{name}': `file_data` must be a raw vector"
+                            ))
+                        })?,
+                )
+            };
+            match (file_data, value) {
+                (Some(_), Some(_)) => Err(RError::invalid(format!(
+                    "field '{name}' must have either `value` (text) or `file_data` (raw), not both"
+                ))),
+                (Some(data), None) => Ok(form.file(
+                    name,
+                    opt_string(&get("filename"), "filename")?.unwrap_or_else(|| "file".into()),
+                    opt_string(&get("content_type"), "content_type")?
+                        .unwrap_or_else(|| "application/octet-stream".into()),
+                    data,
+                )),
+                (None, Some(value)) => Ok(form.text(name, value)),
+                (None, None) => Err(RError::invalid(format!(
+                    "field '{name}' must have either `value` (text) or `file_data` (raw)"
+                ))),
+            }
+        })
+}
+
+/// A streaming response's head as an R list, with its body behind `stream`.
+fn streaming_to_list(resp: koon_core::StreamingResponse) -> List {
+    let content_type = resp
+        .headers
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
+        .map(|(_, v)| v.clone());
+    list!(
+        status = resp.status as i32,
+        status_code = resp.status as i32,
+        ok = (200..300).contains(&resp.status),
+        version = resp.version.as_str(),
+        url = resp.url.as_str(),
+        content_type = string_or_null(content_type.as_deref()),
+        headers = headers_data_frame(&resp.headers),
+        request_headers = headers_data_frame(&resp.request_headers),
+        tls_resumed = resp.tls_resumed,
+        connection_reused = resp.connection_reused,
+        remote_address = string_or_null(resp.remote_address.as_deref()),
+        stream = Robj::from(KoonStream {
+            response: Arc::new(tokio::sync::Mutex::new(Some(resp))),
+        })
+    )
+}
+
+/// The body of a streaming response, read chunk by chunk. The R
+/// documentation lives in `R/koon.R`.
+#[extendr]
+struct KoonStream {
+    response: Arc<tokio::sync::Mutex<Option<koon_core::StreamingResponse>>>,
+}
+
+fn stream_consumed() -> koon_core::Error {
+    koon_core::Error::Body(
+        "the response body was already read by $collect() or cancelled".into(),
+        None,
+    )
+}
+
+#[extendr]
+impl KoonStream {
+    /// The next chunk of the body as a raw vector, or `NULL` at its end.
+    fn next_chunk(&self) -> RResult<Robj> {
+        let response = Arc::clone(&self.response);
+        let chunk = block_on_r(async move {
+            let mut guard = response.lock().await;
+            let response = guard.as_mut().ok_or_else(stream_consumed)?;
+            response.next_chunk().await.transpose()
+        })?;
+        Ok(chunk.map_or_else(|| ().into(), |chunk| Raw::from_bytes(&chunk).into()))
+    }
+
+    /// The rest of the body as one raw vector.
+    fn collect(&self) -> RResult<Raw> {
+        let response = Arc::clone(&self.response);
+        let body = block_on_r(async move {
+            let mut guard = response.lock().await;
+            let mut response = guard.take().ok_or_else(stream_consumed)?;
+            response.collect_body().await
+        })?;
+        Ok(Raw::from_bytes(&body))
+    }
+
+    /// Drop the rest of the body without reading it.
+    fn cancel(&self) {
+        drop(self.response.blocking_lock().take());
+    }
+}
+
+/// A WebSocket connection. The R documentation lives in `R/koon.R`.
+#[extendr]
+struct KoonWebSocket {
+    ws: Arc<koon_core::WebSocket>,
+}
+
+#[extendr]
+impl KoonWebSocket {
+    /// Send a single string as a text message or a raw vector as a binary one.
+    fn send(&self, data: Robj) -> RResult<()> {
+        let ws = Arc::clone(&self.ws);
+        if let Some(bytes) = data.as_raw_slice() {
+            let bytes = bytes.to_vec();
+            return block_on_r(async move { ws.send_binary(&bytes).await });
+        }
+        let text = string(&data, "data")
+            .map_err(|_| RError::invalid("`data` must be a single string or a raw vector"))?;
+        block_on_r(async move { ws.send_text(&text).await })
+    }
+
+    /// The next message as `list(type = "text" or "binary", data = ...)`, or
+    /// `NULL` once the connection is closed.
+    fn receive(&self) -> RResult<Robj> {
+        let ws = Arc::clone(&self.ws);
+        let message = block_on_r(async move { ws.receive().await })?;
+        let (kind, data): (&str, Robj) = match message {
+            Some(WsMessage::Text(text)) => ("text", text.into()),
+            Some(WsMessage::Binary(bytes)) => ("binary", Raw::from_bytes(&bytes).into()),
+            None => return Ok(().into()),
+        };
+        List::from_names_and_values(["type", "data"], [Robj::from(kind), data])
+            .map(Into::into)
+            .map_err(|e| RError::internal(format!("a message could not be converted: {e}")))
+    }
+
+    /// Close the connection with an optional close code (0-65535) and reason.
+    fn close(
+        &self,
+        #[default = "NULL"] code: Robj,
+        #[default = "NULL"] reason: Robj,
+    ) -> RResult<()> {
+        let code = opt::<f64>(&code, "code", "a close code from 0 to 65535")?
+            .map(|code| {
+                if code.fract() == 0.0 && (0.0..=65535.0).contains(&code) {
+                    Ok(code as u16)
+                } else {
+                    Err(RError::invalid(format!(
+                        "`code` must be a close code from 0 to 65535, not {code}"
+                    )))
+                }
+            })
+            .transpose()?;
+        let reason = opt_string(&reason, "reason")?;
+        let ws = Arc::clone(&self.ws);
+        block_on_r(async move { ws.close(code, reason).await })
+    }
+}
+
+type RunningProxy = Arc<std::sync::Mutex<Option<koon_core::ProxyServer>>>;
+
+/// Every proxy started and not shut down yet: a server stops once dropped,
+/// and a `KoonProxy` R's garbage collector takes must not take its server
+/// with it.
+static RUNNING_PROXIES: std::sync::Mutex<Vec<RunningProxy>> = std::sync::Mutex::new(Vec::new());
+
+/// A local MITM proxy. The R documentation lives in `R/koon.R`.
+#[extendr]
+struct KoonProxy {
+    server: RunningProxy,
+    port: u16,
+    url: String,
+    ca_cert_path: String,
+    ca_cert_pem: Vec<u8>,
+}
+
+#[extendr]
+impl KoonProxy {
+    /// The options of `KoonProxy$start()` in `R/koon.R`, as a named list.
+    fn start(#[default = "NULL"] options: Robj) -> RResult<Self> {
+        let (read, _) = read_options(Scope::Proxy, &options)?;
+        let config = read.proxy_config()?;
+        let server = runtime().block_on(koon_core::ProxyServer::start(config))?;
+        let proxy = KoonProxy {
+            port: server.port(),
+            url: server.url(),
+            ca_cert_path: server.ca_cert_path().to_string_lossy().into_owned(),
+            ca_cert_pem: server.ca_cert_pem()?,
+            server: Arc::new(std::sync::Mutex::new(Some(server))),
+        };
+        RUNNING_PROXIES
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(Arc::clone(&proxy.server));
+        Ok(proxy)
+    }
+
+    fn port(&self) -> i32 {
+        i32::from(self.port)
+    }
+
+    fn url(&self) -> String {
+        self.url.clone()
+    }
+
+    fn ca_cert_path(&self) -> String {
+        self.ca_cert_path.clone()
+    }
+
+    fn ca_cert_pem(&self) -> Raw {
+        Raw::from_bytes(&self.ca_cert_pem)
+    }
+
+    /// Stop accepting and close every open connection. Calling it again
+    /// does nothing.
+    fn shutdown(&self) {
+        RUNNING_PROXIES
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .retain(|running| !Arc::ptr_eq(running, &self.server));
+        let server = self
+            .server
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some(server) = server {
+            let _guard = runtime().enter();
+            server.shutdown();
+        }
+    }
+}
+
+/// A JSON value as R data: objects become named lists, arrays lists.
+fn json_to_robj(value: &serde_json::Value) -> Robj {
+    use serde_json::Value as Json;
+    match value {
+        Json::Null => ().into(),
+        Json::Bool(b) => (*b).into(),
+        Json::Number(n) => n.as_f64().unwrap_or(f64::NAN).into(),
+        Json::String(s) => s.as_str().into(),
+        Json::Array(items) => List::from_values(items.iter().map(json_to_robj)).into(),
+        Json::Object(map) => {
+            List::from_names_and_values(map.keys(), map.values().map(json_to_robj))
+                .map_or_else(|_| ().into(), Into::into)
+        }
+    }
+}
+
+/// The fingerprint self-test of `koon_core::verify` for `koon_verify()` in
+/// `R/koon.R`: the report as a named list.
+/// @noRd
+#[extendr]
+fn verify_report(browser: Robj, #[default = "NULL"] options: Robj) -> RResult<Robj> {
+    let (mut read, _) = read_options(Scope::Verify, &options)?;
+    let browser = r_value(&browser, Kind::Browser, "browser")?;
+    read.set("browser", browser).map_err(option_error)?;
+    let report = block_on_r(koon_core::verify::verify_options(read))?;
+    let json: serde_json::Value = serde_json::from_str(&report.to_json())
+        .map_err(|e| RError::internal(format!("the report did not parse: {e}")))?;
+    Ok(json_to_robj(&json))
+}
+
+/// `koon_core::blocked_by` for `koon_blocked_by()` in `R/koon.R`.
+/// @noRd
+#[extendr]
+fn blocked_by_parts(status: Robj, headers: Robj, body: Robj, url: Robj) -> RResult<Robj> {
+    let status = opt::<f64>(&status, "status", "an HTTP status")?
+        .filter(|status| status.fract() == 0.0 && (100.0..=999.0).contains(status))
+        .ok_or_else(|| RError::invalid("`status` must be an HTTP status"))? as u16;
+    let headers = self::headers(&headers, "headers")?;
+    let body = self::body(&body)?.unwrap_or_default();
+    let url = string(&url, "url")?;
+    Ok(string_or_null(koon_core::blocked_by(
+        status, &headers, &body, &url,
+    )))
+}
+
+/// List all available browser profile names
+///
+/// One name per profile: every browser version on every OS it has a profile
+/// for, e.g. `"chrome154-windows"`, `"safari266-ios"` or `"okhttp5"`. Names
+/// without a version select the latest one (`"chrome-macos"`); without an
+/// OS, desktop profiles impersonate Windows, Safari macOS (`"firefox154"`).
+///
+/// @return A character vector of browser profile names.
+/// @export
+#[extendr]
+fn koon_browsers() -> Vec<String> {
+    BrowserProfile::names()
+        .map(|profile| profile.name)
+        .collect()
+}
+
+extendr_module! {
+    mod koon;
+    impl Koon;
+    impl KoonStream;
+    impl KoonWebSocket;
+    impl KoonProxy;
+    fn koon_browsers;
+    fn verify_report;
+    fn blocked_by_parts;
+    fn raise_interrupt;
+}

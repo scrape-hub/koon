@@ -1,0 +1,25 @@
+[package]
+name = "koon-r"
+version = "0.5.6"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["rlib", "staticlib"]
+
+[[bin]]
+name = "document"
+path = "document.rs"
+
+[dependencies]
+extendr-api = { version = "0.8", features = ["result_condition"] }
+koon-core = { path = "vendor/koon-core", features = ["doh"] }
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "macros"] }
+serde_json = "1"
+
+[patch.crates-io]
+quinn = { git = "https://github.com/scrape-hub/quinn.git", tag = "koon-1.0.0" }
+quinn-proto = { git = "https://github.com/scrape-hub/quinn.git", tag = "koon-1.0.0" }
+quinn-udp = { git = "https://github.com/scrape-hub/quinn.git", tag = "koon-1.0.0" }
+h3 = { git = "https://github.com/scrape-hub/h3.git", tag = "koon-1.0.0" }
+h3-quinn = { git = "https://github.com/scrape-hub/h3.git", tag = "koon-1.0.0" }

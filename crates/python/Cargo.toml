@@ -1,0 +1,19 @@
+[package]
+name = "koon-python"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "koon"
+crate-type = ["cdylib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+koon-core = { path = "../core", features = ["doh"] }
+pyo3 = { version = "0.30", features = ["extension-module", "abi3-py311"] }
+pyo3-async-runtimes = { version = "0.30", features = ["tokio-runtime"] }
+tokio = { version = "1", features = ["sync", "time", "macros", "rt-multi-thread"] }

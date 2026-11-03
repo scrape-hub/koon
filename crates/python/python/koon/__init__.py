@@ -1,0 +1,213 @@
+"""koon: an HTTP client that impersonates browsers (TLS, HTTP/2, HTTP/3).
+
+``Koon`` (async) and ``KoonSync`` (blocking) share the native ``_Client``;
+their verbs only choose the method and how the call returns. The full API is
+documented in ``__init__.pyi``.
+"""
+
+import json as _json
+
+from koon._native import (
+    KoonProxy,
+    KoonResponse,
+    KoonStreamingResponse,
+    KoonSyncStreamingResponse,
+    KoonSyncWebSocket,
+    KoonWebSocket,
+    _Client,
+    _Mode,
+    _blocked_by,
+    _verify,
+    __version__,
+    browsers,
+)
+
+__all__ = [
+    "Koon",
+    "KoonSync",
+    "KoonResponse",
+    "KoonStreamingResponse",
+    "KoonSyncStreamingResponse",
+    "KoonWebSocket",
+    "KoonSyncWebSocket",
+    "KoonProxy",
+    "KoonError",
+    "KoonInvalidArgument",
+    "blocked_by",
+    "browsers",
+    "verify",
+]
+
+
+class KoonError(RuntimeError):
+    """Structured error raised by every failing koon operation.
+
+    Carries a machine-readable ``code`` (e.g. ``"TIMEOUT"``, ``"TLS_ERROR"``,
+    ``"INVALID_COOKIE"``) alongside the usual exception message, which has the
+    form ``"[CODE] description"``. Picklable: the code is parsed back from the
+    message. ``phase`` is how far a request got before a transport failure:
+    ``"connect"`` (nothing was sent), ``"request"`` (no response head yet) or
+    ``"body"``; ``None`` for other errors."""
+
+    phase = None
+
+    @property
+    def code(self):
+        message = str(self.args[0]) if self.args else ""
+        code, closed, _ = message[1:].partition("]")
+        return code if message.startswith("[") and closed else "UNKNOWN"
+
+
+class KoonInvalidArgument(KoonError, ValueError):
+    """An invalid argument value: a ``KoonError`` with code
+    ``INVALID_ARGUMENT`` that is also a ``ValueError``."""
+
+
+def verify(browser="chrome", **options):
+    """Check that koon still produces the real browser's fingerprint for the
+    profile ``browser``; returns the report as a dict (blocking). ``options``
+    are the connection options of ``Koon``."""
+    return _json.loads(_verify(browser, **options))
+
+
+def blocked_by(response, body):
+    """``KoonResponse.blocked_by`` for a response whose body the caller
+    reads: a streaming response, or one of the httpx and requests
+    transports. ``body`` is the decoded body or its first 400 KB."""
+    headers = response.headers
+    pairs = list(headers.items() if hasattr(headers, "items") else headers)
+    if isinstance(body, str):
+        body = body.encode()
+    elif not isinstance(body, bytes):
+        body = bytes(memoryview(body))
+    return _blocked_by(response.status_code, pairs, body, str(response.url))
+
+
+class Koon(_Client):
+    """Async HTTP client with browser fingerprint impersonation.
+
+    Hooks (``on_request``, ``on_response``, ``on_redirect``) run on a tokio
+    worker thread, not on the thread of the asyncio event loop.
+    """
+
+    __slots__ = ()
+
+    async def get(self, url, **options):
+        """Perform an HTTP GET request."""
+        return await self._request(_Mode.Await, "GET", url, **options)
+
+    async def post(self, url, body=None, **options):
+        """Perform an HTTP POST request."""
+        return await self._request(_Mode.Await, "POST", url, body, **options)
+
+    async def put(self, url, body=None, **options):
+        """Perform an HTTP PUT request."""
+        return await self._request(_Mode.Await, "PUT", url, body, **options)
+
+    async def delete(self, url, **options):
+        """Perform an HTTP DELETE request."""
+        return await self._request(_Mode.Await, "DELETE", url, **options)
+
+    async def patch(self, url, body=None, **options):
+        """Perform an HTTP PATCH request."""
+        return await self._request(_Mode.Await, "PATCH", url, body, **options)
+
+    async def head(self, url, **options):
+        """Perform an HTTP HEAD request."""
+        return await self._request(_Mode.Await, "HEAD", url, **options)
+
+    async def request(self, method, url, body=None, **options):
+        """Perform an HTTP request with any method (lowercase is uppercased)."""
+        return await self._request(_Mode.Await, method, url, body, **options)
+
+    async def post_multipart(self, url, fields, **options):
+        """Perform an HTTP POST request with a multipart/form-data body."""
+        return await self._request(_Mode.Await, "POST", url, None, fields, **options)
+
+    async def request_streaming(self, method, url, body=None, **options):
+        """Perform an HTTP request and return a KoonStreamingResponse; its
+        body is decoded (Content-Encoding) unless ``decode=False``."""
+        return await self._request(_Mode.Stream, method, url, body, **options)
+
+    async def websocket(self, url, headers=None):
+        """Open a WebSocket connection to a ws:// or wss:// URL."""
+        return await self._websocket(_Mode.Await, url, headers)
+
+    async def shutdown(self):
+        """Shut the client down as a browser does, e.g. before the program
+        exits: every HTTP/3 connection ends at once with the browser's close,
+        and the call returns once the closes have been sent (at most 300 ms)."""
+        await self._shutdown(_Mode.Await)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, traceback):
+        """Leaving ``async with`` shuts the client down (``shutdown()``)."""
+        await self.shutdown()
+
+
+class KoonSync(_Client):
+    """Blocking HTTP client with browser fingerprint impersonation.
+
+    Blocks on koon's own runtime with the GIL released, so it is safe to use
+    from many threads at once and from inside a running asyncio event loop
+    (e.g. Jupyter). Ctrl+C interrupts a request.
+    """
+
+    __slots__ = ()
+
+    def get(self, url, **options):
+        """Perform a blocking HTTP GET request."""
+        return self._request(_Mode.Block, "GET", url, **options)
+
+    def post(self, url, body=None, **options):
+        """Perform a blocking HTTP POST request."""
+        return self._request(_Mode.Block, "POST", url, body, **options)
+
+    def put(self, url, body=None, **options):
+        """Perform a blocking HTTP PUT request."""
+        return self._request(_Mode.Block, "PUT", url, body, **options)
+
+    def delete(self, url, **options):
+        """Perform a blocking HTTP DELETE request."""
+        return self._request(_Mode.Block, "DELETE", url, **options)
+
+    def patch(self, url, body=None, **options):
+        """Perform a blocking HTTP PATCH request."""
+        return self._request(_Mode.Block, "PATCH", url, body, **options)
+
+    def head(self, url, **options):
+        """Perform a blocking HTTP HEAD request."""
+        return self._request(_Mode.Block, "HEAD", url, **options)
+
+    def request(self, method, url, body=None, **options):
+        """Perform a blocking HTTP request with any method (lowercase is uppercased)."""
+        return self._request(_Mode.Block, method, url, body, **options)
+
+    def post_multipart(self, url, fields, **options):
+        """Perform a blocking HTTP POST request with a multipart/form-data body."""
+        return self._request(_Mode.Block, "POST", url, None, fields, **options)
+
+    def request_streaming(self, method, url, body=None, **options):
+        """Perform a blocking HTTP request and return a
+        KoonSyncStreamingResponse once the response head has arrived; its body
+        is decoded (Content-Encoding) unless ``decode=False``."""
+        return self._request(_Mode.BlockStream, method, url, body, **options)
+
+    def websocket(self, url, headers=None):
+        """Open a WebSocket connection to a ws:// or wss:// URL (blocking)."""
+        return self._websocket(_Mode.Block, url, headers)
+
+    def shutdown(self):
+        """Shut the client down as a browser does, e.g. before the program
+        exits: every HTTP/3 connection ends at once with the browser's close,
+        and the call returns once the closes have been sent (at most 300 ms)."""
+        self._shutdown(_Mode.Block)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Leaving ``with`` shuts the client down (``shutdown()``)."""
+        self.shutdown()

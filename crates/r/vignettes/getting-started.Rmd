@@ -1,0 +1,154 @@
+---
+title: "Getting Started with koon"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with koon}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+## Installation
+
+koon requires a Rust toolchain (rustc >= 1.85). Install from source:
+
+```{r}
+# install.packages("remotes")
+remotes::install_github("scrape-hub/koon", subdir = "crates/r")
+```
+
+## Your First Request
+
+Create a client with a browser profile and make a GET request:
+
+```{r}
+library(koon)
+
+client <- Koon$new("chrome")  # latest Chrome on Windows
+resp <- client$get("https://httpbin.org/get")
+
+resp$status   # 200
+resp$version  # "h2"
+resp$url      # final URL after redirects
+```
+
+## Response Structure
+
+Every response is an R list. The most important components:
+
+| Field          | Type       | Description                                          |
+|----------------|------------|------------------------------------------------------|
+| `status`       | integer    | HTTP status code (e.g. 200, 404)                     |
+| `ok`           | logical    | TRUE when status is 2xx (success)                    |
+| `version`      | character  | HTTP version: "HTTP/1.1", "h2" or "h3"               |
+| `url`          | character  | Final URL after redirects                            |
+| `body`         | raw        | Response body as raw bytes                           |
+| `text`         | character  | Body decoded as text, `NULL` for binary bodies       |
+| `content_type` | character  | Content-Type header, `NULL` if absent                |
+| `headers`      | data.frame | Two columns: `name` and `value`                      |
+
+`?Koon` lists all components.
+
+```{r}
+# Inspect response headers
+resp$headers
+#>              name                value
+#> 1    content-type     application/json
+#> 2  content-length                  523
+#> ...
+```
+
+`text` is decoded with the charset of the Content-Type header. Binary
+responses such as images have no text; use the raw `body`:
+
+```{r}
+img <- client$get("https://httpbin.org/image/png")
+is.null(img$text)            # TRUE
+writeBin(img$body, "image.png")
+```
+
+## POST Requests
+
+Send data with `$post()`. The body is a string or a raw vector:
+
+```{r}
+# POST a text body
+resp <- client$post("https://httpbin.org/post", "hello world")
+cat(resp$text)
+
+# POST JSON
+resp <- client$post("https://httpbin.org/post", '{"name": "koon"}',
+  headers = c("Content-Type" = "application/json"))
+
+# POST binary data
+resp <- client$post("https://httpbin.org/post", as.raw(c(0x01, 0x02, 0x03)))
+```
+
+## Parsing JSON Responses
+
+Use `jsonlite` to parse JSON response bodies:
+
+```{r}
+library(jsonlite)
+
+resp <- client$get("https://httpbin.org/get")
+data <- fromJSON(resp$text)
+data$headers$`User-Agent`
+```
+
+## Per-Request Headers
+
+Override or add headers for a single request without changing the client:
+
+```{r}
+resp <- client$get("https://httpbin.org/headers",
+  headers = c(Authorization = "Bearer my-token", "X-Custom" = "value"))
+cat(resp$text)
+```
+
+## Other HTTP Methods
+
+koon supports GET, POST, PUT, DELETE, PATCH and HEAD, and any other method
+through `$request()`:
+
+```{r}
+client$put("https://httpbin.org/put", "data")
+client$patch("https://httpbin.org/patch", "update")
+client$delete("https://httpbin.org/delete")
+client$head("https://httpbin.org/get")
+client$request("OPTIONS", "https://httpbin.org/get")
+```
+
+## Browser Profiles
+
+List the available profile names, one per profile (browser version and
+OS):
+
+```{r}
+head(koon_browsers())
+#> [1] "chrome131-windows" "chrome131-macos"   "chrome131-linux"
+#> [4] "chrome131-android" "chrome132-windows" "chrome132-macos"
+```
+
+A name without a version selects the latest one, which keeps your code
+current as koon adds new browser releases. Desktop profiles impersonate
+Windows (Safari: macOS) unless you add an OS: `"chrome-macos"`,
+`"firefox-linux"`, `"edge150-macos"`. Mobile profiles: `"chromemobile"`,
+`"firefoxmobile"` (Android) and `"safarimobile"` (iOS).
+
+Each profile reproduces the exact TLS, HTTP/2 and header fingerprint of that
+browser version:
+
+```{r}
+# Firefox profile
+ff <- Koon$new("firefox")
+resp <- ff$get("https://tls.browserleaks.com/json")
+cat(resp$text)  # shows JA3/JA4 fingerprint matching real Firefox
+
+# Safari profile
+safari <- Koon$new("safari")
+resp <- safari$get("https://httpbin.org/get")
+```

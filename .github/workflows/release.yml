@@ -1,0 +1,956 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+    branches: ["release/**"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (e.g. v0.5.3)"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  licenses:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-about
+        run: |
+          curl -sSL https://github.com/EmbarkStudios/cargo-about/releases/download/0.9.2/cargo-about-0.9.2-x86_64-unknown-linux-musl.tar.gz \
+            | tar -xz --strip-components=1 -C ~/.cargo/bin cargo-about-0.9.2-x86_64-unknown-linux-musl/cargo-about
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      - name: Vendor koon-core for the R crate
+        working-directory: crates/r
+        run: Rscript bootstrap.R
+
+      - name: Generate notices
+        run: |
+          for crate in node python cli; do
+            mkdir -p "notices/$crate"
+            cargo about generate --fail -m "crates/$crate/Cargo.toml" \
+              -o "notices/$crate/THIRD-PARTY-LICENSES.md" about.hbs
+          done
+          mkdir -p notices/r
+          cargo about generate --fail -c about.toml -m crates/r/src/rust/Cargo.toml \
+            -o notices/r/THIRD-PARTY-LICENSES.md about.hbs
+
+      - name: Upload node notices
+        uses: actions/upload-artifact@v7
+        with:
+          name: licenses-node
+          path: notices/node/THIRD-PARTY-LICENSES.md
+
+      - name: Upload python notices
+        uses: actions/upload-artifact@v7
+        with:
+          name: licenses-python
+          path: notices/python/THIRD-PARTY-LICENSES.md
+
+      - name: Upload CLI notices
+        uses: actions/upload-artifact@v7
+        with:
+          name: licenses-cli
+          path: notices/cli/THIRD-PARTY-LICENSES.md
+
+      - name: Upload R notices
+        uses: actions/upload-artifact@v7
+        with:
+          name: licenses-r
+          path: notices/r/THIRD-PARTY-LICENSES.md
+
+  build-node-windows:
+    strategy:
+      matrix:
+        include:
+          - runner: windows-latest
+            triple: x86_64-pc-windows-msvc
+            arch: x64
+          - runner: windows-11-arm
+            triple: aarch64-pc-windows-msvc
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.triple }}
+
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - uses: ./.github/actions/setup-windows
+        with:
+          arch: ${{ matrix.arch }}
+
+      - name: Build
+        run: cargo build --release -p koon-node --target ${{ matrix.triple }}
+
+      - name: Rename node binary
+        shell: bash
+        run: |
+          cp "target/${{ matrix.triple }}/release/koon_node.dll" \
+             "crates/node/koon.win32-${{ matrix.arch }}-msvc.node"
+
+      - name: Upload node artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: node-${{ matrix.triple }}
+          path: crates/node/koon.win32-${{ matrix.arch }}-msvc.node
+
+  build-node-linux:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            triple: x86_64-unknown-linux-gnu
+            arch: x64
+          - runner: ubuntu-24.04-arm
+            triple: aarch64-unknown-linux-gnu
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Build
+        uses: ./.github/actions/build-manylinux
+        with:
+          args: -p koon-node
+
+      - name: Rename node binary
+        run: cp target/release/libkoon_node.so "crates/node/koon.linux-${{ matrix.arch }}-gnu.node"
+
+      - name: Upload node artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: node-${{ matrix.triple }}
+          path: crates/node/koon.linux-${{ matrix.arch }}-gnu.node
+
+  build-linux-musl:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            triple: x86_64-unknown-linux-musl
+            arch: x64
+          - runner: ubuntu-24.04-arm
+            triple: aarch64-unknown-linux-musl
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: cargo build in Alpine
+        run: |
+          docker run --rm -v "$PWD":/io -w /io rust:1-alpine sh -euc '
+            apk add -q clang-dev cmake make g++ go perl linux-headers git
+            RUSTFLAGS="-C target-feature=-crt-static" cargo build --release -p koon-node
+            cargo build --release -p koon-cli --target ${{ matrix.triple }}
+          '
+
+      - name: Rename binaries
+        run: |
+          cp target/release/libkoon_node.so "crates/node/koon.linux-${{ matrix.arch }}-musl.node"
+          cp target/${{ matrix.triple }}/release/koon "koon-linux-${{ matrix.arch }}-musl"
+
+      - name: Upload node artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: node-${{ matrix.triple }}
+          path: crates/node/koon.linux-${{ matrix.arch }}-musl.node
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: cli-${{ matrix.triple }}
+          path: koon-linux-${{ matrix.arch }}-musl
+
+  build-node-macos-arm64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - name: Build
+        run: cargo build --release -p koon-node --target aarch64-apple-darwin
+
+      - name: Rename node binary
+        run: |
+          cp "target/aarch64-apple-darwin/release/libkoon_node.dylib" \
+             "crates/node/koon.darwin-arm64.node"
+
+      - name: Upload node artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: node-aarch64-apple-darwin
+          path: crates/node/koon.darwin-arm64.node
+
+  build-node-macos-x64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
+
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - name: Build
+        run: cargo build --release -p koon-node --target x86_64-apple-darwin
+
+      - name: Rename node binary
+        run: |
+          cp "target/x86_64-apple-darwin/release/libkoon_node.dylib" \
+             "crates/node/koon.darwin-x64.node"
+
+      - name: Upload node artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: node-x86_64-apple-darwin
+          path: crates/node/koon.darwin-x64.node
+
+  build-python-windows:
+    needs: licenses
+    strategy:
+      matrix:
+        include:
+          - runner: windows-latest
+            triple: x86_64-pc-windows-msvc
+            arch: x64
+          - runner: windows-11-arm
+            triple: aarch64-pc-windows-msvc
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Download license notices
+        uses: actions/download-artifact@v8
+        with:
+          name: licenses-python
+          path: crates/python/python/koon/
+
+      - uses: ./.github/actions/setup-windows
+        with:
+          arch: ${{ matrix.arch }}
+
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - uses: actions/setup-python@v7
+        id: py314t
+        with:
+          python-version: "3.14t"
+
+      - uses: actions/setup-python@v7
+        id: py315t
+        with:
+          python-version: "3.15t"
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.triple }}
+          args: --release --out dist --find-interpreter --manifest-path crates/python/Cargo.toml
+
+      - name: Build free-threaded wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.triple }}
+          args: --release --out dist --manifest-path crates/python/Cargo.toml -i "${{ steps.py314t.outputs.python-path }}" -i "${{ steps.py315t.outputs.python-path }}"
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v7
+        with:
+          name: wheels-${{ matrix.triple }}
+          path: dist/*.whl
+
+  build-python-linux:
+    needs: licenses
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: x86_64
+            triple: x86_64-unknown-linux-gnu
+            go-arch: amd64
+            manylinux: auto
+          - runner: ubuntu-24.04-arm
+            target: aarch64
+            triple: aarch64-unknown-linux-gnu
+            go-arch: arm64
+            manylinux: auto
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            triple: x86_64-unknown-linux-musl
+            go-arch: amd64
+            manylinux: musllinux_1_2
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            triple: aarch64-unknown-linux-musl
+            go-arch: arm64
+            manylinux: musllinux_1_2
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Download license notices
+        uses: actions/download-artifact@v8
+        with:
+          name: licenses-python
+          path: crates/python/python/koon/
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist --find-interpreter --manifest-path crates/python/Cargo.toml
+          before-script-linux: |
+            if command -v yum &>/dev/null; then
+              yum install -y llvm-toolset-7.0-clang-devel || yum install -y clang-devel || true
+              source /opt/rh/llvm-toolset-7.0/enable 2>/dev/null || true
+            elif command -v apt-get &>/dev/null; then
+              apt-get update && apt-get install -y libclang-dev
+            elif command -v apk &>/dev/null; then
+              apk add -q clang-dev
+            fi
+            curl -sL https://go.dev/dl/go1.24.1.linux-${{ matrix.go-arch }}.tar.gz | tar -C /usr/local -xzf -
+            export PATH=$PATH:/usr/local/go/bin
+          manylinux: ${{ matrix.manylinux }}
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v7
+        with:
+          name: wheels-${{ matrix.triple }}
+          path: dist/*.whl
+
+  build-python-macos-arm64:
+    needs: licenses
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Download license notices
+        uses: actions/download-artifact@v8
+        with:
+          name: licenses-python
+          path: crates/python/python/koon/
+
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - uses: actions/setup-python@v7
+        id: py314t
+        with:
+          python-version: "3.14t"
+
+      - uses: actions/setup-python@v7
+        id: py315t
+        with:
+          python-version: "3.15t"
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: aarch64-apple-darwin
+          args: --release --out dist --find-interpreter --manifest-path crates/python/Cargo.toml
+
+      - name: Build free-threaded wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: aarch64-apple-darwin
+          args: --release --out dist --manifest-path crates/python/Cargo.toml -i "${{ steps.py314t.outputs.python-path }}" -i "${{ steps.py315t.outputs.python-path }}"
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v7
+        with:
+          name: wheels-aarch64-apple-darwin
+          path: dist/*.whl
+
+  build-python-macos-x64:
+    needs: licenses
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Download license notices
+        uses: actions/download-artifact@v8
+        with:
+          name: licenses-python
+          path: crates/python/python/koon/
+
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - uses: actions/setup-python@v7
+        id: py314t
+        with:
+          python-version: "3.14t"
+
+      - uses: actions/setup-python@v7
+        id: py315t
+        with:
+          python-version: "3.15t"
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: x86_64-apple-darwin
+          args: --release --out dist --find-interpreter --manifest-path crates/python/Cargo.toml
+
+      - name: Build free-threaded wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: x86_64-apple-darwin
+          args: --release --out dist --manifest-path crates/python/Cargo.toml -i "${{ steps.py314t.outputs.python-path }}" -i "${{ steps.py315t.outputs.python-path }}"
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v7
+        with:
+          name: wheels-x86_64-apple-darwin
+          path: dist/*.whl
+
+  build-cli-windows:
+    strategy:
+      matrix:
+        include:
+          - runner: windows-latest
+            triple: x86_64-pc-windows-msvc
+            arch: x64
+          - runner: windows-11-arm
+            triple: aarch64-pc-windows-msvc
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.triple }}
+
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - uses: ./.github/actions/setup-windows
+        with:
+          arch: ${{ matrix.arch }}
+
+      - name: Build
+        run: cargo build --release -p koon-cli --target ${{ matrix.triple }}
+
+      - name: Rename CLI binary
+        shell: bash
+        run: cp "target/${{ matrix.triple }}/release/koon.exe" koon-windows-${{ matrix.arch }}.exe
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: cli-${{ matrix.triple }}
+          path: koon-windows-${{ matrix.arch }}.exe
+
+  build-cli-linux:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            triple: x86_64-unknown-linux-gnu
+            arch: x64
+          - runner: ubuntu-24.04-arm
+            triple: aarch64-unknown-linux-gnu
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Build
+        uses: ./.github/actions/build-manylinux
+        with:
+          args: -p koon-cli
+
+      - name: Rename CLI binary
+        run: cp target/release/koon "koon-linux-${{ matrix.arch }}"
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: cli-${{ matrix.triple }}
+          path: koon-linux-${{ matrix.arch }}
+
+  build-cli-macos-arm64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - name: Build
+        run: cargo build --release -p koon-cli --target aarch64-apple-darwin
+
+      - name: Rename CLI binary
+        run: cp "target/aarch64-apple-darwin/release/koon" koon-macos-arm64
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: cli-aarch64-apple-darwin
+          path: koon-macos-arm64
+
+  build-cli-macos-x64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
+
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - name: Build
+        run: cargo build --release -p koon-cli --target x86_64-apple-darwin
+
+      - name: Rename CLI binary
+        run: cp "target/x86_64-apple-darwin/release/koon" koon-macos-x64
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: cli-x86_64-apple-darwin
+          path: koon-macos-x64
+
+  build-r-windows:
+    needs: licenses
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Download license notices
+        uses: actions/download-artifact@v8
+        with:
+          name: licenses-r
+          path: crates/r/inst/
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - name: Install NASM
+        uses: ilammy/setup-nasm@v1
+        with:
+          version: "3.02"
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+
+      - uses: r-lib/actions/setup-pandoc@v2
+
+      - name: Install the vignette tools
+        shell: bash
+        run: Rscript -e 'install.packages(c("knitr", "rmarkdown"), repos = "https://cloud.r-project.org")'
+
+      - name: Build the binary package
+        shell: bash
+        run: |
+          (cd crates/r && Rscript bootstrap.R)
+          R CMD build crates/r
+          R CMD INSTALL --build koon_*.tar.gz
+
+      - name: Upload R package
+        uses: actions/upload-artifact@v7
+        with:
+          name: r-windows
+          path: koon_*.zip
+
+  build-r-macos:
+    needs: licenses
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Download license notices
+        uses: actions/download-artifact@v8
+        with:
+          name: licenses-r
+          path: crates/r/inst/
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+
+      - uses: r-lib/actions/setup-pandoc@v2
+
+      - name: Install the vignette tools
+        run: Rscript -e 'install.packages(c("knitr", "rmarkdown"), repos = "https://cloud.r-project.org")'
+
+      - name: Build the binary package
+        run: |
+          (cd crates/r && Rscript bootstrap.R)
+          R CMD build crates/r
+          R CMD INSTALL --build koon_*.tar.gz
+
+      - name: Upload R package
+        uses: actions/upload-artifact@v7
+        with:
+          name: r-macos-arm64
+          path: koon_*.tgz
+
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist --manifest-path crates/python/Cargo.toml
+
+      - name: Upload sdist
+        uses: actions/upload-artifact@v7
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+  smoke:
+    needs: [build-node-windows, build-node-linux, build-linux-musl, build-node-macos-arm64, build-node-macos-x64, build-python-windows, build-python-linux, build-python-macos-arm64, build-python-macos-x64, build-cli-windows, build-cli-linux, build-cli-macos-arm64, build-cli-macos-x64]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            node: linux-x64-gnu
+            wheel: manylinux*_x86_64
+            cli: koon-linux-x64
+            images: node:22 node:24 python:3.11-slim python:3.15-slim rockylinux:8
+          - runner: ubuntu-24.04-arm
+            node: linux-arm64-gnu
+            wheel: manylinux*_aarch64
+            cli: koon-linux-arm64
+            images: node:22 node:24 python:3.11-slim python:3.15-slim rockylinux:8
+          - runner: ubuntu-latest
+            node: linux-x64-musl
+            wheel: musllinux_1_2_x86_64
+            cli: koon-linux-x64-musl
+            images: node:22-alpine node:24-alpine python:3.11-alpine python:3.15-alpine
+          - runner: ubuntu-24.04-arm
+            node: linux-arm64-musl
+            wheel: musllinux_1_2_aarch64
+            cli: koon-linux-arm64-musl
+            images: node:22-alpine node:24-alpine python:3.11-alpine python:3.15-alpine
+          - runner: windows-latest
+            node: win32-x64-msvc
+            wheel: win_amd64
+            cli: koon-windows-x64.exe
+          - runner: windows-11-arm
+            node: win32-arm64-msvc
+            wheel: win_arm64
+            cli: koon-windows-arm64.exe
+          - runner: macos-latest
+            node: darwin-arm64
+            wheel: macosx*_arm64
+            cli: koon-macos-arm64
+          - runner: macos-15-intel
+            node: darwin-x64
+            wheel: macosx*_x86_64
+            cli: koon-macos-x64
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Download packages
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts/
+          merge-multiple: true
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install and run
+        run: bash .github/smoke/run.sh artifacts ${{ matrix.node }} '${{ matrix.wheel }}' ${{ matrix.cli }} ${{ matrix.images }}
+
+      - uses: actions/setup-python@v7
+        if: ${{ !matrix.images }}
+        with:
+          python-version: "3.14t"
+
+      - name: Install and run on free-threaded Python
+        if: ${{ !matrix.images }}
+        run: ONLY=python bash .github/smoke/run.sh artifacts ${{ matrix.node }} '${{ matrix.wheel }}' ${{ matrix.cli }}
+
+  publish-npm:
+    needs: [licenses, build-node-windows, build-node-linux, build-linux-musl, build-node-macos-arm64, build-node-macos-x64, smoke]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - name: Show npm version
+        run: npm --version
+
+      - name: Download node artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: node-*
+          path: artifacts/
+          merge-multiple: true
+
+      - name: List binaries
+        run: ls -la artifacts/
+
+      - name: Download license notices
+        uses: actions/download-artifact@v8
+        with:
+          name: licenses-node
+          path: notices/
+
+      - name: Publish platform packages
+        run: |
+          for dir in crates/node/npm/*/; do
+            cp "artifacts/koon.$(basename "$dir").node" "$dir"
+          done
+          for dir in crates/node/npm/*/; do
+            pkg=$(node -p "const p = require('./$dir/package.json'); p.name + '@' + p.version")
+            if [ -n "$(npm view "$pkg" version 2>/dev/null)" ]; then
+              echo "$pkg is already on npm"
+              continue
+            fi
+            echo "Publishing $pkg..."
+            cp notices/THIRD-PARTY-LICENSES.md "$dir"
+            npm publish "$dir" --access public
+          done
+
+      - name: Copy README into node package
+        run: cp README.md crates/node/README.md
+
+      - name: Publish main package
+        run: |
+          pkg=$(node -p "const p = require('./package.json'); p.name + '@' + p.version")
+          if [ -n "$(npm view "$pkg" version 2>/dev/null)" ]; then
+            echo "$pkg is already on npm"
+          else
+            npm publish --access public
+          fi
+        working-directory: crates/node
+
+  publish-pypi:
+    needs: [build-python-windows, build-python-linux, build-python-macos-arm64, build-python-macos-x64, sdist, smoke]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    environment: pypi
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: wheels-*
+          path: dist/
+          merge-multiple: true
+
+      - name: Download sdist
+        uses: actions/download-artifact@v8
+        with:
+          name: sdist
+          path: dist/
+
+      - name: List artifacts
+        run: ls -la dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          skip-existing: true
+
+  publish-github:
+    needs: [licenses, build-node-windows, build-node-linux, build-linux-musl, build-node-macos-arm64, build-node-macos-x64, build-python-windows, build-python-linux, build-python-macos-arm64, build-python-macos-x64, build-cli-windows, build-cli-linux, build-cli-macos-arm64, build-cli-macos-x64, build-r-windows, build-r-macos, sdist, smoke]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts/
+
+      - name: Collect release files
+        run: |
+          mkdir -p release-files
+          cp artifacts/node-*/*.node release-files/
+          cp artifacts/cli-*/* release-files/
+          cp artifacts/wheels-*/*.whl release-files/
+          cp artifacts/sdist/*.tar.gz release-files/
+          cp artifacts/r-*/* release-files/
+          cp artifacts/licenses-cli/THIRD-PARTY-LICENSES.md release-files/THIRD-PARTY-LICENSES-cli.md
+          cp artifacts/licenses-node/THIRD-PARTY-LICENSES.md release-files/THIRD-PARTY-LICENSES-node.md
+          ls -la release-files/
+
+      - name: Determine tag
+        id: tag
+        run: echo "name=${{ inputs.tag || github.ref_name }}" >> $GITHUB_OUTPUT
+
+      - name: Extract release notes
+        run: |
+          version="${{ steps.tag.outputs.name }}"
+          awk -v v="## [${version#v}]" 'index($0, v) == 1 {on = 1; next} on && /^## / {exit} on' CHANGELOG.md > notes.md
+          test -s notes.md || { echo "CHANGELOG.md has no section for $version"; exit 1; }
+
+      - name: Create GitHub Release with assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ steps.tag.outputs.name }}"
+          if ! existing=$(gh release view "$tag" --json assets --jq '.assets[].name' 2>/dev/null); then
+            gh release create "$tag" release-files/* --notes-file notes.md
+            exit 0
+          fi
+          for file in release-files/*; do
+            if ! grep -qxF "$(basename "$file")" <<< "$existing"; then
+              gh release upload "$tag" "$file"
+            fi
+          done

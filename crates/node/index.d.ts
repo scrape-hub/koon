@@ -1,0 +1,934 @@
+/**
+ * Browser profile name for impersonation.
+ *
+ * Format: `{browser}{version?}{-os?}`
+ * - browser: chrome, firefox, safari, edge, opera, brave, samsung, chrome-mobile, firefox-mobile,
+ *   safari-mobile, edge-mobile, brave-mobile, opera-mobile, okhttp
+ * - version: optional number (e.g. 145, 148)
+ * - os: optional suffix with dash (e.g. -windows, -macos, -linux, -android, -ios)
+ *
+ * Without a version, the latest one; without an OS, Windows (Safari: macOS).
+ *
+ * Examples: "chrome", "chrome152", "chrome152-macos", "firefox154-linux",
+ *           "chrome-mobile152", "firefox-mobile154", "safari-mobile266", "okhttp5"
+ */
+export type Browser =
+  | 'chrome' | 'firefox' | 'safari' | 'edge' | 'opera' | 'brave'
+  | 'chrome-mobile' | 'firefox-mobile' | 'safari-mobile' | 'edge-mobile' | 'brave-mobile'
+  | 'samsung' | 'opera-mobile'
+  | 'okhttp' | 'okhttp4' | 'okhttp5'
+  | (string & {});
+
+/** A header as a `{ name, value }` object; an array of these keeps duplicates (e.g. multiple Set-Cookie). */
+export interface KoonHeaderEntry {
+  name: string;
+  value: string;
+}
+
+/**
+ * The bot protection that answered instead of the page. `javascript` is a JavaScript
+ * challenge and `block-page` a block page of no known vendor, `consent` a cookie consent page.
+ */
+export type KoonBlockedBy =
+  | 'cloudflare'
+  | 'akamai'
+  | 'datadome'
+  | 'perimeterx'
+  | 'aws-waf'
+  | 'imperva'
+  | 'kasada'
+  | 'baleen'
+  | 'google'
+  | 'amazon'
+  | 'javascript'
+  | 'block-page'
+  | 'consent';
+
+/**
+ * Headers to send, in order: an object (insertion order), or `[name, value]`
+ * pairs: an array, a `Map`, a fetch `Headers` or any other iterable of pairs.
+ * A name given more than once is sent once, with the last value, at the
+ * position of its first occurrence. A pair that is not two strings throws
+ * `INVALID_ARGUMENT`.
+ */
+export type KoonHeadersInit = Record<string, string> | Iterable<readonly [string, string]>;
+
+/**
+ * Hook called before each HTTP request (including redirects). If it throws,
+ * the request is not sent and rejects with the thrown value itself.
+ * Hooks are synchronous: a returned Promise is not awaited.
+ */
+export type OnRequestHook = (method: string, url: string) => void;
+/**
+ * Hook called after each HTTP response (including redirects), once its
+ * cookies are stored. If it throws, the request rejects with the thrown value
+ * itself. Hooks are synchronous: a returned Promise is not awaited.
+ */
+export type OnResponseHook = (status: number, url: string, headers: KoonHeaderEntry[]) => void;
+/**
+ * Hook called before following a redirect. Return `false` to stop redirecting
+ * and get the 3xx response as-is; any other return value follows the redirect.
+ * If it throws, the redirect is not followed and the request rejects with the
+ * thrown value itself. The hook is synchronous: a returned Promise is not
+ * awaited (the redirect is followed and a one-time warning with code
+ * `KOON_ASYNC_HOOK` is emitted; a rejection of that Promise is reported as a
+ * process warning).
+ */
+export type OnRedirectHook = (status: number, url: string, headers: KoonHeaderEntry[]) => boolean | void;
+
+/** Options of `new Koon()`. */
+export interface KoonOptions {
+  /**
+   * Browser profile to impersonate, such as `chrome`, `firefox154`, `chrome-macos`,
+   * `safari-mobile266` or `okhttp5`. Without a version it is the newest one, without an OS desktop
+   * browsers impersonate Windows and Safari macOS. Default: `"chrome"`.
+   */
+  browser?: Browser;
+  /**
+   * A custom browser profile as JSON, as `exportProfile()` returns it. Overrides `browser`.
+   * Malformed JSON fails with `JSON_ERROR`.
+   */
+  profileJson?: string;
+  /**
+   * Proxy URL: `http://`, `https://`, `socks5://` or `socks5h://` (the same: the proxy resolves the
+   * host name), optionally with `user:pass@`. An `https://` proxy is reached over TLS and its
+   * certificate is verified (see `proxyCaCerts`).
+   */
+  proxy?: string;
+  /**
+   * Proxy URLs to rotate through: each request, and each retry, takes the next one. Takes priority
+   * over `proxy`.
+   */
+  proxies?: string[];
+  /**
+   * Timeout of a whole request in seconds, fractions allowed: connecting, redirects and the body.
+   * `0` means no timeout. Default: 30.
+   */
+  timeout?: number;
+  /**
+   * Skip certificate verification of origins. `https://` proxies are still verified (see
+   * `ignoreProxyTlsErrors`). Default: `false`.
+   */
+  ignoreTlsErrors?: boolean;
+  /**
+   * Certificates (PEM, one or more) trusted for the TLS connection to `https://` proxies in
+   * addition to the built-in roots, like curl's `--proxy-cacert`: for a proxy with a self-signed
+   * certificate or one from a private CA. Origins are still verified against the built-in roots
+   * only. Invalid PEM fails with `INVALID_ARGUMENT`.
+   */
+  proxyCaCerts?: string | Buffer;
+  /**
+   * Skip certificate verification of `https://` proxies, like curl's `--proxy-insecure`. The
+   * connection stays encrypted, but anyone on the way to the proxy can pose as it and read the
+   * proxy credentials and the hosts requested. Origins are still verified. Prefer `proxyCaCerts`.
+   * Default: `false`.
+   */
+  ignoreProxyTlsErrors?: boolean;
+  /**
+   * Headers sent with every request, in order. They replace the profile's header of the same name
+   * at its browser position; a name given twice is sent once, with the last value.
+   */
+  headers?: KoonHeadersInit;
+  /** Follow redirects. Default: `true`. */
+  followRedirects?: boolean;
+  /** Maximum number of redirects to follow. Default: 10. */
+  maxRedirects?: number;
+  /** Keep cookies across requests. Default: `true`. */
+  cookieJar?: boolean;
+  /** Resume TLS sessions. Default: `true`. */
+  sessionResumption?: boolean;
+  /** DNS-over-HTTPS provider, any case: `cloudflare` or `google`. */
+  doh?: string;
+  /** Local IP address outgoing connections are bound to. */
+  localAddress?: string;
+  /**
+   * Called before each request, including each redirect hop, with the method and URL. An error it
+   * raises fails the request before it is sent.
+   */
+  onRequest?: OnRequestHook;
+  /**
+   * Called after each response, including each redirect hop, once its cookies are stored, with the
+   * status, URL and headers. An error it raises fails the request.
+   */
+  onResponse?: OnResponseHook;
+  /**
+   * Called before a redirect is followed, with the status, URL and headers. Return `false` to stop
+   * and get the 3xx response; any other value follows it. An error it raises fails the request.
+   */
+  onRedirect?: OnRedirectHook;
+  /**
+   * Automatic retries on transport errors. With `proxies`, each retry takes the next proxy. A
+   * request that may already have reached the server is retried only for idempotent methods.
+   * Default: 0.
+   */
+  retries?: number;
+  /**
+   * The user's language, such as `de-AT`, to match the proxy's country. The Accept-Language header
+   * becomes what the profile's browser sends for it: Chrome the list of the UI language it picks
+   * (`de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7`), Safari `de-DE,de;q=0.9`.
+   */
+  locale?: string;
+  /**
+   * Headers of the HTTP CONNECT request to the proxy, in order: session IDs, geo-targeting,
+   * authentication.
+   */
+  proxyHeaders?: KoonHeadersInit;
+  /**
+   * Resolve hosts to IPv4 (`4`) or IPv6 (`6`) only, e.g. for a proxy that speaks IPv4 alone. `v4`,
+   * `ipv6` and the like work too.
+   */
+  ipVersion?: 4 | 6 | string;
+  /**
+   * Entries in curl's `--resolve` format, `host:port:address[,address...]` (IPv6 in brackets):
+   * requests to that host and port connect to the address instead of resolving the host. The TLS
+   * server name, Host header and cookies stay the host's. An invalid entry fails with
+   * `INVALID_ARGUMENT`.
+   */
+  resolve?: string[];
+  /**
+   * Maximum response body size in bytes, decompressed: past it, a response fails with `BODY_ERROR`
+   * instead of growing the buffer further, also when a compressed body decodes past it. Reading a
+   * streaming response chunk by chunk without decoding it is not capped. `0` disables it. Default:
+   * 100 MiB.
+   */
+  maxResponseBody?: number;
+  /**
+   * Pins Chrome 151+'s `PqcBandwidthExperiment` server-padding field trial group instead of drawing
+   * one when the client is built: `none` (not in the study) or the bytes of padding the group asks
+   * for (e.g. `6000`). The study ended on 2026-10-30, so a client no longer draws one. No effect on
+   * a profile without the trial.
+   */
+  serverPadding?: string | number;
+}
+
+/**
+ * Options of one request (every verb, `postMultipart()`, `requestStreaming()`); unset ones fall
+ * back to the client's.
+ */
+export interface KoonRequestOptions {
+  /**
+   * Headers of this request, in order. They replace client and profile headers of the same name,
+   * which keep their browser position.
+   */
+  headers?: KoonHeadersInit;
+  /**
+   * Timeout of this request in seconds, fractions allowed; a streaming request times the response
+   * head and then each wait for the body. `0` means no timeout.
+   */
+  timeout?: number;
+  /** Proxy URL for this request, in place of the client's proxies. */
+  proxy?: string;
+  /** Follow redirects in this request. */
+  followRedirects?: boolean;
+  /** Maximum number of redirects this request follows. */
+  maxRedirects?: number;
+  /**
+   * Called before each request of this call, including each redirect hop, in place of the client's.
+   */
+  onRequest?: OnRequestHook;
+  /**
+   * Called after each response of this call, including each redirect hop, in place of the client's.
+   */
+  onResponse?: OnResponseHook;
+  /**
+   * Called before a redirect of this call is followed, in place of the client's. Return `false` to
+   * stop.
+   */
+  onRedirect?: OnRedirectHook;
+}
+
+export interface KoonStreamingOptions extends KoonRequestOptions {
+  /**
+   * Decode the body's Content-Encoding (gzip, deflate, br, zstd and stacked codings) as it is read;
+   * a coding koon does not know arrives as it is. `false` gives the bytes as sent. The headers stay
+   * as received either way, Content-Encoding and Content-Length included. Default: `true`.
+   */
+  decode?: boolean;
+}
+
+/**
+ * Options of `KoonProxy.start()`. The forwarded requests connect as those of a `Koon` client do;
+ * the proxy follows no redirects and keeps no cookies, the proxied client does both itself.
+ */
+export interface KoonProxyOptions {
+  /**
+   * Browser profile to impersonate, such as `chrome`, `firefox154`, `chrome-macos`,
+   * `safari-mobile266` or `okhttp5`. Without a version it is the newest one, without an OS desktop
+   * browsers impersonate Windows and Safari macOS. Default: `"chrome"`.
+   */
+  browser?: Browser;
+  /**
+   * A custom browser profile as JSON, as `exportProfile()` returns it. Overrides `browser`.
+   * Malformed JSON fails with `JSON_ERROR`.
+   */
+  profileJson?: string;
+  /**
+   * Proxy URL: `http://`, `https://`, `socks5://` or `socks5h://` (the same: the proxy resolves the
+   * host name), optionally with `user:pass@`. An `https://` proxy is reached over TLS and its
+   * certificate is verified (see `proxyCaCerts`).
+   */
+  proxy?: string;
+  /**
+   * Proxy URLs to rotate through: each request, and each retry, takes the next one. Takes priority
+   * over `proxy`.
+   */
+  proxies?: string[];
+  /**
+   * Skip certificate verification of origins. `https://` proxies are still verified (see
+   * `ignoreProxyTlsErrors`). Default: `false`.
+   */
+  ignoreTlsErrors?: boolean;
+  /**
+   * Certificates (PEM, one or more) trusted for the TLS connection to `https://` proxies in
+   * addition to the built-in roots, like curl's `--proxy-cacert`: for a proxy with a self-signed
+   * certificate or one from a private CA. Origins are still verified against the built-in roots
+   * only. Invalid PEM fails with `INVALID_ARGUMENT`.
+   */
+  proxyCaCerts?: string | Buffer;
+  /**
+   * Skip certificate verification of `https://` proxies, like curl's `--proxy-insecure`. The
+   * connection stays encrypted, but anyone on the way to the proxy can pose as it and read the
+   * proxy credentials and the hosts requested. Origins are still verified. Prefer `proxyCaCerts`.
+   * Default: `false`.
+   */
+  ignoreProxyTlsErrors?: boolean;
+  /** Resume TLS sessions. Default: `true`. */
+  sessionResumption?: boolean;
+  /** DNS-over-HTTPS provider, any case: `cloudflare` or `google`. */
+  doh?: string;
+  /** Local IP address outgoing connections are bound to. */
+  localAddress?: string;
+  /**
+   * Automatic retries on transport errors. With `proxies`, each retry takes the next proxy. A
+   * request that may already have reached the server is retried only for idempotent methods.
+   * Default: 0.
+   */
+  retries?: number;
+  /**
+   * The user's language, such as `de-AT`, to match the proxy's country. The Accept-Language header
+   * becomes what the profile's browser sends for it: Chrome the list of the UI language it picks
+   * (`de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7`), Safari `de-DE,de;q=0.9`.
+   */
+  locale?: string;
+  /**
+   * Headers of the HTTP CONNECT request to the proxy, in order: session IDs, geo-targeting,
+   * authentication.
+   */
+  proxyHeaders?: KoonHeadersInit;
+  /**
+   * Resolve hosts to IPv4 (`4`) or IPv6 (`6`) only, e.g. for a proxy that speaks IPv4 alone. `v4`,
+   * `ipv6` and the like work too.
+   */
+  ipVersion?: 4 | 6 | string;
+  /**
+   * Entries in curl's `--resolve` format, `host:port:address[,address...]` (IPv6 in brackets):
+   * requests to that host and port connect to the address instead of resolving the host. The TLS
+   * server name, Host header and cookies stay the host's. An invalid entry fails with
+   * `INVALID_ARGUMENT`.
+   */
+  resolve?: string[];
+  /**
+   * Maximum response body size in bytes, decompressed: past it, a response fails with `BODY_ERROR`
+   * instead of growing the buffer further, also when a compressed body decodes past it. Reading a
+   * streaming response chunk by chunk without decoding it is not capped. `0` disables it. Default:
+   * 100 MiB.
+   */
+  maxResponseBody?: number;
+  /**
+   * Pins Chrome 151+'s `PqcBandwidthExperiment` server-padding field trial group instead of drawing
+   * one when the client is built: `none` (not in the study) or the bytes of padding the group asks
+   * for (e.g. `6000`). The study ended on 2026-10-30, so a client no longer draws one. No effect on
+   * a profile without the trial.
+   */
+  serverPadding?: string | number;
+  /** Address to listen on; port `0` picks a free one. Default: `"127.0.0.1:0"`. */
+  listenAddr?: string;
+  /**
+   * How the headers of the proxy's clients are sent on, any case: `impersonate` sends them as the
+   * profile's browser does, with its identity headers in place of the client's (its Accept-Language
+   * from `locale`), `passthrough` as they came, only TLS and HTTP/2 fingerprinted. Default:
+   * `"impersonate"`.
+   */
+  headerMode?: 'impersonate' | 'passthrough';
+  /** Directory of the proxy's CA certificate. Default: `"~/.koon/ca"`. */
+  caDir?: string;
+  /**
+   * Timeout in seconds, fractions allowed, of a forwarded request's response head and of each wait
+   * for its body. `0` means no timeout. Default: 30.
+   */
+  timeout?: number;
+  /**
+   * Allow `listenAddr` to be a non-loopback address. The proxy has no transport encryption of its
+   * own between it and its clients, so on a reachable interface it is an open relay for anyone who
+   * can reach the port, unless `auth` is set too. Default: `false`.
+   */
+  allowNonLoopback?: boolean;
+  /** `Proxy-Authorization: Basic` credentials every client of the proxy must send. */
+  auth?: KoonProxyAuth;
+  /** Connections accepted at once; further ones wait for a slot to free up. Default: 512. */
+  maxConnections?: number;
+}
+
+/** Options of `Koon.verify()`: how its client connects to the fingerprint services. */
+export interface KoonVerifyOptions {
+  /**
+   * Browser profile to impersonate, such as `chrome`, `firefox154`, `chrome-macos`,
+   * `safari-mobile266` or `okhttp5`. Without a version it is the newest one, without an OS desktop
+   * browsers impersonate Windows and Safari macOS. Default: `"chrome"`.
+   */
+  browser?: Browser;
+  /**
+   * Proxy URL: `http://`, `https://`, `socks5://` or `socks5h://` (the same: the proxy resolves the
+   * host name), optionally with `user:pass@`. An `https://` proxy is reached over TLS and its
+   * certificate is verified (see `proxyCaCerts`).
+   */
+  proxy?: string;
+  /**
+   * Proxy URLs to rotate through: each request, and each retry, takes the next one. Takes priority
+   * over `proxy`.
+   */
+  proxies?: string[];
+  /**
+   * Timeout of a whole request in seconds, fractions allowed: connecting, redirects and the body.
+   * `0` means no timeout. Default: 30.
+   */
+  timeout?: number;
+  /**
+   * Skip certificate verification of origins. `https://` proxies are still verified (see
+   * `ignoreProxyTlsErrors`). Default: `false`.
+   */
+  ignoreTlsErrors?: boolean;
+  /**
+   * Certificates (PEM, one or more) trusted for the TLS connection to `https://` proxies in
+   * addition to the built-in roots, like curl's `--proxy-cacert`: for a proxy with a self-signed
+   * certificate or one from a private CA. Origins are still verified against the built-in roots
+   * only. Invalid PEM fails with `INVALID_ARGUMENT`.
+   */
+  proxyCaCerts?: string | Buffer;
+  /**
+   * Skip certificate verification of `https://` proxies, like curl's `--proxy-insecure`. The
+   * connection stays encrypted, but anyone on the way to the proxy can pose as it and read the
+   * proxy credentials and the hosts requested. Origins are still verified. Prefer `proxyCaCerts`.
+   * Default: `false`.
+   */
+  ignoreProxyTlsErrors?: boolean;
+  /** Resume TLS sessions. Default: `true`. */
+  sessionResumption?: boolean;
+  /** DNS-over-HTTPS provider, any case: `cloudflare` or `google`. */
+  doh?: string;
+  /** Local IP address outgoing connections are bound to. */
+  localAddress?: string;
+  /**
+   * Automatic retries on transport errors. With `proxies`, each retry takes the next proxy. A
+   * request that may already have reached the server is retried only for idempotent methods.
+   * Default: 0.
+   */
+  retries?: number;
+  /**
+   * The user's language, such as `de-AT`, to match the proxy's country. The Accept-Language header
+   * becomes what the profile's browser sends for it: Chrome the list of the UI language it picks
+   * (`de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7`), Safari `de-DE,de;q=0.9`.
+   */
+  locale?: string;
+  /**
+   * Headers of the HTTP CONNECT request to the proxy, in order: session IDs, geo-targeting,
+   * authentication.
+   */
+  proxyHeaders?: KoonHeadersInit;
+  /**
+   * Resolve hosts to IPv4 (`4`) or IPv6 (`6`) only, e.g. for a proxy that speaks IPv4 alone. `v4`,
+   * `ipv6` and the like work too.
+   */
+  ipVersion?: 4 | 6 | string;
+  /**
+   * Entries in curl's `--resolve` format, `host:port:address[,address...]` (IPv6 in brackets):
+   * requests to that host and port connect to the address instead of resolving the host. The TLS
+   * server name, Host header and cookies stay the host's. An invalid entry fails with
+   * `INVALID_ARGUMENT`.
+   */
+  resolve?: string[];
+  /**
+   * Maximum response body size in bytes, decompressed: past it, a response fails with `BODY_ERROR`
+   * instead of growing the buffer further, also when a compressed body decodes past it. Reading a
+   * streaming response chunk by chunk without decoding it is not capped. `0` disables it. Default:
+   * 100 MiB.
+   */
+  maxResponseBody?: number;
+  /**
+   * Pins Chrome 151+'s `PqcBandwidthExperiment` server-padding field trial group instead of drawing
+   * one when the client is built: `none` (not in the study) or the bytes of padding the group asks
+   * for (e.g. `6000`). The study ended on 2026-10-30, so a client no longer draws one. No effect on
+   * a profile without the trial.
+   */
+  serverPadding?: string | number;
+}
+
+/**
+ * Machine-readable error codes koon throws, exposed as `err.code`.
+ * `err.message` also carries the code as a `[CODE] ...` prefix.
+ */
+export type KoonErrorCode =
+  | 'TLS_ERROR'
+  | 'HTTP2_ERROR'
+  | 'QUIC_ERROR'
+  | 'HTTP3_ERROR'
+  | 'IO_ERROR'
+  /** A URL that does not parse, or a scheme koon does not speak (also on a redirect). */
+  | 'INVALID_URL'
+  | 'PROXY_ERROR'
+  | 'INVALID_HEADER'
+  /**
+   * The request body could not be sent (again), or a streaming response body was
+   * read again after `collect()`.
+   */
+  | 'BODY_ERROR'
+  | 'CONNECTION_FAILED'
+  | 'PROTOCOL_ERROR'
+  | 'JSON_ERROR'
+  | 'WEBSOCKET_ERROR'
+  /** A host name did not resolve (a proxy's host gives `PROXY_ERROR`). */
+  | 'DNS_ERROR'
+  | 'CONFIG_ERROR'
+  | 'TIMEOUT'
+  | 'TOO_MANY_REDIRECTS'
+  | 'COOKIE_JAR_DISABLED'
+  | 'INVALID_COOKIE'
+  /**
+   * An option or argument koon does not accept: an unknown browser profile,
+   * HTTP method, header mode, IP version or DoH provider, a negative or
+   * fractional count, a value of the wrong type, ...
+   */
+  | 'INVALID_ARGUMENT';
+
+/**
+ * How far a request got before it failed: `connect` (nothing was sent, so sending it again
+ * cannot repeat it), `request` (sent, no response head yet) or `body` (reading the body).
+ */
+export type KoonErrorPhase = 'connect' | 'request' | 'body';
+
+export interface KoonError extends Error {
+  code: KoonErrorCode;
+  /** Set for a request's transport failure (connection, TLS, timeout, ...). */
+  phase?: KoonErrorPhase;
+}
+
+export class KoonResponse {
+  /** Responses come from `Koon` requests only. */
+  private constructor();
+
+  /** HTTP status code. */
+  readonly status: number;
+  /** Alias for `status` (compatibility with fetch/axios conventions). */
+  readonly statusCode: number;
+  /** Response headers as `{ name, value }` objects, in wire order. The same array on every access. */
+  readonly headers: KoonHeaderEntry[];
+  /** Headers of the request as actually sent, in wire order and casing (HTTP/2 and HTTP/3 pseudo-headers first). */
+  readonly requestHeaders: KoonHeaderEntry[];
+  /** Response body (decompressed). The same Buffer on every access, sharing the response's memory without a copy. */
+  readonly body: Buffer;
+  /** HTTP version string (e.g., "h2"). */
+  readonly version: string;
+  /** Final URL after redirects. */
+  readonly url: string;
+  /** Whether the status code is 2xx (success). */
+  readonly ok: boolean;
+  /** Approximate bytes sent for this request (headers + body). */
+  readonly bytesSent: number;
+  /** Approximate bytes received for this response (headers + body, pre-decompression). */
+  readonly bytesReceived: number;
+  /** Whether TLS session resumption was used for this connection. */
+  readonly tlsResumed: boolean;
+  /** Whether an existing pooled connection was reused. */
+  readonly connectionReused: boolean;
+  /** Remote IP address of the peer (the proxy when one is used), or null if unknown. */
+  readonly remoteAddress: string | null;
+  /** Content-Type header value (e.g. "text/html; charset=utf-8"), or null if absent. */
+  readonly contentType: string | null;
+  /** The bot protection that answered instead of the page, or null for the page itself. A plain error status gives null. */
+  readonly blockedBy: KoonBlockedBy | null;
+
+  /** Decode the body as text with the charset of its Content-Type header, else UTF-8. */
+  text(): string;
+  /** `JSON.parse()` of `text()`. */
+  json(): any;
+  /** Look up a response header by name (case-insensitive). */
+  header(name: string): string | null;
+}
+
+export interface KoonWsMessage {
+  /** Whether the message is text (true) or binary (false). */
+  isText: boolean;
+  /** Message data. */
+  data: Buffer;
+}
+
+export interface KoonMultipartField {
+  /** Field name. */
+  name: string;
+  /** Text value (for form fields). Exactly one of `value`/`fileData` is required. */
+  value?: string;
+  /** Binary data (for file uploads). Exactly one of `value`/`fileData` is required. */
+  fileData?: Buffer;
+  /** Filename (for file uploads). */
+  filename?: string;
+  /** MIME type (for file uploads). */
+  contentType?: string;
+}
+
+/**
+ * A cookie for `setCookies()`/`cookies()`, in the shape of Playwright's
+ * `addCookies()`/`cookies()` and the Chrome DevTools Protocol.
+ *
+ * A cookie has either a `url` or a `domain` (with an optional `path`).
+ */
+export interface KoonCookie {
+  /** Cookie name. */
+  name: string;
+  /** Cookie value. */
+  value: string;
+  /**
+   * Cookie domain. A leading dot means a domain cookie (also sent to
+   * subdomains); without one, it's host-only. Not allowed together with `url`.
+   * `cookies()` always reports it.
+   */
+  domain?: string;
+  /** URL path scope. Defaults to "/". Not allowed together with `url`. */
+  path?: string;
+  /**
+   * Derive a host-only cookie from this URL (like Playwright's
+   * `addCookies`): its host, the URL path up to and including the last "/",
+   * and `secure` from the scheme (https). Not allowed together with `domain`
+   * or `path`. Never reported by `cookies()`.
+   */
+  url?: string;
+  /** Unix timestamp in seconds, up to 253402300799. Omit or pass -1 for a session cookie. */
+  expires?: number;
+  /** Only send over HTTPS. Defaults to false; ignored with `url`. */
+  secure?: boolean;
+  /** Not accessible via JavaScript. Defaults to false. */
+  httpOnly?: boolean;
+  /**
+   * SameSite policy, case-insensitive. Without it the cookie has none, which
+   * Chromium profiles treat as 'Lax' and Firefox and Safari as 'None';
+   * `cookies()` then omits it.
+   */
+  sameSite?: 'Strict' | 'Lax' | 'None' | 'strict' | 'lax' | 'none';
+  /** Only send to the exact domain. Defaults to whether `domain` has no leading dot (true with `url`). */
+  hostOnly?: boolean;
+  /**
+   * CHIPS partition key: Playwright's top-level site (`'https://example.com'`) or CDP's object.
+   * A partitioned cookie goes only with requests from pages of that site; `cookies()` gives the
+   * site. `setCookies()` skips (and reports) a cookie with a cross-site ancestor or an opaque
+   * key: browsers send those only in frames below another site.
+   */
+  partitionKey?: string | { topLevelSite: string; hasCrossSiteAncestor?: boolean } | null;
+  /** Playwright's flag for a partition key with a cross-site ancestor; `true` skips the cookie. */
+  _crHasCrossSiteAncestor?: boolean;
+  /** CDP's flag for an opaque partition key; `true` skips the cookie. */
+  partitionKeyOpaque?: boolean;
+}
+
+/** A cookie `setCookies()` did not import, and why. */
+export interface KoonSkippedCookie {
+  /** Position of the cookie in the array given to `setCookies()` (0-based). */
+  index: number;
+  /** The cookie's name. */
+  name: string;
+  /** Why it was not imported, e.g. an invalid value or domain, or a frame's partition. */
+  reason: string;
+}
+
+/** A fingerprint field `Koon.verify()` compares. */
+export type KoonVerifyField =
+  | 'ja4'
+  | 'ja3n_hash'
+  | 'ja3_hash'
+  | 'akamai_hash'
+  | 'akamai_text'
+  | 'quic_ja4';
+
+/** The result of one field of a `Koon.verify()` report. */
+export type KoonVerifyFieldCheck =
+  | { field: KoonVerifyField; status: 'match'; value: string }
+  | { field: KoonVerifyField; status: 'mismatch'; expected: string; actual: string }
+  | {
+      field: KoonVerifyField;
+      status: 'not_checked';
+      /**
+       * `no_reference`: the real browser's value is not known; `not_reported`: the service does
+       * not report the field; `no_http3`: HTTP/3 was not used (UDP blocked, or a proxy);
+       * `skipped`: the HTTP/3 check was turned off; `unreachable`: no service answered.
+       */
+      reason: 'no_reference' | 'not_reported' | 'no_http3' | 'skipped' | 'unreachable';
+      /** What the service saw, if anything. */
+      actual?: string;
+    };
+
+/** The report of `Koon.verify()`. */
+export interface KoonVerifyReport {
+  /** The profile checked, e.g. `"chrome154-windows"`. */
+  profile: string;
+  /** The koon version that produced the fingerprint. */
+  koon_version: string;
+  /** `no_reference`: no capture covers this browser version (Safari releases without a capture of their own, Firefox on Android before 146). */
+  outcome: 'match' | 'mismatch' | 'no_reference' | 'unreachable';
+  /** The references compared with: their name and where the values come from. */
+  references: { id: string; source: string }[];
+  /** The TLS fingerprint service that answered. */
+  service: string | null;
+  /** The HTTP/3 service that answered over HTTP/3. */
+  http3_service: string | null;
+  /** Every field, in a fixed order. */
+  fields: KoonVerifyFieldCheck[];
+  /** Services that failed, in the order they were tried. */
+  errors: { service: string; code: string; message: string }[];
+}
+
+export class Koon {
+  constructor(options?: KoonOptions);
+
+  /**
+   * Every built-in browser profile name, one per profile: every browser version on every OS
+   * it has a profile for, e.g. `"chrome154-windows"`, `"safari266-ios"`, `"okhttp5"`. Names
+   * without a version select the latest one; without an OS, desktop profiles impersonate
+   * Windows (Safari: macOS).
+   */
+  static browsers(): string[];
+
+  /**
+   * Check that the installed koon still produces the real browser's fingerprint for the
+   * profile `browser` (default `"chrome"`). Connects to tls.browserleaks.com (tls.peet.ws as
+   * fallback) and, where a QUIC reference exists, over HTTP/3 to quic.browserleaks.com, and
+   * compares JA4, JA3N, JA3, the Akamai HTTP/2 fingerprint and the QUIC JA4 with the values
+   * captured from the real browser. `options.proxy` routes the check through a proxy (HTTP/3
+   * is then not used). Rejects with `INVALID_ARGUMENT` for an unknown profile; unreachable
+   * services are part of the report (`outcome: "unreachable"`).
+   */
+  static verify(browser?: string, options?: KoonVerifyOptions): Promise<KoonVerifyReport>;
+
+  /** The User-Agent string from the browser profile. Useful for Puppeteer/Playwright. */
+  readonly userAgent: string | null;
+
+  get(url: string, options?: KoonRequestOptions): Promise<KoonResponse>;
+  post(url: string, body?: string | Buffer, options?: KoonRequestOptions): Promise<KoonResponse>;
+  put(url: string, body?: string | Buffer, options?: KoonRequestOptions): Promise<KoonResponse>;
+  delete(url: string, options?: KoonRequestOptions): Promise<KoonResponse>;
+  patch(url: string, body?: string | Buffer, options?: KoonRequestOptions): Promise<KoonResponse>;
+  head(url: string, options?: KoonRequestOptions): Promise<KoonResponse>;
+  /** `method` is matched case-insensitively and always sent uppercase on the wire. The methods above call this one. */
+  request(method: string, url: string, body?: string | Buffer, options?: KoonRequestOptions): Promise<KoonResponse>;
+  postMultipart(url: string, fields: KoonMultipartField[], options?: KoonRequestOptions): Promise<KoonResponse>;
+  /**
+   * Resolves once the response head has arrived; the body is read with the returned
+   * response. Follows redirects like the buffered methods above. The body is decoded
+   * (gzip, deflate, br, zstd) unless `decode: false`.
+   */
+  requestStreaming(method: string, url: string, body?: string | Buffer, options?: KoonStreamingOptions): Promise<KoonStreamingResponse>;
+
+  /** Opens a `ws://` or `wss://` connection. */
+  websocket(url: string, headers?: KoonHeadersInit): Promise<KoonWebSocket>;
+
+  /** Get the total number of bytes sent across all requests. */
+  totalBytesSent(): number;
+  /** Get the total number of bytes received across all requests. */
+  totalBytesReceived(): number;
+  /** Reset both cumulative byte counters to zero. */
+  resetCounters(): void;
+
+  /** Clear all cookies from the cookie jar. Keeps TLS sessions and connection pool. */
+  clearCookies(): void;
+  /**
+   * Insert or replace cookies imported from an external source (e.g. a
+   * browser's cookie jar via Playwright/CDP `cookies()`). Every valid cookie
+   * is imported; the others, e.g. one with an invalid value or domain or
+   * one partitioned in a frame below another site, are skipped and returned, so one odd
+   * cookie does not cost a whole browser export. An empty array means all were imported.
+   * A cookie whose `expires` is in the past deletes the stored cookie with the
+   * same `name`, `domain` and `path` instead, as in browsers (Playwright's
+   * `clearCookies()` deletes this way too); it is not reported as skipped.
+   * Throws `COOKIE_JAR_DISABLED` if the client was created with
+   * `cookieJar: false`, and `INVALID_ARGUMENT` for an array element that is
+   * not a cookie object (e.g. one without `name`, or with a `partitionKey`
+   * that is neither a string, an object with `topLevelSite` nor null).
+   */
+  setCookies(cookies: KoonCookie[]): KoonSkippedCookie[];
+  /**
+   * Export every cookie currently stored in the jar (e.g. for Playwright/CDP
+   * `addCookies()`, or straight back into `setCookies()`).
+   */
+  cookies(): KoonCookie[];
+
+  /**
+   * Close all pooled connections and release resources, without waiting. The client can still be used after: new connections open on demand.
+   * Idle HTTP/3 connections end as the browser ends them at shutdown; one with a response still being read ends
+   * as when the pool drops it once the response is done: Chrome-family profiles discard it without sending
+   * anything, as Chromium does; Firefox profiles close it with H3_NO_ERROR. `shutdown()` ends everything at once.
+   */
+  close(): void;
+  /**
+   * Shut the client down as a browser does, e.g. before the process exits: every HTTP/3 connection
+   * ends at once with the browser's close, and the promise resolves once the closes have been sent
+   * (after at most 300 ms), so they are not lost when the process exits right after. HTTP/3
+   * responses still being read fail, as browsers abort them; HTTP/1.1 and HTTP/2 responses still
+   * being read are not affected. The client can still be used afterwards.
+   */
+  shutdown(): Promise<void>;
+
+  exportProfile(): string;
+  saveSession(): string;
+  loadSession(json: string): void;
+  saveSessionToFile(path: string): void;
+  loadSessionFromFile(path: string): void;
+}
+
+export class KoonStreamingResponse {
+  /** Streaming responses come from `Koon.requestStreaming()` only. */
+  private constructor();
+
+  readonly status: number;
+  /** Alias for `status`. */
+  readonly statusCode: number;
+  /** Response headers as `{ name, value }` objects, in wire order. The same array on every access. */
+  readonly headers: KoonHeaderEntry[];
+  /** Headers of the request as actually sent, in wire order and casing (HTTP/2 and HTTP/3 pseudo-headers first). */
+  readonly requestHeaders: KoonHeaderEntry[];
+  readonly version: string;
+  readonly url: string;
+  /** Approximate bytes sent for this request. */
+  readonly bytesSent: number;
+  /** Remote IP address of the peer (the proxy when one is used), or null if unknown. */
+  readonly remoteAddress: string | null;
+  /** Whether TLS session resumption was used for this connection. */
+  readonly tlsResumed: boolean;
+  /** Whether an existing pooled connection was reused. */
+  readonly connectionReused: boolean;
+
+  /** Approximate bytes received so far (headers + body chunks consumed). */
+  bytesReceived(): number;
+  /**
+   * The next body chunk, or null when the body is complete. Decoded unless the request asked
+   * for `decode: false`; data that does not decode, or a compressed body that is cut off,
+   * rejects with `IO_ERROR`.
+   */
+  nextChunk(): Promise<Buffer | null>;
+  /** The rest of the body as one Buffer. Consumes the stream: later reads throw `BODY_ERROR`. */
+  collect(): Promise<Buffer>;
+  /**
+   * Drop the rest of the body without reading it: the stream is closed (HTTP/1.1) or reset
+   * (HTTP/2, HTTP/3) at once. A pending `nextChunk()`/`collect()` and every later read reject
+   * with `BODY_ERROR`. Calling it again does nothing.
+   */
+  cancel(): void;
+  /**
+   * `for await (const chunk of response)`: the body chunks as `nextChunk()` returns them.
+   * Leaving the loop early (`break`, `return`, a throw) calls `cancel()`.
+   */
+  [Symbol.asyncIterator](): AsyncGenerator<Buffer, void, undefined>;
+}
+
+/**
+ * A WebSocket connection. Sending and receiving are independent: a pending
+ * `receive()` does not hold up `send()` or `close()`.
+ */
+export class KoonWebSocket {
+  /** WebSockets come from `Koon.websocket()` only. */
+  private constructor();
+
+  /** Send a string as a text message or a Buffer as a binary message. After `close()` this throws `WEBSOCKET_ERROR`. */
+  send(data: string | Buffer): Promise<void>;
+  /** The next message, or null once the connection is closed. */
+  receive(): Promise<KoonWsMessage | null>;
+  /** Send a close frame with an optional close code (0-65535) and reason. */
+  close(code?: number, reason?: string): Promise<void>;
+}
+
+export interface KoonProxyAuth {
+  username: string;
+  password: string;
+}
+
+/**
+ * A local MITM proxy. It runs until `shutdown()` (or the process ends), also
+ * when nothing references the object any more.
+ */
+export class KoonProxy {
+  /** Use `KoonProxy.start()`. */
+  private constructor();
+
+  static start(options?: KoonProxyOptions): Promise<KoonProxy>;
+
+  readonly port: number;
+  /** The proxy URL (e.g. "http://127.0.0.1:12345"). */
+  readonly url: string;
+  /** Path to the CA certificate PEM file; install it in the browser or system to trust the proxy. */
+  readonly caCertPath: string;
+
+  /** The CA certificate as PEM bytes. */
+  caCertPem(): Buffer;
+  /** Stop accepting and close every open connection. Resolves when done; calling it again does nothing. */
+  shutdown(): Promise<void>;
+}
+
+/** A `fetch()` that sends through a koon client, as `koonFetch()` returns it. */
+export interface KoonFetch {
+  (input: string | URL | Request, init?: RequestInit): Promise<Response>;
+  /** The client that sends the requests: its cookies, `userAgent`, `shutdown()`, ... */
+  readonly client: Koon;
+}
+
+/**
+ * A `fetch()` with koon's fingerprint: `const fetch = koonFetch({ browser: 'chrome' })`
+ * takes what the global `fetch()` takes (`string | URL | Request`, `RequestInit`) and resolves
+ * to a standard `Response`. The options are a `Koon` client's; a `Koon` client itself works
+ * too and is then shared.
+ *
+ * - Headers: only the caller's are added to the browser's, as `headers` of a koon request:
+ *   a caller header replaces the browser's header of the same name in place, others go where
+ *   the browser puts them. Nothing of Node's own fetch is sent (its `user-agent: node`, its
+ *   catch-all `accept`, ...). A plain GET looks like a navigation, as with `client.get()`; an
+ *   `Accept` without `text/html`, a `Content-Type` or an `Origin` makes it a fetch() call.
+ *   A body gets the Content-Type fetch gives it, unless the caller sets one; a `referrer`
+ *   URL is sent as Referer. A name repeated in pairs is joined, as `Headers` joins it.
+ * - Bodies: a string, `URLSearchParams`, `Blob`, `ArrayBuffer`, typed array or `DataView`,
+ *   a `FormData` (multipart with the boundary of the profile's browser), a `ReadableStream`
+ *   or another async iterable. Bodies are read into memory and sent with their length.
+ * - Redirects: `redirect: 'follow'` lets koon follow them (the client's `maxRedirects` and
+ *   `onRedirect` apply); `'manual'` resolves to the 3xx response as it is, as Node's fetch
+ *   does; `'error'` rejects. Without `redirect`, the client's `followRedirects` decides
+ *   (default: follow), also for a `Request` in its default mode `'follow'`.
+ * - Cookies: the client's cookie jar, which keeps them as a browser does.
+ *   `credentials: 'omit'` rejects: create the client with `cookieJar: false` instead.
+ * - Response: the body is read from koon as it is consumed (`body` stream, `text()`,
+ *   `json()`, `arrayBuffer()`, ...) and arrives decoded, so the response has no
+ *   Content-Encoding and Content-Length. A compressed body that decodes past the client's
+ *   `maxResponseBody` (100 MiB by default) errors the stream with `BODY_ERROR`. `url` is the final URL and `redirected` whether it
+ *   differs from the one requested; a status outside 200-599 (e.g. 999) is kept, with
+ *   `ok` false. `blockedBy(response, body)` names the bot protection that answered.
+ * - `signal`: an abort before the response head cancels the request, one during the body
+ *   drops the rest of it and errors the stream; both with the signal's reason.
+ * - Timeout: the client's `timeout` (default 30 s, `0` for none), up to the response head
+ *   and then for each wait for body data. `signal: AbortSignal.timeout(ms)` limits a whole
+ *   request.
+ * - Errors: a failed request rejects with `TypeError('fetch failed')`, a failed body read
+ *   with `TypeError('terminated')`, as Node's fetch does; `cause` is the koon error, with its
+ *   `code`.
+ * - `integrity`, `dispatcher` and `cache: 'only-if-cached'` reject. `mode`, `cache`,
+ *   `keepalive`, `priority`, `referrerPolicy` and `duplex` change nothing: koon has no HTTP
+ *   cache and keeps connections alive anyway.
+ */
+export function koonFetch(options?: KoonOptions | Koon): KoonFetch;
+
+/**
+ * `KoonResponse.blockedBy` for a response whose body the caller reads: a `Response` from
+ * `koonFetch()` or a `KoonStreamingResponse`. `body` is the decoded body as read (`text()`,
+ * `arrayBuffer()`, `collect()`, ...) or its first 400 KB, which are all that is looked at;
+ * with an empty one only the headers and the URL count.
+ */
+export function blockedBy(
+  response: {
+    readonly status: number;
+    readonly headers: KoonHeadersInit | KoonHeaderEntry[];
+    readonly url: string;
+  },
+  body: string | ArrayBuffer | ArrayBufferView
+): KoonBlockedBy | null;
