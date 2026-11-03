@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use btls::pkey::{PKey, Private};
 use btls::x509::X509;
-use bytes::Bytes;
+use bytes::{Buf, Bytes};
 use h3_quinn::quinn;
 use quinn_btls::{QuicSslContext, ServerConfig};
 use tokio::net::UdpSocket;
@@ -17,7 +17,8 @@ use tokio::net::UdpSocket;
 /// One-way delay of the server's datagrams through the relay.
 const PATH_DELAY: Duration = Duration::from_millis(40);
 
-/// A local HTTP/3 server answering every request with `200 ok`.
+/// A local HTTP/3 server answering every request with `200 ok`, or with the matrix routes
+/// ([`super::routes::answer`]).
 pub struct H3Server {
     pub addr: SocketAddr,
     /// Requests the HTTP/3 layer received.
@@ -62,7 +63,7 @@ pub fn h3_server_with_versions(
     versions: Option<Vec<u32>>,
 ) -> H3Server {
     let socket = std::net::UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
-    h3_server_inner(cert, key, socket, versions, None)
+    h3_server_inner(cert, key, socket, versions, None, false)
 }
 
 /// An HTTP/3 server that sends `alps` as its ALPS data for `h3`, under the
@@ -70,7 +71,7 @@ pub fn h3_server_with_versions(
 /// after the server started.
 pub fn h3_server_with_alps(cert: X509, key: PKey<Private>, alps: Arc<Mutex<Vec<u8>>>) -> H3Server {
     let socket = std::net::UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
-    h3_server_inner(cert, key, socket, None, Some(alps))
+    h3_server_inner(cert, key, socket, None, Some(alps), false)
 }
 
 /// An HTTP/3 server on a UDP socket the caller already bound: for a test
@@ -85,7 +86,7 @@ pub fn h3_server_with_socket(
     key: PKey<Private>,
     socket: std::net::UdpSocket,
 ) -> H3Server {
-    h3_server_inner(cert, key, socket, None, None)
+    h3_server_inner(cert, key, socket, None, None, false)
 }
 
 mod alps {
@@ -147,12 +148,19 @@ mod alps {
     }
 }
 
+/// An HTTP/3 server answering the matrix routes ([`super::routes::answer`]).
+pub fn h3_route_server(cert: X509, key: PKey<Private>) -> H3Server {
+    let socket = std::net::UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+    h3_server_inner(cert, key, socket, None, None, true)
+}
+
 fn h3_server_inner(
     cert: X509,
     key: PKey<Private>,
     socket: std::net::UdpSocket,
     versions: Option<Vec<u32>>,
     alps: Option<Arc<Mutex<Vec<u8>>>>,
+    routes: bool,
 ) -> H3Server {
     let mut crypto = ServerConfig::new().unwrap();
     crypto.ctx_mut().set_certificate(cert).unwrap();
@@ -211,6 +219,10 @@ fn h3_server_inner(
                             return;
                         };
                         count.fetch_add(1, Ordering::SeqCst);
+                        if routes {
+                            answer_route(request, stream).await;
+                            return;
+                        }
                         // With `x-reject`: reject the request unprocessed.
                         if request.headers().contains_key("x-reject") {
                             stream.stop_stream(h3::error::Code::H3_REQUEST_REJECTED);
@@ -440,4 +452,41 @@ pub fn zero_rtt_bytes(mut datagram: &[u8]) -> usize {
         datagram = &datagram[p..];
     }
     count
+}
+
+/// Read the request's body, then answer it as [`super::routes::answer`] says.
+async fn answer_route<S: h3::quic::BidiStream<Bytes>>(
+    request: http::Request<()>,
+    mut stream: h3::server::RequestStream<S, Bytes>,
+) {
+    let path = request.uri().path().to_string();
+    let headers: Vec<(String, String)> = request
+        .headers()
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
+        .collect();
+    let mut body = Vec::new();
+    while let Ok(Some(mut chunk)) = stream.recv_data().await {
+        while chunk.has_remaining() {
+            let n = chunk.chunk().len();
+            body.extend_from_slice(chunk.chunk());
+            chunk.advance(n);
+        }
+    }
+    let reply = super::routes::answer(&path, &headers, &body);
+    tokio::time::sleep(reply.head_delay).await;
+    let mut response = http::Response::builder().status(reply.status);
+    for (k, v) in &reply.headers {
+        response = response.header(k, v);
+    }
+    if stream
+        .send_response(response.body(()).unwrap())
+        .await
+        .is_err()
+    {
+        return;
+    }
+    tokio::time::sleep(reply.body_delay).await;
+    let _ = stream.send_data(Bytes::from(reply.body)).await;
+    let _ = stream.finish().await;
 }

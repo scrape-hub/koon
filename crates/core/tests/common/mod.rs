@@ -7,6 +7,7 @@
 #![allow(dead_code)]
 
 pub mod h3;
+pub mod routes;
 
 use std::net::SocketAddr;
 use std::str::FromStr;
