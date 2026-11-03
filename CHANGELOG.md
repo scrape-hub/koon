@@ -60,6 +60,7 @@ Rust only:
 - Node and Python: a `KoonProxy` runs until `shutdown()`.
 - Node and Python: a multipart field with both `value` and `fileData` is an
   error.
+- Python: a hook waiting for the GIL no longer holds up other requests.
 - CLI: `--timeout` covers the body.
 - CLI: `koon --help` no longer claims to pass every bot protection.
 

@@ -475,19 +475,25 @@ fn call_hook<'py>(
         .map_err(|e| koon_core::Error::Hook(Box::new(e)))
 }
 
+/// Run `f` with the GIL. A hook runs on a runtime worker, and waiting there for the GIL would stall
+/// the other tasks queued on that worker (the HTTP/2 connections of other requests), so the worker
+/// hands them off first, as the Node and R bindings do. `KoonSync` runs on the multi-thread
+/// runtime's `block_on`, where this is allowed too.
+fn with_gil<T>(f: impl for<'py> FnOnce(Python<'py>) -> T) -> T {
+    tokio::task::block_in_place(|| Python::attach(f))
+}
+
 fn request_hook(
     callback: Py<PyAny>,
 ) -> impl Fn(&str, &str) -> HookResult<()> + Send + Sync + 'static {
-    move |method: &str, url: &str| {
-        Python::attach(|py| call_hook(py, &callback, (method, url)).map(drop))
-    }
+    move |method: &str, url: &str| with_gil(|py| call_hook(py, &callback, (method, url)).map(drop))
 }
 
 fn response_hook(
     callback: Py<PyAny>,
 ) -> impl Fn(u16, &str, &[(String, String)]) -> HookResult<()> + Send + Sync + 'static {
     move |status: u16, url: &str, headers: &[(String, String)]| {
-        Python::attach(|py| call_hook(py, &callback, (status, url, headers)).map(drop))
+        with_gil(|py| call_hook(py, &callback, (status, url, headers)).map(drop))
     }
 }
 
@@ -497,7 +503,7 @@ fn redirect_hook(
     callback: Py<PyAny>,
 ) -> impl Fn(u16, &str, &[(String, String)]) -> HookResult<bool> + Send + Sync + 'static {
     move |status: u16, url: &str, headers: &[(String, String)]| {
-        Python::attach(|py| {
+        with_gil(|py| {
             call_hook(py, &callback, (status, url, headers))
                 .map(|result| !matches!(result.extract::<bool>(), Ok(false)))
         })
