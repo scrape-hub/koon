@@ -757,6 +757,28 @@ class KoonWebSocket:
         """Support ``async with``: closes the connection on exit."""
         ...
 
+class KoonSyncWebSocket:
+    """A WebSocket connection of ``KoonSync``: the methods of
+    ``KoonWebSocket``, blocking. Ctrl+C interrupts a pending ``receive()``.
+    """
+
+    def send(self, data: Union[str, bytes]) -> None:
+        """Send a text (str) or binary (bytes) message."""
+        ...
+    def receive(self) -> Optional[dict[str, Union[str, bytes]]]:
+        """Receive the next message. Returns dict with 'type' and 'data', or None if closed."""
+        ...
+    def close(self, code: Optional[int] = None, reason: Optional[str] = None) -> None:
+        """Close the WebSocket connection with an optional close code
+        (0-65535, else ``KoonInvalidArgument``) and reason."""
+        ...
+    def __enter__(self) -> "KoonSyncWebSocket":
+        """Support ``with``: returns self."""
+        ...
+    def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> bool:
+        """Support ``with``: closes the connection on exit."""
+        ...
+
 class KoonProxy:
     """A local MITM proxy server with browser fingerprinting.
 
@@ -1005,6 +1027,11 @@ class KoonSync:
         """Close all pooled connections without waiting, as
         ``Koon.close()`` does. The client can still be used afterward: new
         connections open as needed. ``shutdown()`` ends everything at once."""
+        ...
+    def websocket(
+        self, url: str, headers: Optional[HeaderInput] = None
+    ) -> "KoonSyncWebSocket":
+        """Open a WebSocket connection to a ws:// or wss:// URL (blocking)."""
         ...
     def shutdown(self) -> None:
         """Shut the client down as a browser does, e.g. before the program exits.

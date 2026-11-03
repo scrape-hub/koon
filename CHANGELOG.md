@@ -31,6 +31,7 @@ Rust only:
   also takes names such as `"v4"`.
 - Python: `verify()` takes the connection options of `Koon`; `ip_version` also
   takes names such as `"v4"`.
+- Python: `KoonSync.websocket()`, a blocking `KoonSyncWebSocket`.
 
 ### Changed
 

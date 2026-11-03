@@ -704,19 +704,27 @@ impl NativeClient {
         Ok(build_multipart(fields)?.build_with(self.client.boundary_style()))
     }
 
-    /// Open a WebSocket connection (awaitable).
-    #[pyo3(name = "_websocket", signature = (url, headers=None))]
+    /// Open a WebSocket connection: an awaitable `KoonWebSocket` for
+    /// `Koon`, a `KoonSyncWebSocket` for `KoonSync`.
+    #[pyo3(name = "_websocket", signature = (mode, url, headers=None))]
     fn websocket(
         &self,
         py: Python<'_>,
+        mode: Mode,
         url: String,
         headers: Option<Headers>,
     ) -> PyResult<Py<PyAny>> {
         let client = self.client.clone();
         let headers = headers.unwrap_or_default().0;
+        let connect = async move { client.websocket_with_headers(&url, headers).await };
+        if mode == Mode::Block {
+            let ws = block_on(py, connect)?.map_err(to_koon_err)?;
+            return KoonSyncWebSocket { ws: Arc::new(ws) }.into_py_any(py);
+        }
         run(py, false, async move {
-            let ws = client.websocket_with_headers(&url, headers).await?;
-            Ok(KoonWebSocket { ws: Arc::new(ws) })
+            Ok(KoonWebSocket {
+                ws: Arc::new(connect.await?),
+            })
         })
     }
 }
@@ -1292,6 +1300,74 @@ impl KoonWebSocket {
     }
 }
 
+/// A WebSocket connection of `KoonSync`: the methods of `KoonWebSocket`,
+/// blocking with the GIL released; Ctrl+C interrupts a pending `receive()`.
+#[pyclass(frozen, module = "koon")]
+struct KoonSyncWebSocket {
+    ws: Arc<koon_core::WebSocket>,
+}
+
+#[pymethods]
+impl KoonSyncWebSocket {
+    /// Send a text (str) or binary (bytes) message.
+    fn send(&self, py: Python<'_>, data: Payload) -> PyResult<()> {
+        let ws = self.ws.clone();
+        block_on(py, async move {
+            match data {
+                Payload::Text(text) => ws.send_text(&text).await,
+                Payload::Bytes(bytes) => ws.send_binary(&bytes).await,
+            }
+        })?
+        .map_err(to_koon_err)
+    }
+
+    /// Receive the next message: a dict with 'type' and 'data', or None
+    /// once the connection is closed.
+    fn receive(&self, py: Python<'_>) -> PyResult<Option<WsFrame>> {
+        let ws = self.ws.clone();
+        let message = block_on(py, async move { ws.receive().await })?.map_err(to_koon_err)?;
+        Ok(message.map(|message| match message {
+            WsMessage::Text(text) => WsFrame {
+                kind: "text",
+                data: Payload::Text(text),
+            },
+            WsMessage::Binary(bytes) => WsFrame {
+                kind: "binary",
+                data: Payload::Bytes(bytes),
+            },
+        }))
+    }
+
+    /// Close the WebSocket connection.
+    #[pyo3(signature = (code=None, reason=None))]
+    fn close(&self, py: Python<'_>, code: Option<i64>, reason: Option<String>) -> PyResult<()> {
+        let code = code.map(|c| whole_number::<u16>("code", c)).transpose()?;
+        let ws = self.ws.clone();
+        block_on(py, async move { ws.close(code, reason).await })?.map_err(to_koon_err)
+    }
+
+    /// Support `with`: returns self.
+    fn __enter__(slf: Py<Self>) -> Py<Self> {
+        slf
+    }
+
+    /// Support `with`: closes the connection on exit.
+    #[pyo3(signature = (_exc_type=None, _exc_val=None, _exc_tb=None))]
+    fn __exit__(
+        &self,
+        py: Python<'_>,
+        _exc_type: Option<&Bound<'_, PyAny>>,
+        _exc_val: Option<&Bound<'_, PyAny>>,
+        _exc_tb: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<bool> {
+        let ws = self.ws.clone();
+        let _ = block_on(py, async move {
+            ws.close(Some(1000), Some("closing".to_string())).await
+        })?;
+        Ok(false)
+    }
+}
+
 // ---------------------------------------------------------------------
 // KoonProxy
 // ---------------------------------------------------------------------
@@ -1422,6 +1498,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<KoonStreamingResponse>()?;
     m.add_class::<KoonSyncStreamingResponse>()?;
     m.add_class::<KoonWebSocket>()?;
+    m.add_class::<KoonSyncWebSocket>()?;
     m.add_class::<KoonProxy>()?;
     Ok(())
 }

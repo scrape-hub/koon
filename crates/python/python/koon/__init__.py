@@ -12,6 +12,7 @@ from koon._native import (
     KoonResponse,
     KoonStreamingResponse,
     KoonSyncStreamingResponse,
+    KoonSyncWebSocket,
     KoonWebSocket,
     _Client,
     _Mode,
@@ -28,6 +29,7 @@ __all__ = [
     "KoonStreamingResponse",
     "KoonSyncStreamingResponse",
     "KoonWebSocket",
+    "KoonSyncWebSocket",
     "KoonProxy",
     "KoonError",
     "KoonInvalidArgument",
@@ -130,7 +132,7 @@ class Koon(_Client):
 
     async def websocket(self, url, headers=None):
         """Open a WebSocket connection to a ws:// or wss:// URL."""
-        return await self._websocket(url, headers)
+        return await self._websocket(_Mode.Await, url, headers)
 
     async def shutdown(self):
         """Shut the client down as a browser does, e.g. before the program
@@ -193,6 +195,10 @@ class KoonSync(_Client):
         KoonSyncStreamingResponse once the response head has arrived; its body
         is decoded (Content-Encoding) unless ``decode=False``."""
         return self._request(_Mode.BlockStream, method, url, body, **options)
+
+    def websocket(self, url, headers=None):
+        """Open a WebSocket connection to a ws:// or wss:// URL (blocking)."""
+        return self._websocket(_Mode.Block, url, headers)
 
     def shutdown(self):
         """Shut the client down as a browser does, e.g. before the program

@@ -937,6 +937,18 @@ def test_websocket_text_and_binary_roundtrip(ws_url):
     assert binary == {"type": "binary", "data": b"\x00\x01\xff"}
 
 
+def test_sync_websocket_text_and_binary_roundtrip(ws_url):
+    with KoonSync("chrome").websocket(ws_url) as ws:
+        ws.send("hello")
+        text = ws.receive()
+        ws.send(b"\x00\x01\xff")
+        binary = ws.receive()
+        with pytest.raises(KoonInvalidArgument):
+            ws.close(70000)
+    assert text == {"type": "text", "data": "hello"}
+    assert binary == {"type": "binary", "data": b"\x00\x01\xff"}
+
+
 def test_websocket_close_code_out_of_range_is_invalid_argument(ws_url):
     async def go():
         ws = await Koon("chrome").websocket(ws_url)
