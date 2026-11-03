@@ -25,6 +25,7 @@ Rust only:
 ### Changed
 
 - Rust: `doh` is a default feature of `koon-core`.
+- Building the Node addon from source needs Rust 1.88.
 
 ### Fixed
 

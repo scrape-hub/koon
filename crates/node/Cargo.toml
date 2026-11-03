@@ -2,7 +2,8 @@
 name = "koon-node"
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
+# napi-build needs 1.88; the other crates build with the workspace's 1.85.
+rust-version = "1.88"
 license.workspace = true
 description = "Node.js bindings for koon browser impersonation client"
 

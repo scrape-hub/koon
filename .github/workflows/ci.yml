@@ -55,6 +55,26 @@ jobs:
       - name: Run tests
         run: cargo test -p koon-core -p koon-cli
 
+  # The oldest Rust the README promises (Cargo.toml `rust-version`); the Node addon needs 1.88.
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust 1.85
+        uses: dtolnay/rust-toolchain@1.85
+
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - name: Install build deps
+        run: sudo apt-get update && sudo apt-get install -y cmake build-essential
+
+      - name: Check with Rust 1.85
+        run: cargo check --locked -p koon-core -p koon-cli -p koon-python
+
   node:
     strategy:
       fail-fast: false

@@ -38,7 +38,7 @@ remotes::install_github("scrape-hub/koon", subdir = "crates/r")
 
 **CLI**: download from [Releases](https://github.com/scrape-hub/koon/releases), or:
 ```bash
-cargo install --git https://github.com/scrape-hub/koon koon-cli
+cargo install --locked --git https://github.com/scrape-hub/koon koon-cli
 ```
 
 **Claude Code**: [koon-mcp](https://github.com/scrape-hub/koon-mcp) fetches web pages and PDFs for Claude through koon.
@@ -850,7 +850,7 @@ Key dependencies:
 Only needed if you want to build koon yourself instead of using the published packages.
 
 **Requirements:**
-- Rust 1.85+
+- Rust 1.85+ (1.88+ for the Node.js addon)
 - CMake
 - libclang, for the BoringSSL bindings: `libclang-dev` (Debian, Ubuntu), `clang-devel` (Fedora,
   RHEL), LLVM (Windows), Xcode's command line tools (macOS)
