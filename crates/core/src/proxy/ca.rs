@@ -1,8 +1,8 @@
 use std::net::IpAddr;
-use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+use crate::util::GrowingLru;
 use btls::asn1::{Asn1Time, Asn1TimeRef};
 use btls::bn::{BigNum, MsbOption};
 use btls::ec::{EcGroup, EcKey};
@@ -16,7 +16,6 @@ use btls::x509::extension::{
     SubjectKeyIdentifier,
 };
 use btls::x509::{X509, X509Builder, X509Name, X509NameRef};
-use lru::LruCache;
 
 use crate::error::Error;
 
@@ -75,7 +74,7 @@ pub struct CertAuthority {
     ca_key: PKey<Private>,
     ca_cert: X509,
     storage_dir: PathBuf,
-    leaf_cache: Mutex<LruCache<String, (X509, PKey<Private>)>>,
+    leaf_cache: Mutex<GrowingLru<String, (X509, PKey<Private>)>>,
 }
 
 impl CertAuthority {
@@ -148,9 +147,7 @@ impl CertAuthority {
             ca_key,
             ca_cert,
             storage_dir,
-            leaf_cache: Mutex::new(LruCache::new(
-                NonZeroUsize::new(MAX_CACHED_HOSTS).expect("MAX_CACHED_HOSTS is non-zero"),
-            )),
+            leaf_cache: Mutex::new(GrowingLru::new(MAX_CACHED_HOSTS)),
         })
     }
 
@@ -159,9 +156,7 @@ impl CertAuthority {
     #[cfg(test)]
     fn with_leaf_cache_capacity(storage_dir: PathBuf, capacity: usize) -> Result<Self, Error> {
         let mut ca = Self::load_or_generate(storage_dir)?;
-        ca.leaf_cache = Mutex::new(LruCache::new(
-            NonZeroUsize::new(capacity).expect("test capacity is non-zero"),
-        ));
+        ca.leaf_cache = Mutex::new(GrowingLru::new(capacity));
         Ok(ca)
     }
 

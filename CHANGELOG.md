@@ -34,6 +34,7 @@ Rust only:
 - A request whose response has arrived is not retried.
 - Proxy credentials in the URL are percent-decoded.
 - Chrome profiles no longer join the ended handshake-padding trial.
+- A client takes about 9 KiB of memory instead of 280 KiB.
 
 **Responses and errors**
 

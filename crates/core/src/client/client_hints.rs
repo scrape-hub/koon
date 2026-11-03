@@ -6,11 +6,10 @@
 //! with `Critical-CH` retrying a request that's still missing one. Firefox and Safari send none.
 //! koon leaves out `Save-Data` and the resource width hints; a caller can set either itself.
 
-use std::num::NonZeroUsize;
 use std::sync::Mutex;
 
+use crate::util::GrowingLru;
 use http::Uri;
-use lru::LruCache;
 
 use crate::profile::{BrowserProfile, UaClientHints};
 
@@ -286,7 +285,7 @@ fn default_port(scheme: &str) -> u16 {
 /// salt of Chromium's network-hint noise.
 #[derive(Debug)]
 pub struct ClientHintsState {
-    persisted: Mutex<LruCache<String, Vec<Hint>>>,
+    persisted: Mutex<GrowingLru<String, Vec<Hint>>>,
     /// Chromium draws it once per browser process, 1 to 21.
     salt: u8,
     /// Brave's farbling seed, drawn once per client as Brave draws one per browser session.
@@ -296,9 +295,7 @@ pub struct ClientHintsState {
 impl Default for ClientHintsState {
     fn default() -> Self {
         Self {
-            persisted: Mutex::new(LruCache::new(
-                NonZeroUsize::new(MAX_CLIENT_HINT_ORIGINS).expect("nonzero constant"),
-            )),
+            persisted: Mutex::new(GrowingLru::new(MAX_CLIENT_HINT_ORIGINS)),
             salt: rand::random_range(1..=21),
             farbling_seed: rand::random(),
         }

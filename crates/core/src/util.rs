@@ -25,3 +25,49 @@ pub(crate) fn site(host: &str) -> String {
 pub(crate) fn same_site(host1: &str, host2: &str) -> bool {
     site(host1) == site(host2)
 }
+
+/// An LRU cache of at most `max` entries that allocates as it fills: `lru::LruCache::new` sizes its
+/// map for the whole capacity at once (about 270 KiB for 10,000 entries), in every client.
+#[derive(Debug)]
+pub(crate) struct GrowingLru<K: std::hash::Hash + Eq, V> {
+    cache: lru::LruCache<K, V>,
+    max: usize,
+}
+
+impl<K: std::hash::Hash + Eq, V> GrowingLru<K, V> {
+    pub(crate) fn new(max: usize) -> Self {
+        Self {
+            cache: lru::LruCache::unbounded(),
+            max,
+        }
+    }
+
+    pub(crate) fn get<Q>(&mut self, key: &Q) -> Option<&V>
+    where
+        K: std::borrow::Borrow<Q>,
+        Q: std::hash::Hash + Eq + ?Sized,
+    {
+        self.cache.get(key)
+    }
+
+    /// Insert or replace `key`, evicting the least recently used entry past `max`.
+    pub(crate) fn put(&mut self, key: K, value: V) {
+        self.cache.put(key, value);
+        if self.cache.len() > self.max {
+            self.cache.pop_lru();
+        }
+    }
+
+    pub(crate) fn pop<Q>(&mut self, key: &Q) -> Option<V>
+    where
+        K: std::borrow::Borrow<Q>,
+        Q: std::hash::Hash + Eq + ?Sized,
+    {
+        self.cache.pop(key)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn len(&self) -> usize {
+        self.cache.len()
+    }
+}
