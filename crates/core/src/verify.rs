@@ -1382,6 +1382,17 @@ fn client_references(profile: &ProfileName, built: &BrowserProfile) -> Vec<Refer
         .collect()
 }
 
+/// [`verify`] for the options of a [`Scope::Verify`](crate::options::Scope::Verify) call: the
+/// built-in profile its browser names, checked with a new client built from its connection
+/// options and timeout.
+pub async fn verify_options(options: crate::options::Options) -> Result<VerifyReport, Error> {
+    let profile = BrowserProfile::resolve_name(options.browser())?;
+    let client = options.client_builder()?.build()?;
+    let report = verify_with(&profile, &client, &Services::default()).await;
+    client.shutdown().await;
+    Ok(report)
+}
+
 /// Check the built-in profile `name` (`chrome`, `firefox154-windows`, ...) against the real
 /// browser, with a new client (timeout [`DEFAULT_TIMEOUT`]) that connects through `proxy` if one is
 /// given.

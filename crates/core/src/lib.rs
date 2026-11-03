@@ -15,6 +15,7 @@ pub mod error;
 pub(crate) mod http1;
 pub mod http2;
 pub mod multipart;
+pub mod options;
 pub(crate) mod pool;
 pub mod profile;
 pub mod proxy;

@@ -1096,6 +1096,49 @@ mod tests {
     use super::*;
 
     #[test]
+    fn documented_option_defaults_are_the_builders() {
+        use crate::options::{DefaultValue, Scope, options_in};
+
+        let builder = ClientBuilder::new(crate::Chrome::latest());
+        let connection = ConnectionOptions::default();
+        for spec in options_in(Scope::Client) {
+            match (spec.name, spec.default) {
+                ("timeout", Some(DefaultValue::Number(n))) => {
+                    assert_eq!(builder.timeout, Duration::from_secs(n.parse().unwrap()));
+                }
+                ("max_redirects", Some(DefaultValue::Number(n))) => {
+                    assert_eq!(builder.max_redirects, n.parse::<u32>().unwrap());
+                }
+                ("retries", Some(DefaultValue::Number(n))) => {
+                    assert_eq!(builder.max_retries, n.parse::<u32>().unwrap());
+                    assert_eq!(connection.retries, builder.max_retries);
+                }
+                ("follow_redirects", Some(DefaultValue::Bool(b))) => {
+                    assert_eq!(builder.follow_redirects, b);
+                }
+                ("cookie_jar", Some(DefaultValue::Bool(b))) => assert_eq!(builder.cookie_jar, b),
+                ("session_resumption", Some(DefaultValue::Bool(b))) => {
+                    assert_eq!(builder.session_resumption, b);
+                    assert_eq!(connection.session_resumption, b);
+                }
+                ("ignore_tls_errors", Some(DefaultValue::Bool(b))) => {
+                    assert_eq!(connection.ignore_tls_errors, b);
+                }
+                ("ignore_proxy_tls_errors", Some(DefaultValue::Bool(b))) => {
+                    assert_eq!(builder.danger_accept_invalid_proxy_certs, b);
+                    assert_eq!(connection.ignore_proxy_tls_errors, b);
+                }
+                ("max_response_body", Some(DefaultValue::Words("100 MiB"))) => {
+                    assert_eq!(builder.max_response_body, 100 << 20);
+                    assert_eq!(connection.max_response_body, builder.max_response_body);
+                }
+                ("browser", Some(DefaultValue::Text("chrome"))) | (_, None) => {}
+                (name, default) => panic!("default of {name} not checked: {default:?}"),
+            }
+        }
+    }
+
+    #[test]
     fn resolve_entries_parse_like_curl() {
         let v4: IpAddr = [127, 0, 0, 1].into();
         let v6: IpAddr = "2001:db8::1".parse().unwrap();
