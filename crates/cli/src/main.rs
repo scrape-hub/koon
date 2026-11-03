@@ -1,26 +1,23 @@
 use bytes::Bytes;
-use clap::builder::{PossibleValuesParser, TypedValueParser};
 use clap::{ArgAction, Args, Parser, Subcommand};
 use futures_util::Stream;
 use http::Method;
-use koon_core::dns::DohConfig;
 use koon_core::{
-    Body, Browser, BrowserProfile, Chrome, Client, ClientBuilder, DEFAULT_OS, HeaderMode,
-    IpVersion, Multipart, Os, ProxyServer, ProxyServerAuth, ProxyServerConfig, RequestOptions,
-    StreamingResponse, decode_body_text, parse_method,
+    Body, Browser, BrowserProfile, Chrome, Client, DEFAULT_OS, Multipart, Os, ProxyServer,
+    RequestOptions, StreamingResponse, decode_body_text, parse_method,
 };
 use serde_json::json;
 use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::io::{IsTerminal, Write as _};
-use std::net::IpAddr;
 use std::path::Path;
 use std::process::ExitCode;
-use std::str::FromStr;
-use std::time::Duration;
 use tokio::io::AsyncReadExt;
 
+mod options;
 mod verify;
+
+use options::{ProxyFlags, RequestFlags, TableArgs};
 
 const AFTER_HELP: &str = "\
 Examples:
@@ -87,11 +84,6 @@ struct Cli {
     #[arg(short = 'X', long = "request", value_parser = parse_method_arg)]
     method: Option<Method>,
 
-    /// Browser profile: chrome, firefox154, chrome-macos, safari-mobile, ...
-    /// (see --list-browsers; without an OS: Windows, Safari macOS)
-    #[arg(short = 'b', long = "browser", default_value = "chrome")]
-    browser: String,
-
     /// Request body; @FILE sends a file (streamed from disk above 16 MiB)
     #[arg(short = 'd', long = "data")]
     data: Option<String>,
@@ -107,17 +99,10 @@ struct Cli {
     )]
     form: Vec<FormField>,
 
-    /// Custom header (repeatable, format: "Key: Value")
-    #[arg(short = 'H', long = "header", value_parser = parse_header)]
-    headers: Vec<(String, String)>,
-
+    /// The options of the core's option table: browser, headers, timeout,
+    /// proxy, DNS, TLS, ...
     #[command(flatten)]
-    connection: ConnectionArgs,
-
-    /// Timeout for the whole request, body included, in seconds; fractions
-    /// allowed (0: no timeout)
-    #[arg(long, default_value = "30", value_parser = parse_timeout)]
-    timeout: Duration,
+    options: TableArgs<RequestFlags>,
 
     /// Output file (write response body to file)
     #[arg(short = 'o', long = "output")]
@@ -161,22 +146,6 @@ struct Cli {
     #[arg(long = "compressed", hide = true, action = ArgAction::Count)]
     _compressed: u8,
 
-    /// Don't follow redirects
-    #[arg(long = "no-follow")]
-    no_follow: bool,
-
-    /// Maximum number of redirects
-    #[arg(long, default_value = "10")]
-    max_redirects: u32,
-
-    /// Custom profile from JSON file
-    #[arg(long = "profile")]
-    profile_json: Option<String>,
-
-    /// Disable cookie jar
-    #[arg(long)]
-    no_cookies: bool,
-
     /// Save session (cookies + TLS) to file after request
     #[arg(long = "save-session")]
     save_session: Option<String>,
@@ -204,244 +173,10 @@ enum Command {
 
 #[derive(Args)]
 struct ProxyArgs {
-    /// Browser profile
-    #[arg(short = 'b', long = "browser", default_value = "chrome")]
-    browser: String,
-
-    /// Custom profile from JSON file
-    #[arg(long = "profile")]
-    profile_json: Option<String>,
-
-    /// Listen address (ip:port)
-    #[arg(long = "listen", default_value = "127.0.0.1:0")]
-    listen_addr: String,
-
-    /// Header mode: send the profile's browser headers, or the client's
-    #[arg(
-        long = "header-mode",
-        default_value = "impersonate",
-        value_parser = core_value::<HeaderMode>(&["impersonate", "passthrough"])
-    )]
-    header_mode: HeaderMode,
-
-    /// CA certificate directory
-    #[arg(long = "ca-dir")]
-    ca_dir: Option<String>,
-
-    /// Timeout in seconds, fractions allowed, for a forwarded request's
-    /// response head and each wait for its body (0: no timeout)
-    #[arg(long, default_value = "30", value_parser = parse_timeout)]
-    timeout: Duration,
-
-    /// Allow --listen to bind a non-loopback address (an open relay through
-    /// koon's fingerprinted TLS/HTTP2 stack unless --auth is also set)
-    #[arg(long)]
-    allow_non_loopback: bool,
-
-    /// Require "USER:PASS" as Proxy-Authorization from every client
-    #[arg(long, value_name = "USER:PASS", value_parser = parse_proxy_auth)]
-    auth: Option<ProxyServerAuth>,
-
-    /// Connections accepted at once; further ones wait for a slot to free up
-    /// (unset keeps the core's own default)
-    #[arg(long)]
-    max_connections: Option<usize>,
-
-    /// How the forwarded requests connect: upstream proxy, DNS, TLS, ...
+    /// The options of the core's option table: listener, browser, upstream
+    /// proxy, DNS, TLS, ...
     #[command(flatten)]
-    connection: ConnectionArgs,
-}
-
-/// Parses `--auth`'s "USER:PASS" into a [`ProxyServerAuth`].
-fn parse_proxy_auth(value: &str) -> Result<ProxyServerAuth, String> {
-    value
-        .split_once(':')
-        .map(|(username, password)| ProxyServerAuth {
-            username: username.to_string(),
-            password: password.to_string(),
-        })
-        .ok_or_else(|| format!("invalid --auth '{value}': expected USER:PASS"))
-}
-
-/// Options for the connections to origins and proxies: those of a request,
-/// and of the upstream client of `koon proxy`.
-#[derive(Args)]
-struct ConnectionArgs {
-    /// Proxy URL (http://, https://, socks5://)
-    #[arg(long)]
-    proxy: Option<String>,
-
-    /// Multiple proxy URLs for round-robin rotation (comma-separated)
-    #[arg(long, value_delimiter = ',')]
-    proxies: Vec<String>,
-
-    /// Custom header for HTTP CONNECT tunnel (repeatable, format: "Key: Value")
-    #[arg(long = "proxy-header", value_parser = parse_header)]
-    proxy_headers: Vec<(String, String)>,
-
-    /// DNS-over-HTTPS provider
-    #[arg(long, value_parser = core_value::<DohConfig>(&["cloudflare", "google"]))]
-    doh: Option<DohConfig>,
-
-    /// Disable TLS session resumption
-    #[arg(long)]
-    no_session_resumption: bool,
-
-    /// Skip TLS certificate verification of origins (an https:// proxy is
-    /// still verified, see --ignore-proxy-tls-errors)
-    #[arg(long = "ignore-tls-errors", short = 'k')]
-    ignore_tls_errors: bool,
-
-    /// Trust the certificates in this PEM file for an https:// proxy, in
-    /// addition to the built-in roots
-    #[arg(long = "proxy-cacert", value_name = "FILE")]
-    proxy_cacert: Option<String>,
-
-    /// Skip certificate verification of an https:// proxy (like curl's
-    /// --proxy-insecure)
-    #[arg(long = "ignore-proxy-tls-errors")]
-    ignore_proxy_tls_errors: bool,
-
-    /// Number of automatic retries on transport errors
-    #[arg(long, default_value = "0")]
-    retries: u32,
-
-    /// The user's language (e.g. "de-AT"); Accept-Language becomes what the browser sends for it
-    #[arg(long)]
-    locale: Option<String>,
-
-    /// Bind outgoing connections to a specific local IP address
-    #[arg(long = "local-address")]
-    local_address: Option<IpAddr>,
-
-    /// Restrict DNS to IPv4 or IPv6
-    #[arg(long = "ip-version", value_parser = core_value::<IpVersion>(&["4", "6"]))]
-    ip_version: Option<IpVersion>,
-
-    /// Connect to ADDR instead of resolving HOST for PORT, like curl
-    /// (repeatable; several addresses comma-separated, IPv6 in brackets)
-    #[arg(long = "resolve", value_name = "HOST:PORT:ADDR")]
-    resolve: Vec<String>,
-
-    /// Maximum response body size in bytes, decompressed; 0 disables it
-    /// (unset keeps the core's default of 100 MiB). Applies to -o and piped
-    /// downloads too: koon counts each chunk as it arrives and aborts once
-    /// it crosses the limit, like curl's --max-filesize for a body of
-    /// unknown length. As curl does, an aborted download's partial output
-    /// file is left on disk.
-    #[arg(long = "max-response-body", value_name = "BYTES")]
-    max_response_body: Option<u64>,
-
-    /// Pin Chrome >=151's `PqcBandwidthExperiment` server-padding field
-    /// trial group instead of drawing it per client: `none` (not in the
-    /// study) or the bytes of padding the group asks for (0, 6000, 9000,
-    /// 12000, 14000, 16000). The study ended on 2026-10-30, so a client no
-    /// longer draws one. No effect on a profile without the trial.
-    #[arg(long = "server-padding", value_name = "none|BYTES", value_parser = parse_server_padding)]
-    server_padding: Option<koon_core::ServerPadding>,
-}
-
-/// Parses `--server-padding`'s `"none"` or a byte count into a [`koon_core::ServerPadding`].
-fn parse_server_padding(value: &str) -> Result<koon_core::ServerPadding, String> {
-    value.parse().map_err(|e: koon_core::Error| e.to_string())
-}
-
-impl ConnectionArgs {
-    /// `--max-response-body`, or the core's own default when unset.
-    fn resolved_max_response_body(&self) -> u64 {
-        self.max_response_body
-            .unwrap_or_else(|| koon_core::ConnectionOptions::default().max_response_body)
-    }
-
-    /// A client builder for `profile` with these options.
-    fn client_builder(&self, profile: BrowserProfile) -> Result<ClientBuilder, CliError> {
-        let proxy_ca_certs = self.proxy_cacert.as_deref().map(read_file).transpose()?;
-        let options = koon_core::ConnectionOptions {
-            ignore_tls_errors: self.ignore_tls_errors,
-            proxy: self.proxy.clone(),
-            proxies: self.proxies.clone(),
-            proxy_ca_certs,
-            ignore_proxy_tls_errors: self.ignore_proxy_tls_errors,
-            proxy_headers: self.proxy_headers.clone(),
-            session_resumption: !self.no_session_resumption,
-            doh: self.doh.clone(),
-            local_address: self.local_address,
-            retries: self.retries,
-            locale: self.locale.clone(),
-            ip_version: self.ip_version,
-            resolve: self.resolve.clone(),
-            max_response_body: self.resolved_max_response_body(),
-            server_padding: self.server_padding,
-        };
-        Ok(options.apply(profile)?)
-    }
-
-    /// Report the options set to stderr, one `* ` line each, with proxy
-    /// credentials masked.
-    fn print_settings(&self) {
-        if !self.proxies.is_empty() {
-            let proxies: Vec<_> = self.proxies.iter().map(|p| redact_proxy_url(p)).collect();
-            eprintln!("* Proxies: {} (round-robin)", proxies.join(", "));
-        } else if let Some(proxy) = &self.proxy {
-            eprintln!("* Proxy: {}", redact_proxy_url(proxy));
-        }
-        if let Some(config) = &self.doh {
-            eprintln!("* DoH: {}", config.server_hostname);
-        }
-        if let Some(locale) = &self.locale {
-            eprintln!("* Locale: {locale}");
-        }
-        if let Some(addr) = self.local_address {
-            eprintln!("* Local address: {addr}");
-        }
-        if let Some(version) = self.ip_version {
-            let version = match version {
-                IpVersion::V4 => "IPv4",
-                IpVersion::V6 => "IPv6",
-            };
-            eprintln!("* IP version: {version}");
-        }
-        for entry in &self.resolve {
-            eprintln!("* Resolve: {entry}");
-        }
-        if self.retries > 0 {
-            eprintln!("* Retries: {}", self.retries);
-        }
-        if self.ignore_tls_errors {
-            eprintln!("* TLS verification: disabled");
-        }
-        if let Some(path) = &self.proxy_cacert {
-            eprintln!("* Proxy CA certificates: {path}");
-        }
-        if self.ignore_proxy_tls_errors {
-            eprintln!("* Proxy TLS verification: disabled");
-        }
-        if let Some(max) = self.max_response_body {
-            if max == 0 {
-                eprintln!("* Max response body: unlimited");
-            } else {
-                eprintln!("* Max response body: {max} bytes");
-            }
-        }
-        if let Some(padding) = self.server_padding {
-            match padding {
-                koon_core::ServerPadding::None => eprintln!("* Server padding: none"),
-                koon_core::ServerPadding::Bytes(bytes) => {
-                    eprintln!("* Server padding: {bytes} bytes");
-                }
-            }
-        }
-    }
-}
-
-/// A clap value parser that offers `names` (listed by `--help`, checked by
-/// clap) and turns the chosen one into a value with the core's parser.
-fn core_value<T>(names: &'static [&'static str]) -> impl TypedValueParser<Value = T>
-where
-    T: FromStr<Err = koon_core::Error> + Clone + Send + Sync + 'static,
-{
-    PossibleValuesParser::new(names.iter().copied())
-        .map(|name| name.parse().expect("every offered name parses"))
+    options: TableArgs<ProxyFlags>,
 }
 
 fn parse_method_arg(method: &str) -> Result<Method, String> {
@@ -454,15 +189,6 @@ fn parse_header(header: &str) -> Result<(String, String), String> {
         .split_once(':')
         .map(|(key, value)| (key.trim().to_string(), value.trim().to_string()))
         .ok_or_else(|| format!("invalid header '{header}': expected \"Key: Value\""))
-}
-
-/// Parse a timeout in seconds, fractions allowed; 0 means no timeout.
-fn parse_timeout(secs: &str) -> Result<Duration, String> {
-    secs.trim()
-        .parse::<f64>()
-        .ok()
-        .and_then(|value| Duration::try_from_secs_f64(value).ok())
-        .ok_or_else(|| format!("'{secs}' is not a number of seconds >= 0"))
 }
 
 /// A `-F` field, as curl takes it.
@@ -958,7 +684,7 @@ async fn write_response(cli: &Cli, response: &mut StreamingResponse) -> Result<(
     // read"). A chunk that would cross the cap is never written, matching what `collect_body`
     // does for the other output modes above; the file or pipe keeps whatever was written before
     // it, as curl leaves a partial download on disk past `--max-filesize`.
-    let max_response_body = cli.connection.resolved_max_response_body();
+    let max_response_body = cli.options.options()?.max_response_body();
     let mut received: u64 = 0;
     let mut first_part = Vec::new();
     let mut sink = Sink::open(output)?;
@@ -996,31 +722,17 @@ fn report_blocked(cli: &Cli, response: &StreamingResponse, body: &[u8]) -> Optio
     blocked
 }
 
-fn load_profile(browser: &str, profile_json: Option<&str>) -> Result<BrowserProfile, CliError> {
-    match profile_json {
-        Some(path) => BrowserProfile::from_file(path)
-            .map_err(|e| CliError::other(format!("Failed to load profile: {e}"))),
-        None => Ok(BrowserProfile::resolve(browser)?),
-    }
-}
-
 async fn run_request(cli: Cli) -> Result<(), CliError> {
     let url = cli.url.as_deref().ok_or_else(|| CliError {
         message: "No URL provided. Use --help for usage.".into(),
         exit_code: 2,
     })?;
 
-    let profile = load_profile(&cli.browser, cli.profile_json.as_deref())?;
-
-    let client = cli
-        .connection
-        .client_builder(profile)?
-        .follow_redirects(!cli.no_follow)
-        .max_redirects(cli.max_redirects)
-        .timeout(cli.timeout)
-        .cookie_jar(!cli.no_cookies)
-        .headers(cli.headers.clone())
-        .build()
+    let options = cli.options.options()?;
+    let timeout = options.timeout().unwrap_or_default();
+    let client = options
+        .client_builder()
+        .and_then(|builder| builder.build())
         .map_err(failed("Client build failed"))?;
 
     if let Some(path) = &cli.load_session {
@@ -1054,7 +766,7 @@ async fn run_request(cli: Cli) -> Result<(), CliError> {
 
     if cli.verbose {
         eprintln!("* {method} {url}");
-        cli.connection.print_settings();
+        cli.options.print_settings();
     }
 
     let transfer = async {
@@ -1098,10 +810,10 @@ async fn run_request(cli: Cli) -> Result<(), CliError> {
     };
     // --timeout bounds the body too, as in the bindings (and curl's --max-time); the client's
     // own timeout covers only the head of a streamed response.
-    let written = if cli.timeout.is_zero() {
+    let written = if timeout.is_zero() {
         transfer.await
     } else {
-        tokio::time::timeout(cli.timeout, transfer)
+        tokio::time::timeout(timeout, transfer)
             .await
             .unwrap_or_else(|_| Err(failed("Request failed")(koon_core::Error::Timeout)))
     };
@@ -1112,25 +824,12 @@ async fn run_request(cli: Cli) -> Result<(), CliError> {
 }
 
 async fn run_proxy(args: ProxyArgs) -> Result<(), CliError> {
-    let profile = load_profile(&args.browser, args.profile_json.as_deref())?;
-
-    let client = args
-        .connection
-        .client_builder(profile)?
-        .timeout(args.timeout);
-    let auth_required = args.auth.is_some();
-    let mut config = ProxyServerConfig {
-        listen_addr: args.listen_addr,
-        header_mode: args.header_mode,
-        ca_dir: args.ca_dir,
-        client,
-        allow_non_loopback: args.allow_non_loopback,
-        auth: args.auth,
-        ..ProxyServerConfig::default()
-    };
-    if let Some(max_connections) = args.max_connections {
-        config.max_connections = max_connections;
-    }
+    let config = args
+        .options
+        .options()?
+        .proxy_config()
+        .map_err(failed("Failed to start proxy"))?;
+    let auth_required = config.auth.is_some();
     let server = ProxyServer::start(config)
         .await
         .map_err(failed("Failed to start proxy"))?;
@@ -1140,7 +839,7 @@ async fn run_proxy(args: ProxyArgs) -> Result<(), CliError> {
     if auth_required {
         eprintln!("* Proxy-Authorization required");
     }
-    args.connection.print_settings();
+    args.options.print_settings();
     eprintln!("Press Ctrl+C to stop.");
 
     tokio::signal::ctrl_c()
@@ -1206,6 +905,7 @@ async fn async_main() -> ExitCode {
 mod tests {
     use super::*;
     use clap::CommandFactory;
+    use std::time::Duration;
 
     #[test]
     fn cli_definition_is_valid() {
@@ -1259,16 +959,26 @@ mod tests {
         assert_eq!(exit_code("COOKIE_JAR_DISABLED"), 1);
     }
 
+    fn proxy_args(args: &[&str]) -> ProxyArgs {
+        match Cli::try_parse_from(args).expect("valid arguments").command {
+            Some(Command::Proxy(args)) => args,
+            _ => panic!("expected the proxy command"),
+        }
+    }
+
+    fn client(cli: &Cli) -> Result<Client, CliError> {
+        Ok(cli.options.options()?.client_builder()?.build()?)
+    }
+
     #[test]
-    fn value_parsers_use_the_core() {
-        let cli = Cli::try_parse_from(["koon", "--doh", "google", "--ip-version", "6", "u"])
+    fn values_are_checked_by_the_core() {
+        let cli = Cli::try_parse_from(["koon", "--doh", "Google", "--ip-version", "v6", "u"])
             .expect("valid arguments");
-        assert_eq!(
-            cli.connection.doh.map(|c| c.server_hostname),
-            Some("dns.google".into())
-        );
-        assert_eq!(cli.connection.ip_version, Some(IpVersion::V6));
+        assert_eq!(cli.options.given("doh"), Some("Google"));
+        assert_eq!(cli.options.given("ip_version"), Some("v6"));
+        assert!(client(&cli).is_ok());
         assert_eq!(cli.method, None);
+        assert!(Cli::try_parse_from(["koon", "proxy", "--header-mode", "PassThrough"]).is_ok());
 
         let cli = Cli::try_parse_from(["koon", "-X", "patch", "u"]).expect("valid arguments");
         assert_eq!(cli.method, Some(Method::PATCH));
@@ -1279,6 +989,8 @@ mod tests {
             &["koon", "-H", "no colon", "u"],
             &["koon", "--local-address", "nope", "u"],
             &["koon", "-X", "GE T", "u"],
+            &["koon", "--max-redirects", "1.5", "u"],
+            &["koon", "--server-padding", "x", "u"],
             &["koon", "proxy", "--header-mode", "mirror"],
         ] {
             let err = Cli::try_parse_from(args).err().expect("rejected");
@@ -1287,25 +999,24 @@ mod tests {
     }
 
     #[test]
-    fn parses_proxy_tls_options() {
-        let cli = Cli::try_parse_from(["koon", "u"]).expect("valid arguments");
-        assert_eq!(cli.connection.proxy_cacert, None);
-        assert!(!cli.connection.ignore_proxy_tls_errors);
+    fn files_are_read_when_the_client_is_built() {
         let cli = Cli::try_parse_from([
             "koon",
             "--proxy-cacert",
-            "ca.pem",
+            "no-such-ca.pem",
             "--ignore-proxy-tls-errors",
             "u",
         ])
         .expect("valid arguments");
-        assert_eq!(cli.connection.proxy_cacert.as_deref(), Some("ca.pem"));
-        assert!(cli.connection.ignore_proxy_tls_errors);
+        assert_eq!(cli.options.given("proxy_ca_certs"), Some("no-such-ca.pem"));
+        let err = cli.options.options().err().expect("the file is missing");
+        assert_eq!(err.exit_code, 1);
+        assert!(err.message.contains("no-such-ca.pem"), "{}", err.message);
     }
 
     #[test]
     fn proxy_takes_the_connection_options_of_a_request() {
-        let cli = Cli::try_parse_from([
+        let args = proxy_args(&[
             "koon",
             "proxy",
             "--proxy",
@@ -1321,23 +1032,13 @@ mod tests {
             "--ip-version",
             "4",
             "-k",
-        ])
-        .expect("valid arguments");
-        let Some(Command::Proxy(args)) = cli.command else {
-            panic!("expected the proxy command");
-        };
-        let connection = &args.connection;
+        ]);
         assert_eq!(
-            connection.proxy.as_deref(),
+            args.options.given("proxy"),
             Some("http://user:pass@upstream:8080")
         );
-        assert_eq!(connection.locale.as_deref(), Some("de-DE"));
-        assert!(connection.doh.is_some());
-        assert_eq!(connection.local_address, Some([127, 0, 0, 1].into()));
-        assert_eq!(connection.retries, 2);
-        assert_eq!(connection.ip_version, Some(IpVersion::V4));
-        assert!(connection.ignore_tls_errors);
-        assert!(connection.client_builder(Chrome::latest()).is_ok());
+        assert_eq!(args.options.given("retries"), Some("2"));
+        assert!(args.options.options().unwrap().proxy_config().is_ok());
     }
 
     #[test]
@@ -1353,44 +1054,24 @@ mod tests {
             "u",
         ])
         .expect("valid arguments");
-        let err = cli
-            .connection
-            .client_builder(Chrome::latest())
-            .err()
-            .expect("the invalid --proxies entry must be rejected");
+        let err = client(&cli).err().expect("the invalid --proxies entry");
         assert_eq!(err.exit_code, 97, "{}", err.message);
     }
 
     #[test]
-    fn server_padding_pins_the_profile_through_client_builder() {
+    fn server_padding_pins_the_profile() {
         let cli = Cli::try_parse_from(["koon", "--server-padding", "none", "u"]).unwrap();
-        assert_eq!(
-            cli.connection.server_padding,
-            Some(koon_core::ServerPadding::None)
-        );
-        let client = cli.connection.client_builder(Chrome::latest()).unwrap();
-        let client = client.build().unwrap();
-        assert_eq!(client.profile().tls.server_padding, None);
-
+        assert_eq!(client(&cli).unwrap().profile().tls.server_padding, None);
         let cli = Cli::try_parse_from(["koon", "--server-padding", "9000", "u"]).unwrap();
         assert_eq!(
-            cli.connection.server_padding,
-            Some(koon_core::ServerPadding::Bytes(9000))
+            client(&cli).unwrap().profile().tls.server_padding,
+            Some(9000)
         );
-        let client = cli
-            .connection
-            .client_builder(Chrome::latest())
-            .unwrap()
-            .build()
-            .unwrap();
-        assert_eq!(client.profile().tls.server_padding, Some(9000));
-
-        assert!(Cli::try_parse_from(["koon", "--server-padding", "x", "u"]).is_err());
     }
 
     #[test]
     fn parses_proxy_listener_options() {
-        let cli = Cli::try_parse_from([
+        let args = proxy_args(&[
             "koon",
             "proxy",
             "--allow-non-loopback",
@@ -1398,16 +1079,13 @@ mod tests {
             "user:pass",
             "--max-connections",
             "5",
-        ])
-        .expect("valid arguments");
-        let Some(Command::Proxy(args)) = cli.command else {
-            panic!("expected the proxy command");
-        };
-        assert!(args.allow_non_loopback);
-        let auth = args.auth.expect("auth must be set");
+        ]);
+        let config = args.options.options().unwrap().proxy_config().unwrap();
+        assert!(config.allow_non_loopback);
+        let auth = config.auth.expect("auth must be set");
         assert_eq!(auth.username, "user");
         assert_eq!(auth.password, "pass");
-        assert_eq!(args.max_connections, Some(5));
+        assert_eq!(config.max_connections, 5);
 
         for bad in ["nocolon", ""] {
             let err = Cli::try_parse_from(["koon", "proxy", "--auth", bad])
@@ -1447,22 +1125,30 @@ mod tests {
 
     #[test]
     fn timeouts_take_fractions() {
-        assert_eq!(parse_timeout("2.5"), Ok(Duration::from_millis(2500)));
-        assert_eq!(parse_timeout("0"), Ok(Duration::ZERO));
-        for bad in ["-1", "nan", "inf", "soon", ""] {
-            assert!(parse_timeout(bad).is_err(), "{bad}");
-        }
-        let cli = Cli::try_parse_from(["koon", "--timeout", "0.25", "u"]).expect("valid");
-        assert_eq!(cli.timeout, Duration::from_millis(250));
-        let cli = Cli::try_parse_from(["koon", "proxy", "--timeout", "1.5"]).expect("valid");
-        let Some(Command::Proxy(args)) = cli.command else {
-            panic!("expected the proxy command");
+        let timeout = |args: &[&str]| {
+            let cli = Cli::try_parse_from(args).expect("valid");
+            cli.options.options().unwrap().timeout()
         };
-        assert_eq!(args.timeout, Duration::from_millis(1500));
-        let err = Cli::try_parse_from(["koon", "--timeout", "-1", "u"])
-            .err()
-            .unwrap();
-        assert_eq!(err.exit_code(), 2);
+        assert_eq!(timeout(&["koon", "u"]), Some(Duration::from_secs(30)));
+        assert_eq!(
+            timeout(&["koon", "--timeout", "0.25", "u"]),
+            Some(Duration::from_millis(250))
+        );
+        assert_eq!(
+            timeout(&["koon", "--timeout", "0", "u"]),
+            Some(Duration::ZERO)
+        );
+        let args = proxy_args(&["koon", "proxy", "--timeout", "1.5"]);
+        assert_eq!(
+            args.options.options().unwrap().timeout(),
+            Some(Duration::from_millis(1500))
+        );
+        for bad in ["-1", "nan", "inf", "soon", ""] {
+            let err = Cli::try_parse_from(["koon", "--timeout", bad, "u"])
+                .err()
+                .expect("rejected");
+            assert_eq!(err.exit_code(), 2, "{bad}");
+        }
     }
 
     #[test]
@@ -1517,8 +1203,7 @@ mod tests {
         .expect("valid arguments");
         assert!(cli.include && cli.fail && !cli.head);
         assert_eq!(cli.form.len(), 1);
-        assert_eq!(cli.connection.resolve, ["example.com:443:127.0.0.1"]);
-        assert!(cli.connection.client_builder(Chrome::latest()).is_ok());
+        assert!(client(&cli).is_ok());
         assert!(
             Cli::try_parse_from(["koon", "-I", "u"])
                 .expect("valid")
@@ -1535,11 +1220,7 @@ mod tests {
             assert_eq!(err.exit_code(), 2, "{args:?}");
         }
         let cli = Cli::try_parse_from(["koon", "--resolve", "nonsense", "u"]).expect("parses");
-        let err = cli
-            .connection
-            .client_builder(Chrome::latest())
-            .err()
-            .expect("an invalid entry");
+        let err = client(&cli).err().expect("an invalid entry");
         assert_eq!(err.exit_code, 2);
     }
 }

@@ -2,16 +2,17 @@
 //! the ones captured from the real browsers (`koon_core::verify`).
 
 use std::fmt::Write as _;
-use std::time::Duration;
 
 use clap::Args;
 use koon_core::BrowserProfile;
+use koon_core::options::Value;
 use koon_core::verify::{
     Check, Outcome, QUIC_SERVICE, Services, TLS_SERVICES, VerifyReport, verify_with,
 };
 use serde_json::json;
 
-use crate::{CliError, ConnectionArgs, exit_code, failed, parse_timeout, write_stdout};
+use crate::options::{TableArgs, VerifyFlags};
+use crate::{CliError, exit_code, failed, write_stdout};
 
 /// The profiles `koon verify` checks without `-b`: the latest version of
 /// each browser, on the default OS.
@@ -79,10 +80,6 @@ pub struct VerifyArgs {
     #[arg(long = "json")]
     json_output: bool,
 
-    /// Timeout in seconds of each request, fractions allowed (0: no timeout)
-    #[arg(long, default_value = "30", value_parser = parse_timeout)]
-    timeout: Duration,
-
     /// Fingerprint service to ask instead of tls.browserleaks.com and
     /// tls.peet.ws (repeatable, tried in order; JSON in the format of either)
     #[arg(long = "service", value_name = "URL")]
@@ -92,9 +89,10 @@ pub struct VerifyArgs {
     #[arg(long = "skip-http3")]
     skip_http3: bool,
 
-    /// How the checks connect: proxy, DNS, local address, `--server-padding`, ...
+    /// How the checks connect: timeout, proxy, DNS, local address,
+    /// `--server-padding`, ...
     #[command(flatten)]
-    connection: ConnectionArgs,
+    options: TableArgs<VerifyFlags>,
 }
 
 /// The status column of a field.
@@ -263,14 +261,10 @@ pub async fn run_verify(args: VerifyArgs) -> Result<(), CliError> {
     } else {
         args.browsers.clone()
     };
-    // Every name is checked before the first request. `--server-padding`, part of `connection`,
-    // is applied to each profile inside `client_builder` below.
+    // Every name is checked before the first request.
     let profiles = names
         .iter()
-        .map(|name| {
-            let profile = BrowserProfile::resolve(name)?;
-            Ok((name, BrowserProfile::resolve_name(name)?, profile))
-        })
+        .map(|name| Ok((name, BrowserProfile::resolve_name(name)?)))
         .collect::<Result<Vec<_>, CliError>>()?;
     let services = Services {
         tls: if args.services.is_empty() {
@@ -288,15 +282,17 @@ pub async fn run_verify(args: VerifyArgs) -> Result<(), CliError> {
             profiles.len(),
             services.tls.join(", ")
         );
-        args.connection.print_settings();
+        args.options.print_settings();
     }
     let mut reports = Vec::new();
-    for (requested, entry, profile) in profiles {
-        let client = args
-            .connection
-            .client_builder(profile)?
-            .timeout(args.timeout)
-            .build()
+    for (requested, entry) in profiles {
+        let mut options = args.options.options()?;
+        options
+            .set("--browser", Value::Text(requested.clone()))
+            .map_err(|e| CliError::from(koon_core::Error::from(e)))?;
+        let client = options
+            .client_builder()
+            .and_then(|builder| builder.build())
             .map_err(failed("Client build failed"))?;
         let report = verify_with(&entry, &client, &services).await;
         client.shutdown().await;
@@ -348,28 +344,18 @@ mod tests {
         ]);
         assert_eq!(args.browsers, ["chrome", "firefox154", "safari", "okhttp4"]);
         assert!(args.json_output && args.skip_http3);
+        assert_eq!(args.options.given("proxy"), Some("http://u:p@proxy:8080"));
         assert_eq!(
-            args.connection.proxy.as_deref(),
-            Some("http://u:p@proxy:8080")
+            args.options.options().unwrap().timeout(),
+            Some(std::time::Duration::from_secs(5))
         );
-        assert_eq!(args.timeout, Duration::from_secs(5));
         assert!(Cli::try_parse_from(["koon", "verify", "-b"]).is_err());
     }
 
     #[test]
-    fn server_padding_is_parsed_and_shared_with_the_main_cli() {
-        // `--server-padding` lives on the shared `ConnectionArgs`: `koon verify` gets it for
-        // free, and pinning itself (`BrowserProfile::pin_server_padding`) is a core test.
+    fn server_padding_is_a_verify_option() {
         let args = verify_args(&["koon", "verify", "--server-padding", "none"]);
-        assert_eq!(
-            args.connection.server_padding,
-            Some(koon_core::ServerPadding::None)
-        );
-        let args = verify_args(&["koon", "verify", "--server-padding", "6000"]);
-        assert_eq!(
-            args.connection.server_padding,
-            Some(koon_core::ServerPadding::Bytes(6000))
-        );
+        assert_eq!(args.options.given("server_padding"), Some("none"));
         assert!(Cli::try_parse_from(["koon", "verify", "--server-padding", "x"]).is_err());
     }
 }

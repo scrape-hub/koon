@@ -37,6 +37,9 @@ Rust only:
 - Python: one abi3 wheel per platform for Python 3.11 and later.
 - Rust: `doh` is a default feature of `koon-core`.
 - Building the Node addon from source needs Rust 1.88.
+- CLI: the flags of the options and their help come from the bindings' option
+  table; `--doh`, `--header-mode` and `--ip-version` take any case and the same
+  names, such as `--ip-version v4`.
 
 ### Fixed
 
