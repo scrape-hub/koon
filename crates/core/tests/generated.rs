@@ -401,9 +401,189 @@ fn python() -> Result<(), String> {
         .try_for_each(|(begin, end, text)| update(PYI, begin, end, text))
 }
 
+// --- R ------------------------------------------------------------------------------------------
+
+const R_WIDTH: usize = 80;
+const KOON_R: &str = "crates/r/R/koon.R";
+
+/// The constructor's arguments in the order `Koon$new()` took them before the option table, so an
+/// argument given by position stays where it was; the others follow in table order.
+const R_CLIENT_ORDER: &[&str] = &[
+    "browser",
+    "profile_json",
+    "proxy",
+    "proxies",
+    "timeout",
+    "headers",
+    "local_address",
+    "on_request",
+    "on_response",
+    "on_redirect",
+    "retries",
+    "locale",
+    "proxy_headers",
+    "ip_version",
+    "follow_redirects",
+    "max_redirects",
+    "cookie_jar",
+    "session_resumption",
+    "ignore_tls_errors",
+    "proxy_ca_certs",
+    "ignore_proxy_tls_errors",
+    "doh",
+    "resolve",
+    "max_response_body",
+    "server_padding",
+];
+
+fn r_options(scope: Scope, order: &[&str]) -> Vec<&'static OptionSpec> {
+    let mut specs: Vec<_> = options_in(scope).collect();
+    specs.sort_by_key(|spec| {
+        order
+            .iter()
+            .position(|name| *name == spec.name)
+            .unwrap_or(usize::MAX)
+    });
+    specs
+}
+
+/// What R takes for a kind, where the doc does not say it.
+fn r_note(kind: Kind) -> Option<&'static str> {
+    Some(match kind {
+        Kind::Headers => {
+            "A named character vector or a named list of single strings, e.g. \
+             `c(\"Accept-Language\" = \"de-DE\")`."
+        }
+        Kind::Pem => "PEM text, e.g. `readLines(\"proxy-ca.pem\")`, or a raw vector.",
+        Kind::Hook(Hook::Request) => "A `function(method, url)`.",
+        Kind::Hook(Hook::Response | Hook::Redirect) => {
+            "A `function(status, url, headers)`, `headers` a data frame like the response's."
+        }
+        Kind::Auth => "`c(user, password)`.",
+        _ => return None,
+    })
+}
+
+fn r_items(out: &mut String, specs: &[&OptionSpec]) {
+    out.push_str("#' \\describe{\n");
+    for spec in specs {
+        let mut text = render(spec.doc, Target::R);
+        if let Some(note) = r_note(spec.kind) {
+            text = format!("{text} {note}");
+        }
+        if let Some(default) = default_text(spec.default, Target::R) {
+            text = format!("{text} Default {default}.");
+        }
+        let item = format!("\\item{{`{}`}}{{{text}}}", spec.name);
+        for (i, line) in wrap(&item, R_WIDTH, "#'     ").into_iter().enumerate() {
+            if i == 0 {
+                out.push_str(&format!("#'   {}\n", &line["#'     ".len()..]));
+            } else {
+                out.push_str(&line);
+                out.push('\n');
+            }
+        }
+    }
+    out.push_str("#' }\n");
+}
+
+/// An R function `name` that passes `fixed` and the options of `specs` as a named list to the
+/// native `symbol`, after `before` (such as `self`).
+fn r_function(
+    out: &mut String,
+    name: &str,
+    fixed: &[(&str, Option<&str>)],
+    symbol: &str,
+    before: &[&str],
+    specs: &[&OptionSpec],
+) {
+    out.push_str(&format!("{name} <- function(\n"));
+    let params: Vec<String> = fixed
+        .iter()
+        .map(|(param, default)| match default {
+            Some(default) => format!("{param} = {default}"),
+            None => (*param).to_string(),
+        })
+        .chain(specs.iter().map(|spec| format!("{} = NULL", spec.name)))
+        .collect();
+    out.push_str(&format!("  {}\n", params.join(",\n  ")));
+    out.push_str(") {\n  koon_unwrap(.Call(\n");
+    for arg in std::iter::once(symbol)
+        .chain(before.iter().copied())
+        .chain(fixed.iter().map(|(param, _)| *param))
+    {
+        out.push_str(&format!("    {arg},\n"));
+    }
+    out.push_str("    list(\n");
+    let entries: Vec<String> = specs
+        .iter()
+        .map(|spec| format!("      {0} = {0}", spec.name))
+        .collect();
+    out.push_str(&entries.join(",\n"));
+    out.push_str("\n    )\n  ))\n}\n");
+}
+
+fn r() -> Result<(), String> {
+    let client: Vec<_> = r_options(Scope::Client, R_CLIENT_ORDER);
+    let request: Vec<_> = r_options(Scope::Request, &[]);
+
+    let mut docs = String::new();
+    docs.push_str("#' @section Constructor arguments:\n");
+    docs.push_str(
+        "#' `Koon$new()` takes the following arguments. Any left `NULL` keeps its\n#' default.\n",
+    );
+    r_items(&mut docs, &client);
+    docs.push_str("#'\n#' @section Request options:\n");
+    docs.push_str(
+        "#' `$request()` and the verbs (`$get()`, `$post()`, ...) take these options for\n\
+         #' one request. Any left `NULL` keeps the client's setting.\n",
+    );
+    r_items(&mut docs, &request);
+    docs.push_str("#' @name Koon\n#' @rdname Koon\nNULL\n");
+
+    let mut functions = String::new();
+    let browser = client.iter().position(|spec| spec.name == "browser");
+    let options: Vec<_> = client
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| Some(*i) != browser)
+        .map(|(_, spec)| *spec)
+        .collect();
+    r_function(
+        &mut functions,
+        "Koon$new",
+        &[("browser", Some("\"chrome\""))],
+        "wrap__Koon__new",
+        &[],
+        &options,
+    );
+    functions.push('\n');
+    r_function(
+        &mut functions,
+        "Koon$request",
+        &[("method", None), ("url", None), ("body", Some("NULL"))],
+        "wrap__Koon__request",
+        &["self"],
+        &request,
+    );
+
+    update(
+        KOON_R,
+        "# BEGIN GENERATED docs",
+        "# END GENERATED docs",
+        &docs,
+    )?;
+    update(
+        KOON_R,
+        "# BEGIN GENERATED functions",
+        "# END GENERATED functions",
+        &functions,
+    )
+}
+
 #[test]
 fn generated_files_are_current() {
-    let stale: Vec<String> = [node(), python()]
+    let stale: Vec<String> = [node(), python(), r()]
         .into_iter()
         .filter_map(Result::err)
         .collect();

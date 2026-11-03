@@ -6,13 +6,12 @@
 //! `koon_unwrap()` in `R/koon.R` raises it as a classed R condition.
 
 use extendr_api::prelude::*;
-use koon_core::dns::DohConfig;
+use koon_core::options::{Hook, Kind, OptionError, Options, Scope, Target, Value};
 use koon_core::{
-    decode_body_text, parse_method, BrowserProfile, Client, CookieParams, HttpResponse, IpVersion,
+    decode_body_text, parse_method, BrowserProfile, Client, CookieParams, HttpResponse,
     PartitionKey, RequestOptions,
 };
 use std::borrow::Cow;
-use std::net::IpAddr;
 use std::os::raw::{c_int, c_void};
 use std::sync::{mpsc, Arc, OnceLock};
 use std::time::{Duration, Instant};
@@ -142,29 +141,8 @@ fn opt_string(x: &Robj, name: &str) -> RResult<Option<String>> {
     opt(x, name, "a single string")
 }
 
-fn opt_bool(x: &Robj, name: &str) -> RResult<Option<bool>> {
-    opt(x, name, "TRUE or FALSE")
-}
-
-fn opt_count(x: &Robj, name: &str) -> RResult<Option<u32>> {
-    opt(x, name, "a whole number >= 0")
-}
-
 fn string(x: &Robj, name: &str) -> RResult<String> {
     opt_string(x, name)?.ok_or_else(|| RError::invalid(format!("`{name}` must be a single string")))
-}
-
-/// A timeout in seconds. `0` means no timeout, as in the core.
-fn opt_timeout(x: &Robj) -> RResult<Option<Duration>> {
-    opt::<f64>(x, "timeout", "a number of seconds")?
-        .map(|secs| {
-            Duration::try_from_secs_f64(secs).map_err(|_| {
-                RError::invalid(format!(
-                    "Invalid timeout: {secs}. Must be a finite number of seconds >= 0 (0 means no timeout)"
-                ))
-            })
-        })
-        .transpose()
 }
 
 /// A character vector without `NA`s.
@@ -246,75 +224,6 @@ fn body(x: &Robj) -> RResult<Option<Vec<u8>>> {
         .map_err(|_| RError::invalid("`body` must be a single string or a raw vector"))
 }
 
-/// PEM text: a character vector, joined by newlines (so `readLines()` of a
-/// PEM file works), or a raw vector.
-fn opt_pem(x: &Robj, name: &str) -> RResult<Option<Vec<u8>>> {
-    if x.is_null() {
-        return Ok(None);
-    }
-    if let Some(bytes) = x.as_raw_slice() {
-        return Ok(Some(bytes.to_vec()));
-    }
-    let lines = strings(x, name).map_err(|_| {
-        RError::invalid(format!(
-            "`{name}` must be PEM text (a character vector) or a raw vector"
-        ))
-    })?;
-    Ok(Some(lines.join("\n").into_bytes()))
-}
-
-/// `4`, `6`, or a string the core parses (`"v4"`, `"ipv6"`, ...).
-fn opt_ip_version(x: &Robj) -> RResult<Option<IpVersion>> {
-    if x.is_null() {
-        return Ok(None);
-    }
-    if let Ok(s) = <&str>::try_from(x) {
-        return Ok(Some(s.parse()?));
-    }
-    let version = u8::try_from(x).map_err(|_| RError::invalid("`ip_version` must be 4 or 6"))?;
-    Ok(Some(IpVersion::try_from(version)?))
-}
-
-/// A DNS-over-HTTPS provider name the core parses (`"cloudflare"`, `"google"`, ...).
-fn opt_doh(x: &Robj) -> RResult<Option<DohConfig>> {
-    Ok(opt_string(x, "doh")?
-        .map(|provider| provider.parse::<DohConfig>())
-        .transpose()?)
-}
-
-/// A local IP address to bind outgoing connections to.
-fn opt_local_address(x: &Robj) -> RResult<Option<IpAddr>> {
-    let Some(addr) = opt_string(x, "local_address")? else {
-        return Ok(None);
-    };
-    addr.parse::<IpAddr>()
-        .map(Some)
-        .map_err(|e| RError::invalid(format!("Invalid local_address '{addr}': {e}")))
-}
-
-/// A response-body size cap in bytes; `0` disables it, `NULL` keeps the core's default (100 MiB).
-fn opt_max_response_body(x: &Robj) -> RResult<u64> {
-    Ok(opt::<u64>(x, "max_response_body", "a whole number >= 0")?
-        .unwrap_or_else(|| koon_core::ConnectionOptions::default().max_response_body))
-}
-
-/// A pinned server-padding field trial group the core parses (`"none"`, or a number of bytes).
-fn opt_server_padding(x: &Robj) -> RResult<Option<koon_core::ServerPadding>> {
-    Ok(opt_string(x, "server_padding")?
-        .map(|padding| padding.parse::<koon_core::ServerPadding>())
-        .transpose()?)
-}
-
-/// A character vector, or an empty one for `NULL` (unset means "no proxies"/"no resolve
-/// entries", not "an empty list of proxies", which the core would reject as invalid).
-fn strings_or_empty(x: &Robj, name: &str) -> RResult<Vec<String>> {
-    if x.is_null() {
-        Ok(Vec::new())
-    } else {
-        strings(x, name)
-    }
-}
-
 fn callback(x: Robj, name: &str) -> RResult<Option<Robj>> {
     if x.is_null() {
         Ok(None)
@@ -325,6 +234,87 @@ fn callback(x: Robj, name: &str) -> RResult<Option<Robj>> {
             "`{name}` must be a function or NULL"
         )))
     }
+}
+
+// --- Options -------------------------------------------------------------------
+
+/// Named options (`list(name = value, ...)`, which the R functions in
+/// `R/koon.R` build) as the core's [`Options`] for `scope`, and the
+/// callbacks among them, which run on the R thread instead of in the core.
+fn read_options(scope: Scope, options: &Robj) -> RResult<(Options, Callbacks)> {
+    let mut read = Options::new(scope, Target::R);
+    let mut callbacks = Callbacks::default();
+    if options.is_null() {
+        return Ok((read, callbacks));
+    }
+    let list =
+        List::try_from(options).map_err(|_| RError::invalid("the options must be a named list"))?;
+    for (key, value) in list.iter() {
+        let spec = read.spec(key).map_err(option_error)?;
+        match spec.kind {
+            Kind::Hook(hook) => {
+                let f = callback(value, spec.name)?;
+                match hook {
+                    Hook::Request => callbacks.on_request = f,
+                    Hook::Response => callbacks.on_response = f,
+                    Hook::Redirect => callbacks.on_redirect = f,
+                }
+            }
+            kind => {
+                let value = r_value(&value, kind, spec.name)?;
+                read.set_option(spec, value).map_err(option_error)?;
+            }
+        }
+    }
+    Ok((read, callbacks))
+}
+
+fn option_error(error: OptionError) -> RError {
+    match error {
+        OptionError::Unknown(message) | OptionError::Type(message) => RError::invalid(message),
+        OptionError::Invalid(error) => error.into(),
+    }
+}
+
+/// An R value as the core's option [`Value`]: `NULL` and `NA` are unset, a
+/// value no option takes is [`Value::Other`], which the core reports with
+/// the type it expected.
+fn r_value(x: &Robj, kind: Kind, name: &str) -> RResult<Value> {
+    if x.is_null() {
+        return Ok(Value::Null);
+    }
+    if kind == Kind::Headers {
+        return headers(x, name).map(Value::Pairs);
+    }
+    if let Some(bytes) = x.as_raw_slice() {
+        return Ok(Value::Bytes(bytes.to_vec()));
+    }
+    let scalar = x.len() == 1;
+    Ok(match x.rtype() {
+        Rtype::Logicals if scalar => Option::<bool>::try_from(x)
+            .ok()
+            .flatten()
+            .map_or(Value::Null, Value::Bool),
+        Rtype::Integers if scalar => Option::<i32>::try_from(x)
+            .ok()
+            .flatten()
+            .map_or(Value::Null, |n| Value::Int(n.into())),
+        Rtype::Doubles if scalar => Option::<f64>::try_from(x)
+            .ok()
+            .flatten()
+            .map_or(Value::Null, Value::Float),
+        Rtype::Strings if scalar && x.is_na() => Value::Null,
+        Rtype::Strings => match strings(x, name) {
+            Ok(mut texts) if texts.len() == 1 => Value::Text(texts.remove(0)),
+            Ok(texts) => Value::Texts(texts),
+            Err(_) => Value::Other,
+        },
+        Rtype::List => match strings(x, name) {
+            Ok(texts) => Value::Texts(texts),
+            Err(_) => Value::Other,
+        },
+        _ => Value::Other,
+    })
 }
 
 /// A list's element by name.
@@ -600,14 +590,6 @@ struct Callbacks {
 }
 
 impl Callbacks {
-    fn new(on_request: Robj, on_response: Robj, on_redirect: Robj) -> RResult<Self> {
-        Ok(Callbacks {
-            on_request: callback(on_request, "on_request")?,
-            on_response: callback(on_response, "on_response")?,
-            on_redirect: callback(on_redirect, "on_redirect")?,
-        })
-    }
-
     /// These callbacks, each falling back to `client`'s.
     fn or(self, client: &Callbacks) -> Callbacks {
         Callbacks {
@@ -821,114 +803,39 @@ fn poll_until_done<T: Send + 'static>(
 
 #[extendr]
 impl Koon {
-    #[allow(clippy::too_many_arguments)]
+    /// The options of `Koon$new()` in `R/koon.R`, as a named list.
     fn new(
         #[default = "\"chrome\""] browser: Robj,
-        #[default = "NULL"] profile_json: Robj,
-        #[default = "NULL"] proxy: Robj,
-        #[default = "NULL"] proxies: Robj,
-        #[default = "NULL"] timeout: Robj,
-        #[default = "NULL"] headers: Robj,
-        #[default = "NULL"] local_address: Robj,
-        #[default = "NULL"] on_request: Robj,
-        #[default = "NULL"] on_response: Robj,
-        #[default = "NULL"] on_redirect: Robj,
-        #[default = "NULL"] retries: Robj,
-        #[default = "NULL"] locale: Robj,
-        #[default = "NULL"] proxy_headers: Robj,
-        #[default = "NULL"] ip_version: Robj,
-        #[default = "NULL"] follow_redirects: Robj,
-        #[default = "NULL"] max_redirects: Robj,
-        #[default = "NULL"] cookie_jar: Robj,
-        #[default = "NULL"] session_resumption: Robj,
-        #[default = "NULL"] ignore_tls_errors: Robj,
-        #[default = "NULL"] proxy_ca_certs: Robj,
-        #[default = "NULL"] ignore_proxy_tls_errors: Robj,
-        #[default = "NULL"] doh: Robj,
-        #[default = "NULL"] resolve: Robj,
-        #[default = "NULL"] max_response_body: Robj,
-        #[default = "NULL"] server_padding: Robj,
+        #[default = "NULL"] options: Robj,
     ) -> RResult<Self> {
-        let profile = BrowserProfile::from_name_or_json(
-            &string(&browser, "browser")?,
-            opt_string(&profile_json, "profile_json")?.as_deref(),
-        )?;
-
-        let connection = koon_core::ConnectionOptions {
-            ignore_tls_errors: opt_bool(&ignore_tls_errors, "ignore_tls_errors")?.unwrap_or(false),
-            proxy: opt_string(&proxy, "proxy")?,
-            proxies: strings_or_empty(&proxies, "proxies")?,
-            proxy_ca_certs: opt_pem(&proxy_ca_certs, "proxy_ca_certs")?,
-            ignore_proxy_tls_errors: opt_bool(&ignore_proxy_tls_errors, "ignore_proxy_tls_errors")?
-                .unwrap_or(false),
-            proxy_headers: self::headers(&proxy_headers, "proxy_headers")?,
-            session_resumption: opt_bool(&session_resumption, "session_resumption")?
-                .unwrap_or(true),
-            doh: opt_doh(&doh)?,
-            local_address: opt_local_address(&local_address)?,
-            retries: opt_count(&retries, "retries")?.unwrap_or(0),
-            locale: opt_string(&locale, "locale")?,
-            ip_version: opt_ip_version(&ip_version)?,
-            resolve: strings_or_empty(&resolve, "resolve")?,
-            max_response_body: opt_max_response_body(&max_response_body)?,
-            server_padding: opt_server_padding(&server_padding)?,
-        };
-
-        // Unset (NULL) options keep the core's defaults.
-        let mut builder = connection
-            .apply(profile)?
-            .headers(self::headers(&headers, "headers")?);
-        if let Some(timeout) = opt_timeout(&timeout)? {
-            builder = builder.timeout(timeout);
-        }
-        if let Some(follow) = opt_bool(&follow_redirects, "follow_redirects")? {
-            builder = builder.follow_redirects(follow);
-        }
-        if let Some(max) = opt_count(&max_redirects, "max_redirects")? {
-            builder = builder.max_redirects(max);
-        }
-        if let Some(enabled) = opt_bool(&cookie_jar, "cookie_jar")? {
-            builder = builder.cookie_jar(enabled);
-        }
-
+        let (mut read, callbacks) = read_options(Scope::Client, &options)?;
+        let browser = r_value(&browser, Kind::Browser, "browser")?;
+        read.set("browser", browser).map_err(option_error)?;
         // The callbacks are wired per request (see `Callbacks::wire`), never
         // registered on the builder: they may only run on the R thread.
         Ok(Koon {
-            client: Arc::new(builder.build()?),
-            callbacks: Callbacks::new(on_request, on_response, on_redirect)?,
+            client: Arc::new(read.client_builder()?.build()?),
+            callbacks,
         })
     }
 
     /// Send a request and wait for the response, interruptibly. The HTTP
-    /// verbs (`get`, `post`, ...) are defined on top of this in R/koon.R.
-    #[allow(clippy::too_many_arguments)]
+    /// verbs (`get`, `post`, ...) are defined on top of this in R/koon.R,
+    /// which passes the options as a named list.
     fn request(
         &self,
         method: Robj,
         url: Robj,
         #[default = "NULL"] body: Robj,
-        #[default = "NULL"] headers: Robj,
-        #[default = "NULL"] timeout: Robj,
-        #[default = "NULL"] proxy: Robj,
-        #[default = "NULL"] follow_redirects: Robj,
-        #[default = "NULL"] max_redirects: Robj,
-        #[default = "NULL"] on_request: Robj,
-        #[default = "NULL"] on_response: Robj,
-        #[default = "NULL"] on_redirect: Robj,
+        #[default = "NULL"] options: Robj,
     ) -> RResult<List> {
         let method = parse_method(&string(&method, "method")?)?;
         let url = string(&url, "url")?;
         let body = self::body(&body)?;
         // Unset (NULL) options fall back to the client's settings.
-        let mut options = RequestOptions {
-            headers: self::headers(&headers, "headers")?,
-            timeout: opt_timeout(&timeout)?,
-            proxy: opt_string(&proxy, "proxy")?,
-            follow_redirects: opt_bool(&follow_redirects, "follow_redirects")?,
-            max_redirects: opt_count(&max_redirects, "max_redirects")?,
-            ..Default::default()
-        };
-        let callbacks = Callbacks::new(on_request, on_response, on_redirect)?.or(&self.callbacks);
+        let (read, callbacks) = read_options(Scope::Request, &options)?;
+        let mut options = read.request_options();
+        let callbacks = callbacks.or(&self.callbacks);
 
         let (tx, rx) = unbounded_channel();
         callbacks.wire(&mut options, &tx);

@@ -1,6 +1,126 @@
 #' @include extendr-wrappers.R
 NULL
 
+# BEGIN GENERATED docs (crates/core/tests/generated.rs)
+#' @section Constructor arguments:
+#' `Koon$new()` takes the following arguments. Any left `NULL` keeps its
+#' default.
+#' \describe{
+#'   \item{`browser`}{Browser profile to impersonate, such as `chrome`,
+#'     `firefox154`, `chrome-macos`, `safari-mobile266` or `okhttp5`. Without a
+#'     version it is the newest one, without an OS desktop browsers impersonate
+#'     Windows and Safari macOS. Default `"chrome"`.}
+#'   \item{`profile_json`}{A custom browser profile as JSON, as
+#'     `$export_profile()` returns it. Overrides `browser`. Malformed JSON fails
+#'     with `koon_json_error`.}
+#'   \item{`proxy`}{Proxy URL: `http://`, `https://`, `socks5://` or
+#'     `socks5h://` (the same: the proxy resolves the host name), optionally
+#'     with `user:pass@`. An `https://` proxy is reached over TLS and its
+#'     certificate is verified (see `proxy_ca_certs`).}
+#'   \item{`proxies`}{Proxy URLs to rotate through: each request, and each
+#'     retry, takes the next one. Takes priority over `proxy`.}
+#'   \item{`timeout`}{Timeout of a whole request in seconds, fractions
+#'     allowed: connecting, redirects and the body. `0` means no timeout.
+#'     Default 30.}
+#'   \item{`headers`}{Headers sent with every request, in order. They replace
+#'     the profile's header of the same name at its browser position; a name
+#'     given twice is sent once, with the last value. A named character vector
+#'     or a named list of single strings, e.g. `c("Accept-Language" =
+#'     "de-DE")`.}
+#'   \item{`local_address`}{Local IP address outgoing connections are bound
+#'     to.}
+#'   \item{`on_request`}{Called before each request, including each redirect
+#'     hop, with the method and URL. An error it raises fails the request before
+#'     it is sent. A `function(method, url)`.}
+#'   \item{`on_response`}{Called after each response, including each redirect
+#'     hop, once its cookies are stored, with the status, URL and headers. An
+#'     error it raises fails the request. A `function(status, url, headers)`,
+#'     `headers` a data frame like the response's.}
+#'   \item{`on_redirect`}{Called before a redirect is followed, with the
+#'     status, URL and headers. Return `FALSE` to stop and get the 3xx response;
+#'     any other value follows it. An error it raises fails the request. A
+#'     `function(status, url, headers)`, `headers` a data frame like the
+#'     response's.}
+#'   \item{`retries`}{Automatic retries on transport errors. With `proxies`,
+#'     each retry takes the next proxy. A request that may already have reached
+#'     the server is retried only for idempotent methods. Default 0.}
+#'   \item{`locale`}{The user's language, such as `de-AT`, to match the
+#'     proxy's country. The Accept-Language header becomes what the profile's
+#'     browser sends for it: Chrome the list of the UI language it picks
+#'     (`de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7`), Safari `de-DE,de;q=0.9`.}
+#'   \item{`proxy_headers`}{Headers of the HTTP CONNECT request to the proxy,
+#'     in order: session IDs, geo-targeting, authentication. A named character
+#'     vector or a named list of single strings, e.g. `c("Accept-Language" =
+#'     "de-DE")`.}
+#'   \item{`ip_version`}{Resolve hosts to IPv4 (`4`) or IPv6 (`6`) only, e.g.
+#'     for a proxy that speaks IPv4 alone. `v4`, `ipv6` and the like work too.}
+#'   \item{`follow_redirects`}{Follow redirects. Default `TRUE`.}
+#'   \item{`max_redirects`}{Maximum number of redirects to follow. Default
+#'     10.}
+#'   \item{`cookie_jar`}{Keep cookies across requests. Default `TRUE`.}
+#'   \item{`session_resumption`}{Resume TLS sessions. Default `TRUE`.}
+#'   \item{`ignore_tls_errors`}{Skip certificate verification of origins.
+#'     `https://` proxies are still verified (see `ignore_proxy_tls_errors`).
+#'     Default `FALSE`.}
+#'   \item{`proxy_ca_certs`}{Certificates (PEM, one or more) trusted for the
+#'     TLS connection to `https://` proxies in addition to the built-in roots,
+#'     like curl's `--proxy-cacert`: for a proxy with a self-signed certificate
+#'     or one from a private CA. Origins are still verified against the built-in
+#'     roots only. Invalid PEM fails with `koon_invalid_argument`. PEM text,
+#'     e.g. `readLines("proxy-ca.pem")`, or a raw vector.}
+#'   \item{`ignore_proxy_tls_errors`}{Skip certificate verification of
+#'     `https://` proxies, like curl's `--proxy-insecure`. The connection stays
+#'     encrypted, but anyone on the way to the proxy can pose as it and read the
+#'     proxy credentials and the hosts requested. Origins are still verified.
+#'     Prefer `proxy_ca_certs`. Default `FALSE`.}
+#'   \item{`doh`}{DNS-over-HTTPS provider, any case: `cloudflare` or
+#'     `google`.}
+#'   \item{`resolve`}{Entries in curl's `--resolve` format,
+#'     `host:port:address[,address...]` (IPv6 in brackets): requests to that
+#'     host and port connect to the address instead of resolving the host. The
+#'     TLS server name, Host header and cookies stay the host's. An invalid
+#'     entry fails with `koon_invalid_argument`.}
+#'   \item{`max_response_body`}{Maximum response body size in bytes,
+#'     decompressed: past it, a response fails with `koon_body_error` instead of
+#'     growing the buffer further, also when a compressed body decodes past it.
+#'     Reading a streaming response chunk by chunk without decoding it is not
+#'     capped. `0` disables it. Default 100 MiB.}
+#'   \item{`server_padding`}{Pins Chrome 151+'s `PqcBandwidthExperiment`
+#'     server-padding field trial group instead of drawing one when the client
+#'     is built: `none` (not in the study) or the bytes of padding the group
+#'     asks for (e.g. `6000`). The study ended on 2026-10-30, so a client no
+#'     longer draws one. No effect on a profile without the trial.}
+#' }
+#'
+#' @section Request options:
+#' `$request()` and the verbs (`$get()`, `$post()`, ...) take these options for
+#' one request. Any left `NULL` keeps the client's setting.
+#' \describe{
+#'   \item{`headers`}{Headers of this request, in order. They replace client
+#'     and profile headers of the same name, which keep their browser position.
+#'     A named character vector or a named list of single strings, e.g.
+#'     `c("Accept-Language" = "de-DE")`.}
+#'   \item{`timeout`}{Timeout of this request in seconds, fractions allowed; a
+#'     streaming request times the response head and then each wait for the
+#'     body. `0` means no timeout.}
+#'   \item{`proxy`}{Proxy URL for this request, in place of the client's
+#'     proxies.}
+#'   \item{`follow_redirects`}{Follow redirects in this request.}
+#'   \item{`max_redirects`}{Maximum number of redirects this request follows.}
+#'   \item{`on_request`}{Called before each request of this call, including
+#'     each redirect hop, in place of the client's. A `function(method, url)`.}
+#'   \item{`on_response`}{Called after each response of this call, including
+#'     each redirect hop, in place of the client's. A `function(status, url,
+#'     headers)`, `headers` a data frame like the response's.}
+#'   \item{`on_redirect`}{Called before a redirect of this call is followed,
+#'     in place of the client's. Return `FALSE` to stop. A `function(status,
+#'     url, headers)`, `headers` a data frame like the response's.}
+#' }
+#' @name Koon
+#' @rdname Koon
+NULL
+# END GENERATED docs
+
 #' @title Browser-Impersonating HTTP Client
 #'
 #' @description
@@ -11,99 +131,15 @@ NULL
 #' Create a client with `Koon$new(...)` and call its methods with `$`, e.g.
 #' `client$get(url)`.
 #'
-#' @section Constructor arguments:
-#' `Koon$new()` takes the following arguments. Any left `NULL` keeps koon's
-#' default.
-#' \describe{
-#'   \item{`browser`}{Browser profile name, see [koon_browsers()]. Without a
-#'     version the latest one is used, without an OS suffix desktop profiles
-#'     impersonate Windows, Safari macOS: `"chrome"`, `"firefox154"`,
-#'     `"chrome-macos"`, `"safarimobile"`, `"okhttp4"`. Default `"chrome"`.}
-#'   \item{`profile_json`}{A custom browser profile as a JSON string (e.g. from
-#'     `$export_profile()`). Overrides `browser`. Malformed JSON is a
-#'     `koon_json_error`.}
-#'   \item{`proxy`}{Proxy URL: `http://`, `https://` or `socks5://`, optionally
-#'     with `user:pass@`. An `https://` proxy is reached over TLS and its
-#'     certificate is verified (see `proxy_ca_certs`).}
-#'   \item{`proxies`}{Character vector of proxy URLs used in rotation, one per
-#'     request. Takes priority over `proxy`.}
-#'   \item{`timeout`}{Timeout of a whole request in seconds, fractions allowed
-#'     (default 30); `0` means no timeout.}
-#'   \item{`headers`}{Headers sent with every request, in order: a named
-#'     character vector, e.g. `c("Accept-Language" = "de-DE")`, or a named
-#'     list of single strings, e.g. `list("Accept-Language" = "de-DE")`. They
-#'     replace the profile's header of the same name at its browser position.
-#'     A name given twice is sent once, with the last value.}
-#'   \item{`local_address`}{Local IP address to bind outgoing connections to.}
-#'   \item{`on_request`}{`function(method, url)`, called before each request,
-#'     including each redirect hop. An error it raises fails the request
-#'     before it is sent.}
-#'   \item{`on_response`}{`function(status, url, headers)`, called after each
-#'     response, including each redirect hop. `headers` is a data frame like
-#'     the response's. An error it raises fails the request.}
-#'   \item{`on_redirect`}{`function(status, url, headers)`, called before a
-#'     redirect is followed. Return `FALSE` to stop and get the 3xx response;
-#'     any other value (`TRUE`, `NULL` from a logging function, `NA`, ...)
-#'     follows it. An error it raises fails the request.}
-#'   \item{`retries`}{Number of automatic retries on transport errors
-#'     (default 0). Requests that may already have reached the server are
-#'     only retried for idempotent methods.}
-#'   \item{`locale`}{The user's language, such as `"de-AT"`, to match the
-#'     proxy's country. The `Accept-Language` header becomes what the profile's
-#'     browser sends for it: Chrome the list of the UI language it picks
-#'     (`de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7`), Safari `de-DE,de;q=0.9`.}
-#'   \item{`proxy_headers`}{Headers for the HTTP CONNECT request to the proxy
-#'     (session IDs, geo-targeting), in the same forms as `headers`.}
-#'   \item{`ip_version`}{`4` or `6` to resolve hosts to IPv4 or IPv6 only.}
-#'   \item{`follow_redirects`}{Follow redirects (default `TRUE`).}
-#'   \item{`max_redirects`}{Maximum number of redirects to follow (default 10).}
-#'   \item{`cookie_jar`}{Keep cookies across requests (default `TRUE`).}
-#'   \item{`session_resumption`}{Resume TLS sessions (default `TRUE`).}
-#'   \item{`ignore_tls_errors`}{Skip TLS certificate verification of origins
-#'     (default `FALSE`). Dangerous; for testing only. `https://` proxies are
-#'     still verified (see `ignore_proxy_tls_errors`).}
-#'   \item{`proxy_ca_certs`}{Certificates (PEM, one or more) trusted for the
-#'     TLS connection to `https://` proxies, in addition to the built-in
-#'     roots, like curl's `--proxy-cacert`: for a proxy with a self-signed
-#'     certificate or one from a private CA. PEM text, e.g.
-#'     `readLines("proxy-ca.pem")`, or a raw vector. Origins are still
-#'     verified against the built-in roots only.}
-#'   \item{`ignore_proxy_tls_errors`}{Skip certificate verification of
-#'     `https://` proxies (default `FALSE`), like curl's `--proxy-insecure`.
-#'     The connection stays encrypted, but anyone on the way to the proxy can
-#'     pose as it and read the proxy credentials and the hosts requested.
-#'     Origins are still verified. Prefer `proxy_ca_certs`.}
-#'   \item{`doh`}{DNS-over-HTTPS provider: `"cloudflare"` or `"google"`.}
-#'   \item{`resolve`}{Character vector of entries in curl's `--resolve`
-#'     format, `"host:port:address[,address...]"` (IPv6 in brackets):
-#'     requests to that host and port connect to the address instead of
-#'     resolving the host. TLS server name, Host header and cookies stay the
-#'     host's.}
-#'   \item{`max_response_body`}{Maximum response body size in bytes,
-#'     decompressed (default 100 MiB): past it, a response fails with a
-#'     `koon_body_error` instead of growing the buffer further (also covers
-#'     a compressed body that decodes past the cap). `0` disables it.}
-#'   \item{`server_padding`}{Pins Chrome 151+'s
-#'     `PqcBandwidthExperiment` server-padding field trial group instead of
-#'     drawing one when the client is built: `"none"` (not in the study) or
-#'     the bytes of padding the group asks for (e.g. `"6000"`). The study
-#'     ended on 2026-10-30, so a client no longer draws one. No effect on a
-#'     profile without the trial.}
-#' }
-#'
 #' @section Methods:
 #' \describe{
 #'   \item{`$get(url, ...)`, `$head(url, ...)`, `$delete(url, ...)`}{Send a
 #'     request without a body. `...` takes the options of `$request()`.}
 #'   \item{`$post(url, body = NULL, ...)`, `$put(...)`, `$patch(...)`}{Send a
 #'     request with a body.}
-#'   \item{`$request(method, url, body = NULL, headers = NULL, timeout = NULL,
-#'     proxy = NULL, follow_redirects = NULL, max_redirects = NULL, on_request =
-#'     NULL, on_response = NULL, on_redirect = NULL)`}{Send a request with any
-#'     method. `body` is a single string or a raw vector. `headers` are headers
-#'     for this request only, in the forms the constructor takes. The other
-#'     options, callbacks included, override the client's setting of the same
-#'     name for this request; `NULL` keeps it.}
+#'   \item{`$request(method, url, body = NULL, ...)`}{Send a request with any
+#'     method. `body` is a single string or a raw vector. `...` takes the
+#'     request options above.}
 #'   \item{`$save_session()`, `$load_session(json)`}{Save the cookies and TLS
 #'     sessions as a JSON string, and restore them. `json` may also be the
 #'     lines of a saved session file, as `readLines()` returns them.}
@@ -311,6 +347,100 @@ local({
     Koon[[name]] <- method
   }
 })
+
+# The functions that take options pass them to Rust as one named list.
+# BEGIN GENERATED functions (crates/core/tests/generated.rs)
+Koon$new <- function(
+  browser = "chrome",
+  profile_json = NULL,
+  proxy = NULL,
+  proxies = NULL,
+  timeout = NULL,
+  headers = NULL,
+  local_address = NULL,
+  on_request = NULL,
+  on_response = NULL,
+  on_redirect = NULL,
+  retries = NULL,
+  locale = NULL,
+  proxy_headers = NULL,
+  ip_version = NULL,
+  follow_redirects = NULL,
+  max_redirects = NULL,
+  cookie_jar = NULL,
+  session_resumption = NULL,
+  ignore_tls_errors = NULL,
+  proxy_ca_certs = NULL,
+  ignore_proxy_tls_errors = NULL,
+  doh = NULL,
+  resolve = NULL,
+  max_response_body = NULL,
+  server_padding = NULL
+) {
+  koon_unwrap(.Call(
+    wrap__Koon__new,
+    browser,
+    list(
+      profile_json = profile_json,
+      proxy = proxy,
+      proxies = proxies,
+      timeout = timeout,
+      headers = headers,
+      local_address = local_address,
+      on_request = on_request,
+      on_response = on_response,
+      on_redirect = on_redirect,
+      retries = retries,
+      locale = locale,
+      proxy_headers = proxy_headers,
+      ip_version = ip_version,
+      follow_redirects = follow_redirects,
+      max_redirects = max_redirects,
+      cookie_jar = cookie_jar,
+      session_resumption = session_resumption,
+      ignore_tls_errors = ignore_tls_errors,
+      proxy_ca_certs = proxy_ca_certs,
+      ignore_proxy_tls_errors = ignore_proxy_tls_errors,
+      doh = doh,
+      resolve = resolve,
+      max_response_body = max_response_body,
+      server_padding = server_padding
+    )
+  ))
+}
+
+Koon$request <- function(
+  method,
+  url,
+  body = NULL,
+  headers = NULL,
+  timeout = NULL,
+  proxy = NULL,
+  follow_redirects = NULL,
+  max_redirects = NULL,
+  on_request = NULL,
+  on_response = NULL,
+  on_redirect = NULL
+) {
+  koon_unwrap(.Call(
+    wrap__Koon__request,
+    self,
+    method,
+    url,
+    body,
+    list(
+      headers = headers,
+      timeout = timeout,
+      proxy = proxy,
+      follow_redirects = follow_redirects,
+      max_redirects = max_redirects,
+      on_request = on_request,
+      on_response = on_response,
+      on_redirect = on_redirect
+    )
+  ))
+}
+# END GENERATED functions
 
 # $set_cookies() returns the skipped cookies, usually none: invisibly.
 body(Koon$set_cookies) <- call("invisible", body(Koon$set_cookies))

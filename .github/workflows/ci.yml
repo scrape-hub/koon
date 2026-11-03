@@ -215,10 +215,10 @@ jobs:
         with:
           use-public-rspm: true
 
-      # Only what the tests need; the package itself has no R dependencies.
+      # Only what the tests and the docs check need; the package itself has no R dependencies.
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          packages: any::testthat, any::processx, any::withr, any::jsonlite
+          packages: any::testthat, any::processx, any::withr, any::jsonlite, any::roxygen2
 
       - name: Cargo cache
         uses: actions/cache@v6
@@ -244,6 +244,12 @@ jobs:
 
       - name: Install the package
         run: R CMD INSTALL crates/r
+
+      # The install regenerates R/extendr-wrappers.R; roxygen writes man/ from R/koon.R.
+      - name: Generated R files are current
+        run: |
+          Rscript -e 'roxygen2::roxygenise("crates/r", load_code = roxygen2::load_installed)'
+          git diff --exit-code crates/r/R/extendr-wrappers.R crates/r/man
 
       # Python is on the runner, so the tests against the local test server
       # (tests/testthat/testserver.py) run too.

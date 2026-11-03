@@ -95,6 +95,7 @@ Rust only:
 - Node: `postMultipart()` and `Koon.verify()` reject unknown option keys too.
 - Python: `None` keeps the default for every option, also for
   `follow_redirects`, `retries` and the like, which raised `TypeError`.
+- R: `Koon$new(browser = NULL)` keeps the default profile instead of failing.
 
 ### Security
 

@@ -31,9 +31,9 @@ raise_interrupt <- function() invisible(.Call(wrap__raise_interrupt))
 
 Koon <- new.env(parent = emptyenv())
 
-Koon$new <- function(browser = "chrome", profile_json = NULL, proxy = NULL, proxies = NULL, timeout = NULL, headers = NULL, local_address = NULL, on_request = NULL, on_response = NULL, on_redirect = NULL, retries = NULL, locale = NULL, proxy_headers = NULL, ip_version = NULL, follow_redirects = NULL, max_redirects = NULL, cookie_jar = NULL, session_resumption = NULL, ignore_tls_errors = NULL, proxy_ca_certs = NULL, ignore_proxy_tls_errors = NULL, doh = NULL, resolve = NULL, max_response_body = NULL, server_padding = NULL) .Call(wrap__Koon__new, browser, profile_json, proxy, proxies, timeout, headers, local_address, on_request, on_response, on_redirect, retries, locale, proxy_headers, ip_version, follow_redirects, max_redirects, cookie_jar, session_resumption, ignore_tls_errors, proxy_ca_certs, ignore_proxy_tls_errors, doh, resolve, max_response_body, server_padding)
+Koon$new <- function(browser = "chrome", options = NULL) .Call(wrap__Koon__new, browser, options)
 
-Koon$request <- function(method, url, body = NULL, headers = NULL, timeout = NULL, proxy = NULL, follow_redirects = NULL, max_redirects = NULL, on_request = NULL, on_response = NULL, on_redirect = NULL) .Call(wrap__Koon__request, self, method, url, body, headers, timeout, proxy, follow_redirects, max_redirects, on_request, on_response, on_redirect)
+Koon$request <- function(method, url, body = NULL, options = NULL) .Call(wrap__Koon__request, self, method, url, body, options)
 
 Koon$save_session <- function() .Call(wrap__Koon__save_session, self)
 

@@ -13,83 +13,116 @@ Create a client with \code{Koon$new(...)} and call its methods with \code{$}, e.
 }
 \section{Constructor arguments}{
 
-\code{Koon$new()} takes the following arguments. Any left \code{NULL} keeps koon's
+\code{Koon$new()} takes the following arguments. Any left \code{NULL} keeps its
 default.
 \describe{
-\item{\code{browser}}{Browser profile name, see \code{\link[=koon_browsers]{koon_browsers()}}. Without a
-version the latest one is used, without an OS suffix desktop profiles
-impersonate Windows, Safari macOS: \code{"chrome"}, \code{"firefox154"},
-\code{"chrome-macos"}, \code{"safarimobile"}, \code{"okhttp4"}. Default \code{"chrome"}.}
-\item{\code{profile_json}}{A custom browser profile as a JSON string (e.g. from
-\verb{$export_profile()}). Overrides \code{browser}. Malformed JSON is a
-\code{koon_json_error}.}
-\item{\code{proxy}}{Proxy URL: \verb{http://}, \verb{https://} or \verb{socks5://}, optionally
+\item{\code{browser}}{Browser profile to impersonate, such as \code{chrome},
+\code{firefox154}, \code{chrome-macos}, \code{safari-mobile266} or \code{okhttp5}. Without a
+version it is the newest one, without an OS desktop browsers impersonate
+Windows and Safari macOS. Default \code{"chrome"}.}
+\item{\code{profile_json}}{A custom browser profile as JSON, as
+\verb{$export_profile()} returns it. Overrides \code{browser}. Malformed JSON fails
+with \code{koon_json_error}.}
+\item{\code{proxy}}{Proxy URL: \verb{http://}, \verb{https://}, \verb{socks5://} or
+\verb{socks5h://} (the same: the proxy resolves the host name), optionally
 with \verb{user:pass@}. An \verb{https://} proxy is reached over TLS and its
 certificate is verified (see \code{proxy_ca_certs}).}
-\item{\code{proxies}}{Character vector of proxy URLs used in rotation, one per
-request. Takes priority over \code{proxy}.}
-\item{\code{timeout}}{Timeout of a whole request in seconds, fractions allowed
-(default 30); \code{0} means no timeout.}
-\item{\code{headers}}{Headers sent with every request, in order: a named
-character vector, e.g. \code{c("Accept-Language" = "de-DE")}, or a named
-list of single strings, e.g. \code{list("Accept-Language" = "de-DE")}. They
-replace the profile's header of the same name at its browser position.
-A name given twice is sent once, with the last value.}
-\item{\code{local_address}}{Local IP address to bind outgoing connections to.}
-\item{\code{on_request}}{\verb{function(method, url)}, called before each request,
-including each redirect hop. An error it raises fails the request
-before it is sent.}
-\item{\code{on_response}}{\verb{function(status, url, headers)}, called after each
-response, including each redirect hop. \code{headers} is a data frame like
-the response's. An error it raises fails the request.}
-\item{\code{on_redirect}}{\verb{function(status, url, headers)}, called before a
-redirect is followed. Return \code{FALSE} to stop and get the 3xx response;
-any other value (\code{TRUE}, \code{NULL} from a logging function, \code{NA}, ...)
-follows it. An error it raises fails the request.}
-\item{\code{retries}}{Number of automatic retries on transport errors
-(default 0). Requests that may already have reached the server are
-only retried for idempotent methods.}
-\item{\code{locale}}{The user's language, such as \code{"de-AT"}, to match the
-proxy's country. The \code{Accept-Language} header becomes what the profile's
+\item{\code{proxies}}{Proxy URLs to rotate through: each request, and each
+retry, takes the next one. Takes priority over \code{proxy}.}
+\item{\code{timeout}}{Timeout of a whole request in seconds, fractions
+allowed: connecting, redirects and the body. \code{0} means no timeout.
+Default 30.}
+\item{\code{headers}}{Headers sent with every request, in order. They replace
+the profile's header of the same name at its browser position; a name
+given twice is sent once, with the last value. A named character vector
+or a named list of single strings, e.g. \code{c("Accept-Language" = "de-DE")}.}
+\item{\code{local_address}}{Local IP address outgoing connections are bound
+to.}
+\item{\code{on_request}}{Called before each request, including each redirect
+hop, with the method and URL. An error it raises fails the request before
+it is sent. A \verb{function(method, url)}.}
+\item{\code{on_response}}{Called after each response, including each redirect
+hop, once its cookies are stored, with the status, URL and headers. An
+error it raises fails the request. A \verb{function(status, url, headers)},
+\code{headers} a data frame like the response's.}
+\item{\code{on_redirect}}{Called before a redirect is followed, with the
+status, URL and headers. Return \code{FALSE} to stop and get the 3xx response;
+any other value follows it. An error it raises fails the request. A
+\verb{function(status, url, headers)}, \code{headers} a data frame like the
+response's.}
+\item{\code{retries}}{Automatic retries on transport errors. With \code{proxies},
+each retry takes the next proxy. A request that may already have reached
+the server is retried only for idempotent methods. Default 0.}
+\item{\code{locale}}{The user's language, such as \code{de-AT}, to match the
+proxy's country. The Accept-Language header becomes what the profile's
 browser sends for it: Chrome the list of the UI language it picks
 (\verb{de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7}), Safari \verb{de-DE,de;q=0.9}.}
-\item{\code{proxy_headers}}{Headers for the HTTP CONNECT request to the proxy
-(session IDs, geo-targeting), in the same forms as \code{headers}.}
-\item{\code{ip_version}}{\code{4} or \code{6} to resolve hosts to IPv4 or IPv6 only.}
-\item{\code{follow_redirects}}{Follow redirects (default \code{TRUE}).}
-\item{\code{max_redirects}}{Maximum number of redirects to follow (default 10).}
-\item{\code{cookie_jar}}{Keep cookies across requests (default \code{TRUE}).}
-\item{\code{session_resumption}}{Resume TLS sessions (default \code{TRUE}).}
-\item{\code{ignore_tls_errors}}{Skip TLS certificate verification of origins
-(default \code{FALSE}). Dangerous; for testing only. \verb{https://} proxies are
-still verified (see \code{ignore_proxy_tls_errors}).}
+\item{\code{proxy_headers}}{Headers of the HTTP CONNECT request to the proxy,
+in order: session IDs, geo-targeting, authentication. A named character
+vector or a named list of single strings, e.g. \code{c("Accept-Language" = "de-DE")}.}
+\item{\code{ip_version}}{Resolve hosts to IPv4 (\code{4}) or IPv6 (\code{6}) only, e.g.
+for a proxy that speaks IPv4 alone. \code{v4}, \code{ipv6} and the like work too.}
+\item{\code{follow_redirects}}{Follow redirects. Default \code{TRUE}.}
+\item{\code{max_redirects}}{Maximum number of redirects to follow. Default
+10.}
+\item{\code{cookie_jar}}{Keep cookies across requests. Default \code{TRUE}.}
+\item{\code{session_resumption}}{Resume TLS sessions. Default \code{TRUE}.}
+\item{\code{ignore_tls_errors}}{Skip certificate verification of origins.
+\verb{https://} proxies are still verified (see \code{ignore_proxy_tls_errors}).
+Default \code{FALSE}.}
 \item{\code{proxy_ca_certs}}{Certificates (PEM, one or more) trusted for the
-TLS connection to \verb{https://} proxies, in addition to the built-in
-roots, like curl's \code{--proxy-cacert}: for a proxy with a self-signed
-certificate or one from a private CA. PEM text, e.g.
-\code{readLines("proxy-ca.pem")}, or a raw vector. Origins are still
-verified against the built-in roots only.}
+TLS connection to \verb{https://} proxies in addition to the built-in roots,
+like curl's \code{--proxy-cacert}: for a proxy with a self-signed certificate
+or one from a private CA. Origins are still verified against the built-in
+roots only. Invalid PEM fails with \code{koon_invalid_argument}. PEM text,
+e.g. \code{readLines("proxy-ca.pem")}, or a raw vector.}
 \item{\code{ignore_proxy_tls_errors}}{Skip certificate verification of
-\verb{https://} proxies (default \code{FALSE}), like curl's \code{--proxy-insecure}.
-The connection stays encrypted, but anyone on the way to the proxy can
-pose as it and read the proxy credentials and the hosts requested.
-Origins are still verified. Prefer \code{proxy_ca_certs}.}
-\item{\code{doh}}{DNS-over-HTTPS provider: \code{"cloudflare"} or \code{"google"}.}
-\item{\code{resolve}}{Character vector of entries in curl's \code{--resolve}
-format, \code{"host:port:address[,address...]"} (IPv6 in brackets):
-requests to that host and port connect to the address instead of
-resolving the host. TLS server name, Host header and cookies stay the
-host's.}
+\verb{https://} proxies, like curl's \code{--proxy-insecure}. The connection stays
+encrypted, but anyone on the way to the proxy can pose as it and read the
+proxy credentials and the hosts requested. Origins are still verified.
+Prefer \code{proxy_ca_certs}. Default \code{FALSE}.}
+\item{\code{doh}}{DNS-over-HTTPS provider, any case: \code{cloudflare} or
+\code{google}.}
+\item{\code{resolve}}{Entries in curl's \code{--resolve} format,
+\code{host:port:address[,address...]} (IPv6 in brackets): requests to that
+host and port connect to the address instead of resolving the host. The
+TLS server name, Host header and cookies stay the host's. An invalid
+entry fails with \code{koon_invalid_argument}.}
 \item{\code{max_response_body}}{Maximum response body size in bytes,
-decompressed (default 100 MiB): past it, a response fails with a
-\code{koon_body_error} instead of growing the buffer further (also covers
-a compressed body that decodes past the cap). \code{0} disables it.}
-\item{\code{server_padding}}{Pins Chrome 151+'s
-\code{PqcBandwidthExperiment} server-padding field trial group instead of
-drawing one when the client is built: \code{"none"} (not in the study) or
-the bytes of padding the group asks for (e.g. \code{"6000"}). The study
-ended on 2026-10-30, so a client no longer draws one. No effect on a
-profile without the trial.}
+decompressed: past it, a response fails with \code{koon_body_error} instead of
+growing the buffer further, also when a compressed body decodes past it.
+Reading a streaming response chunk by chunk without decoding it is not
+capped. \code{0} disables it. Default 100 MiB.}
+\item{\code{server_padding}}{Pins Chrome 151+'s \code{PqcBandwidthExperiment}
+server-padding field trial group instead of drawing one when the client
+is built: \code{none} (not in the study) or the bytes of padding the group
+asks for (e.g. \code{6000}). The study ended on 2026-10-30, so a client no
+longer draws one. No effect on a profile without the trial.}
+}
+}
+
+\section{Request options}{
+
+\verb{$request()} and the verbs (\verb{$get()}, \verb{$post()}, ...) take these options for
+one request. Any left \code{NULL} keeps the client's setting.
+\describe{
+\item{\code{headers}}{Headers of this request, in order. They replace client
+and profile headers of the same name, which keep their browser position.
+A named character vector or a named list of single strings, e.g.
+\code{c("Accept-Language" = "de-DE")}.}
+\item{\code{timeout}}{Timeout of this request in seconds, fractions allowed; a
+streaming request times the response head and then each wait for the
+body. \code{0} means no timeout.}
+\item{\code{proxy}}{Proxy URL for this request, in place of the client's
+proxies.}
+\item{\code{follow_redirects}}{Follow redirects in this request.}
+\item{\code{max_redirects}}{Maximum number of redirects this request follows.}
+\item{\code{on_request}}{Called before each request of this call, including
+each redirect hop, in place of the client's. A \verb{function(method, url)}.}
+\item{\code{on_response}}{Called after each response of this call, including
+each redirect hop, in place of the client's. A \verb{function(status, url, headers)}, \code{headers} a data frame like the response's.}
+\item{\code{on_redirect}}{Called before a redirect of this call is followed,
+in place of the client's. Return \code{FALSE} to stop. A \verb{function(status, url, headers)}, \code{headers} a data frame like the response's.}
 }
 }
 
@@ -100,11 +133,9 @@ profile without the trial.}
 request without a body. \code{...} takes the options of \verb{$request()}.}
 \item{\verb{$post(url, body = NULL, ...)}, \verb{$put(...)}, \verb{$patch(...)}}{Send a
 request with a body.}
-\item{\verb{$request(method, url, body = NULL, headers = NULL, timeout = NULL, proxy = NULL, follow_redirects = NULL, max_redirects = NULL, on_request = NULL, on_response = NULL, on_redirect = NULL)}}{Send a request with any
-method. \code{body} is a single string or a raw vector. \code{headers} are headers
-for this request only, in the forms the constructor takes. The other
-options, callbacks included, override the client's setting of the same
-name for this request; \code{NULL} keeps it.}
+\item{\verb{$request(method, url, body = NULL, ...)}}{Send a request with any
+method. \code{body} is a single string or a raw vector. \code{...} takes the
+request options above.}
 \item{\verb{$save_session()}, \verb{$load_session(json)}}{Save the cookies and TLS
 sessions as a JSON string, and restore them. \code{json} may also be the
 lines of a saved session file, as \code{readLines()} returns them.}
