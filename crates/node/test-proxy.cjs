@@ -7,7 +7,7 @@ const path = require('node:path');
 const http = require('node:http');
 const https = require('node:https');
 
-const { INDEX, TEST_CERT, TEST_KEY, check, expectThrows, caught, listen, close, startHttpServer } = require('./test-helpers.cjs');
+const { INDEX, TEST_CERT, TEST_KEY, check, expectThrows, caught, runChildJson, listen, close, startHttpServer } = require('./test-helpers.cjs');
 const { Koon, KoonProxy } = require(INDEX);
 
 async function testProxy() {
@@ -33,6 +33,38 @@ async function testProxy() {
   } finally {
     fs.rmSync(caDir, { recursive: true, force: true });
   }
+}
+
+// A proxy nothing references any more keeps running: only shutdown() stops it.
+async function testProxyOutlivesItsObject() {
+  console.log('KoonProxy: runs on after the garbage collector took its object');
+  const result = runChildJson(
+    `
+    require('node:v8').setFlagsFromString('--expose-gc');
+    const gc = require('node:vm').runInNewContext('gc');
+    const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+    const net = require('node:net');
+    const { KoonProxy } = require(${JSON.stringify(INDEX)});
+    (async () => {
+      const caDir = fs.mkdtempSync(path.join(os.tmpdir(), 'koon-ca-'));
+      const port = (await KoonProxy.start({ caDir, timeout: 5 })).port;
+      for (let i = 0; i < 5; i += 1) {
+        gc();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      const open = await new Promise((resolve) => {
+        const socket = net.connect(port, '127.0.0.1');
+        socket.on('connect', () => { socket.destroy(); resolve(true); });
+        socket.on('error', () => resolve(false));
+      });
+      console.log(JSON.stringify({ open }));
+      fs.rmSync(caDir, { recursive: true, force: true });
+      process.exit(0);
+    })();
+    `,
+    'a collected KoonProxy object'
+  );
+  if (result) check('the proxy still accepts connections', result.open === true);
 }
 
 async function testProxyUpstream() {
@@ -182,6 +214,7 @@ async function testListenerOptions() {
 
 async function run() {
   await testProxy();
+  await testProxyOutlivesItsObject();
   await testProxyUpstream();
   await testHttpsProxy();
   await testListenerOptions();

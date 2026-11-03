@@ -26,6 +26,22 @@ def read_head(sock):
     return data
 
 
+def test_a_proxy_runs_on_after_its_object_is_collected(tmp_path):
+    """Only shutdown() stops a proxy, not the garbage collector."""
+    import gc
+
+    async def main():
+        port = (await KoonProxy.start(ca_dir=str(tmp_path))).port
+        gc.collect()
+        await asyncio.sleep(0.5)
+        with socket.create_connection(("127.0.0.1", port), timeout=2) as sock:
+            sock.settimeout(2)
+            sock.sendall(b"CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n")
+            assert read_head(sock).startswith(b"HTTP/1.1 200")
+
+    run(main())
+
+
 def test_certificates_pass_strict_verification(tmp_path):
     """Python 3.13+ verifies with VERIFY_X509_STRICT by default (httpx,
     aiohttp use that context): it rejects a CA without a

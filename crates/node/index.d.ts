@@ -633,6 +633,10 @@ export interface KoonProxyAuth {
   password: string;
 }
 
+/**
+ * A local MITM proxy. It runs until `shutdown()` (or the process ends), also
+ * when nothing references the object any more.
+ */
 export class KoonProxy {
   /** Use `KoonProxy.start()`. */
   private constructor();

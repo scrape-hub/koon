@@ -1400,10 +1400,16 @@ impl KoonWebSocket {
 // KoonProxy
 // ---------------------------------------------------------------------
 
+type RunningProxy = Arc<tokio::sync::Mutex<Option<ProxyServer>>>;
+
+/// Every proxy started and not shut down yet: a server stops once dropped,
+/// and a `KoonProxy` Python collects must not take its server with it.
+static RUNNING_PROXIES: std::sync::Mutex<Vec<RunningProxy>> = std::sync::Mutex::new(Vec::new());
+
 /// A local MITM proxy server with browser fingerprinting.
 #[pyclass(frozen, module = "koon")]
 struct KoonProxy {
-    server: Arc<tokio::sync::Mutex<Option<ProxyServer>>>,
+    server: RunningProxy,
     /// The port the proxy server is listening on.
     #[pyo3(get)]
     port: u16,
@@ -1493,13 +1499,18 @@ impl KoonProxy {
         }
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let server = ProxyServer::start(config).await.map_err(to_koon_err)?;
-            Ok(Self {
+            let proxy = Self {
                 port: server.port(),
                 url: server.url(),
                 ca_cert_path: server.ca_cert_path().to_string_lossy().into_owned(),
                 ca_cert_pem: server.ca_cert_pem().map_err(to_koon_err)?,
                 server: Arc::new(tokio::sync::Mutex::new(Some(server))),
-            })
+            };
+            RUNNING_PROXIES
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(proxy.server.clone());
+            Ok(proxy)
         })
     }
 
@@ -1511,6 +1522,10 @@ impl KoonProxy {
     /// Shut down the proxy server.
     fn shutdown<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let server = self.server.clone();
+        RUNNING_PROXIES
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .retain(|running| !Arc::ptr_eq(running, &server));
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let server = server.lock().await.take();
             if let Some(server) = server {

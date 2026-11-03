@@ -725,7 +725,11 @@ class KoonWebSocket:
         ...
 
 class KoonProxy:
-    """A local MITM proxy server with browser fingerprinting."""
+    """A local MITM proxy server with browser fingerprinting.
+
+    It runs until ``shutdown()`` (or the process ends), also when nothing
+    references the object any more.
+    """
 
     @property
     def port(self) -> int:

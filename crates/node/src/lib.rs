@@ -1455,6 +1455,13 @@ impl From<KoonProxyAuth> for ProxyServerAuth {
     }
 }
 
+type RunningProxy = Arc<std::sync::Mutex<Option<ProxyServer>>>;
+
+/// Every proxy started and not shut down yet: a server stops once dropped,
+/// and a `KoonProxy` the garbage collector takes must not take its server
+/// with it.
+static RUNNING_PROXIES: std::sync::Mutex<Vec<RunningProxy>> = std::sync::Mutex::new(Vec::new());
+
 /// A local MITM proxy that forwards intercepted traffic with koon's
 /// fingerprinted TLS/HTTP2 stack.
 #[napi]
@@ -1466,7 +1473,7 @@ pub struct KoonProxy {
     #[napi(readonly)]
     pub ca_cert_path: String,
     ca_cert_pem: Vec<u8>,
-    server: std::sync::Mutex<Option<ProxyServer>>,
+    server: RunningProxy,
 }
 
 #[napi]
@@ -1546,13 +1553,18 @@ impl KoonProxy {
         }
 
         let server = ProxyServer::start(config).await.map_err(koon_napi_error)?;
-        Ok(Self {
+        let proxy = Self {
             port: server.port(),
             url: server.url(),
             ca_cert_path: server.ca_cert_path().to_string_lossy().into_owned(),
             ca_cert_pem: server.ca_cert_pem().map_err(koon_napi_error)?,
-            server: std::sync::Mutex::new(Some(server)),
-        })
+            server: Arc::new(std::sync::Mutex::new(Some(server))),
+        };
+        RUNNING_PROXIES
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(proxy.server.clone());
+        Ok(proxy)
     }
 
     #[napi]
@@ -1564,6 +1576,10 @@ impl KoonProxy {
     /// promise, like `Koon.shutdown()` and Python's `KoonProxy.shutdown()`.
     #[napi]
     pub async fn shutdown(&self) {
+        RUNNING_PROXIES
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .retain(|running| !Arc::ptr_eq(running, &self.server));
         let server = self
             .server
             .lock()
