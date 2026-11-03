@@ -27,6 +27,8 @@ Rust only:
 - Rust: `Client::boundary_style()`.
 - Rust: `koon_core::options`, every option of the bindings and the CLI with its
   kind, default and docs, and the checks they share.
+- Node: `Koon.verify()` takes the connection options of `new Koon()`; `ipVersion`
+  also takes names such as `"v4"`.
 
 ### Changed
 
@@ -88,6 +90,7 @@ Rust only:
 - R: the binary packages include the vignettes.
 - CLI: `--timeout` covers the body.
 - CLI: `koon --help` no longer claims to pass every bot protection.
+- Node: `postMultipart()` and `Koon.verify()` reject unknown option keys too.
 
 ### Security
 

@@ -80,91 +80,394 @@ export type OnResponseHook = (status: number, url: string, headers: KoonHeaderEn
  */
 export type OnRedirectHook = (status: number, url: string, headers: KoonHeaderEntry[]) => boolean | void;
 
+// BEGIN GENERATED options (crates/core/tests/generated.rs)
+/** Options of `new Koon()`. */
 export interface KoonOptions {
-  /** Browser profile to impersonate. Default: "chrome" (latest Chrome on Windows). */
+  /**
+   * Browser profile to impersonate, such as `chrome`, `firefox154`, `chrome-macos`,
+   * `safari-mobile266` or `okhttp5`. Without a version it is the newest one, without an OS desktop
+   * browsers impersonate Windows and Safari macOS. Default: `"chrome"`.
+   */
   browser?: Browser;
-  /** Custom browser profile as JSON string (see `exportProfile()`). Overrides `browser`. */
+  /**
+   * A custom browser profile as JSON, as `exportProfile()` returns it. Overrides `browser`.
+   * Malformed JSON fails with `JSON_ERROR`.
+   */
   profileJson?: string;
   /**
-   * Proxy URL (http://, https://, socks5:// or socks5h://, the same: the proxy resolves the
-   * host name). An `https://` proxy is reached over TLS and
-   * its certificate is verified (see `proxyCaCerts`).
+   * Proxy URL: `http://`, `https://`, `socks5://` or `socks5h://` (the same: the proxy resolves the
+   * host name), optionally with `user:pass@`. An `https://` proxy is reached over TLS and its
+   * certificate is verified (see `proxyCaCerts`).
    */
   proxy?: string;
-  /** Array of proxy URLs for round-robin rotation. Takes priority over `proxy`. */
+  /**
+   * Proxy URLs to rotate through: each request, and each retry, takes the next one. Takes priority
+   * over `proxy`.
+   */
   proxies?: string[];
-  /** Request timeout in seconds, fractions allowed. 0 means no timeout. Default: 30. */
+  /**
+   * Timeout of a whole request in seconds, fractions allowed: connecting, redirects and the body.
+   * `0` means no timeout. Default: 30.
+   */
   timeout?: number;
-  /** Skip TLS certificate verification of origins. `https://` proxies are still verified (see `ignoreProxyTlsErrors`). */
+  /**
+   * Skip certificate verification of origins. `https://` proxies are still verified (see
+   * `ignoreProxyTlsErrors`). Default: `false`.
+   */
   ignoreTlsErrors?: boolean;
   /**
-   * Certificates (PEM, one or more) trusted for the TLS connection to `https://` proxies, in
-   * addition to the built-in roots, like curl's `--proxy-cacert`: for a proxy with a
-   * self-signed certificate or one from a private CA. Origins are still verified against the
-   * built-in roots only. Invalid PEM throws `INVALID_ARGUMENT`.
+   * Certificates (PEM, one or more) trusted for the TLS connection to `https://` proxies in
+   * addition to the built-in roots, like curl's `--proxy-cacert`: for a proxy with a self-signed
+   * certificate or one from a private CA. Origins are still verified against the built-in roots
+   * only. Invalid PEM fails with `INVALID_ARGUMENT`.
    */
   proxyCaCerts?: string | Buffer;
   /**
-   * Skip certificate verification of `https://` proxies, like curl's `--proxy-insecure`.
-   * The connection stays encrypted, but anyone on the way to the proxy can pose as it and
-   * read the proxy credentials and the hosts requested. Origins are still verified. Prefer
-   * `proxyCaCerts`. Default: false.
+   * Skip certificate verification of `https://` proxies, like curl's `--proxy-insecure`. The
+   * connection stays encrypted, but anyone on the way to the proxy can pose as it and read the
+   * proxy credentials and the hosts requested. Origins are still verified. Prefer `proxyCaCerts`.
+   * Default: `false`.
    */
   ignoreProxyTlsErrors?: boolean;
-  /** Default headers to send with every request, in order. */
+  /**
+   * Headers sent with every request, in order. They replace the profile's header of the same name
+   * at its browser position; a name given twice is sent once, with the last value.
+   */
   headers?: KoonHeadersInit;
-  /** Follow redirects. Default: true. */
+  /** Follow redirects. Default: `true`. */
   followRedirects?: boolean;
-  /** Maximum redirects to follow (a whole number). Default: 10. */
+  /** Maximum number of redirects to follow. Default: 10. */
   maxRedirects?: number;
-  /** Enable cookie jar. Default: true. */
+  /** Keep cookies across requests. Default: `true`. */
   cookieJar?: boolean;
-  /** Enable TLS session resumption. Default: true. */
+  /** Resume TLS sessions. Default: `true`. */
   sessionResumption?: boolean;
-  /** DNS-over-HTTPS provider, case-insensitive: "cloudflare" or "google". */
+  /** DNS-over-HTTPS provider, any case: `cloudflare` or `google`. */
   doh?: string;
-  /** Bind outgoing connections to a specific local IP address. */
+  /** Local IP address outgoing connections are bound to. */
   localAddress?: string;
-  /** Hook called before each HTTP request (including redirects); throwing fails the request before it is sent. */
+  /**
+   * Called before each request, including each redirect hop, with the method and URL. An error it
+   * raises fails the request before it is sent.
+   */
   onRequest?: OnRequestHook;
-  /** Hook called after each HTTP response (including redirects); throwing fails the request. */
+  /**
+   * Called after each response, including each redirect hop, once its cookies are stored, with the
+   * status, URL and headers. An error it raises fails the request.
+   */
   onResponse?: OnResponseHook;
-  /** Hook called before following a redirect. Return false to stop redirecting and return the 3xx response; throwing fails the request. */
+  /**
+   * Called before a redirect is followed, with the status, URL and headers. Return `false` to stop
+   * and get the 3xx response; any other value follows it. An error it raises fails the request.
+   */
   onRedirect?: OnRedirectHook;
-  /** Number of automatic retries on transport errors (a whole number). With proxy rotation, each retry uses the next proxy. Default: 0. */
+  /**
+   * Automatic retries on transport errors. With `proxies`, each retry takes the next proxy. A
+   * request that may already have reached the server is retried only for idempotent methods.
+   * Default: 0.
+   */
   retries?: number;
   /**
-   * The user's language, such as "de-AT", to match the proxy's country. The Accept-Language
-   * header becomes what the profile's browser sends for it: Chrome the list of the UI language
-   * it picks ("de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7"), Safari "de-DE,de;q=0.9".
+   * The user's language, such as `de-AT`, to match the proxy's country. The Accept-Language header
+   * becomes what the profile's browser sends for it: Chrome the list of the UI language it picks
+   * (`de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7`), Safari `de-DE,de;q=0.9`.
    */
   locale?: string;
-  /** Custom headers to send in the HTTP CONNECT tunnel request, in order. Useful for proxy session IDs, geo-targeting, or authentication. */
-  proxyHeaders?: KoonHeadersInit;
-  /** Restrict DNS resolution to IPv4 (4) or IPv6 (6). Useful when residential proxies only support IPv4. */
-  ipVersion?: 4 | 6;
   /**
-   * Entries in curl's `--resolve` format, `"host:port:address[,address...]"` (IPv6 in
-   * brackets): requests to that host and port connect to the address instead of resolving
-   * the host. The TLS server name, Host header and cookies stay the host's. An invalid entry
-   * throws `INVALID_ARGUMENT`.
+   * Headers of the HTTP CONNECT request to the proxy, in order: session IDs, geo-targeting,
+   * authentication.
+   */
+  proxyHeaders?: KoonHeadersInit;
+  /**
+   * Resolve hosts to IPv4 (`4`) or IPv6 (`6`) only, e.g. for a proxy that speaks IPv4 alone. `v4`,
+   * `ipv6` and the like work too.
+   */
+  ipVersion?: 4 | 6 | string;
+  /**
+   * Entries in curl's `--resolve` format, `host:port:address[,address...]` (IPv6 in brackets):
+   * requests to that host and port connect to the address instead of resolving the host. The TLS
+   * server name, Host header and cookies stay the host's. An invalid entry fails with
+   * `INVALID_ARGUMENT`.
    */
   resolve?: string[];
   /**
-   * Maximum response body size in bytes, decompressed: past it, a response fails with
-   * `BODY_ERROR` instead of growing the buffer further (also covers a compressed body that
-   * decodes past the cap). Reading a streaming response chunk by chunk without decoding it is
-   * not capped. `0` disables it. Default: 100 MiB.
+   * Maximum response body size in bytes, decompressed: past it, a response fails with `BODY_ERROR`
+   * instead of growing the buffer further, also when a compressed body decodes past it. Reading a
+   * streaming response chunk by chunk without decoding it is not capped. `0` disables it. Default:
+   * 100 MiB.
    */
   maxResponseBody?: number;
   /**
-   * Pins Chrome 151+'s `PqcBandwidthExperiment` server-padding field trial group instead of
-   * drawing one when the client is built: `"none"` (not in the study) or the bytes of padding
-   * the group asks for (e.g. `"6000"`). The study ended on 2026-10-30, so a client no longer
-   * draws one. No effect on a profile without the trial.
+   * Pins Chrome 151+'s `PqcBandwidthExperiment` server-padding field trial group instead of drawing
+   * one when the client is built: `none` (not in the study) or the bytes of padding the group asks
+   * for (e.g. `6000`). The study ended on 2026-10-30, so a client no longer draws one. No effect on
+   * a profile without the trial.
    */
-  serverPadding?: string;
+  serverPadding?: string | number;
 }
+
+/**
+ * Options of one request (every verb, `postMultipart()`, `requestStreaming()`); unset ones fall
+ * back to the client's.
+ */
+export interface KoonRequestOptions {
+  /**
+   * Headers of this request, in order. They replace client and profile headers of the same name,
+   * which keep their browser position.
+   */
+  headers?: KoonHeadersInit;
+  /**
+   * Timeout of this request in seconds, fractions allowed; a streaming request times the response
+   * head and then each wait for the body. `0` means no timeout.
+   */
+  timeout?: number;
+  /** Proxy URL for this request, in place of the client's proxies. */
+  proxy?: string;
+  /** Follow redirects in this request. */
+  followRedirects?: boolean;
+  /** Maximum number of redirects this request follows. */
+  maxRedirects?: number;
+  /**
+   * Called before each request of this call, including each redirect hop, in place of the client's.
+   */
+  onRequest?: OnRequestHook;
+  /**
+   * Called after each response of this call, including each redirect hop, in place of the client's.
+   */
+  onResponse?: OnResponseHook;
+  /**
+   * Called before a redirect of this call is followed, in place of the client's. Return `false` to
+   * stop.
+   */
+  onRedirect?: OnRedirectHook;
+}
+
+export interface KoonStreamingOptions extends KoonRequestOptions {
+  /**
+   * Decode the body's Content-Encoding (gzip, deflate, br, zstd and stacked codings) as it is read;
+   * a coding koon does not know arrives as it is. `false` gives the bytes as sent. The headers stay
+   * as received either way, Content-Encoding and Content-Length included. Default: `true`.
+   */
+  decode?: boolean;
+}
+
+/**
+ * Options of `KoonProxy.start()`. The forwarded requests connect as those of a `Koon` client do;
+ * the proxy follows no redirects and keeps no cookies, the proxied client does both itself.
+ */
+export interface KoonProxyOptions {
+  /**
+   * Browser profile to impersonate, such as `chrome`, `firefox154`, `chrome-macos`,
+   * `safari-mobile266` or `okhttp5`. Without a version it is the newest one, without an OS desktop
+   * browsers impersonate Windows and Safari macOS. Default: `"chrome"`.
+   */
+  browser?: Browser;
+  /**
+   * A custom browser profile as JSON, as `exportProfile()` returns it. Overrides `browser`.
+   * Malformed JSON fails with `JSON_ERROR`.
+   */
+  profileJson?: string;
+  /**
+   * Proxy URL: `http://`, `https://`, `socks5://` or `socks5h://` (the same: the proxy resolves the
+   * host name), optionally with `user:pass@`. An `https://` proxy is reached over TLS and its
+   * certificate is verified (see `proxyCaCerts`).
+   */
+  proxy?: string;
+  /**
+   * Proxy URLs to rotate through: each request, and each retry, takes the next one. Takes priority
+   * over `proxy`.
+   */
+  proxies?: string[];
+  /**
+   * Skip certificate verification of origins. `https://` proxies are still verified (see
+   * `ignoreProxyTlsErrors`). Default: `false`.
+   */
+  ignoreTlsErrors?: boolean;
+  /**
+   * Certificates (PEM, one or more) trusted for the TLS connection to `https://` proxies in
+   * addition to the built-in roots, like curl's `--proxy-cacert`: for a proxy with a self-signed
+   * certificate or one from a private CA. Origins are still verified against the built-in roots
+   * only. Invalid PEM fails with `INVALID_ARGUMENT`.
+   */
+  proxyCaCerts?: string | Buffer;
+  /**
+   * Skip certificate verification of `https://` proxies, like curl's `--proxy-insecure`. The
+   * connection stays encrypted, but anyone on the way to the proxy can pose as it and read the
+   * proxy credentials and the hosts requested. Origins are still verified. Prefer `proxyCaCerts`.
+   * Default: `false`.
+   */
+  ignoreProxyTlsErrors?: boolean;
+  /** Resume TLS sessions. Default: `true`. */
+  sessionResumption?: boolean;
+  /** DNS-over-HTTPS provider, any case: `cloudflare` or `google`. */
+  doh?: string;
+  /** Local IP address outgoing connections are bound to. */
+  localAddress?: string;
+  /**
+   * Automatic retries on transport errors. With `proxies`, each retry takes the next proxy. A
+   * request that may already have reached the server is retried only for idempotent methods.
+   * Default: 0.
+   */
+  retries?: number;
+  /**
+   * The user's language, such as `de-AT`, to match the proxy's country. The Accept-Language header
+   * becomes what the profile's browser sends for it: Chrome the list of the UI language it picks
+   * (`de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7`), Safari `de-DE,de;q=0.9`.
+   */
+  locale?: string;
+  /**
+   * Headers of the HTTP CONNECT request to the proxy, in order: session IDs, geo-targeting,
+   * authentication.
+   */
+  proxyHeaders?: KoonHeadersInit;
+  /**
+   * Resolve hosts to IPv4 (`4`) or IPv6 (`6`) only, e.g. for a proxy that speaks IPv4 alone. `v4`,
+   * `ipv6` and the like work too.
+   */
+  ipVersion?: 4 | 6 | string;
+  /**
+   * Entries in curl's `--resolve` format, `host:port:address[,address...]` (IPv6 in brackets):
+   * requests to that host and port connect to the address instead of resolving the host. The TLS
+   * server name, Host header and cookies stay the host's. An invalid entry fails with
+   * `INVALID_ARGUMENT`.
+   */
+  resolve?: string[];
+  /**
+   * Maximum response body size in bytes, decompressed: past it, a response fails with `BODY_ERROR`
+   * instead of growing the buffer further, also when a compressed body decodes past it. Reading a
+   * streaming response chunk by chunk without decoding it is not capped. `0` disables it. Default:
+   * 100 MiB.
+   */
+  maxResponseBody?: number;
+  /**
+   * Pins Chrome 151+'s `PqcBandwidthExperiment` server-padding field trial group instead of drawing
+   * one when the client is built: `none` (not in the study) or the bytes of padding the group asks
+   * for (e.g. `6000`). The study ended on 2026-10-30, so a client no longer draws one. No effect on
+   * a profile without the trial.
+   */
+  serverPadding?: string | number;
+  /** Address to listen on; port `0` picks a free one. Default: `"127.0.0.1:0"`. */
+  listenAddr?: string;
+  /**
+   * How the headers of the proxy's clients are sent on, any case: `impersonate` sends them as the
+   * profile's browser does, with its identity headers in place of the client's (its Accept-Language
+   * from `locale`), `passthrough` as they came, only TLS and HTTP/2 fingerprinted. Default:
+   * `"impersonate"`.
+   */
+  headerMode?: 'impersonate' | 'passthrough';
+  /** Directory of the proxy's CA certificate. Default: `"~/.koon/ca"`. */
+  caDir?: string;
+  /**
+   * Timeout in seconds, fractions allowed, of a forwarded request's response head and of each wait
+   * for its body. `0` means no timeout. Default: 30.
+   */
+  timeout?: number;
+  /**
+   * Allow `listenAddr` to be a non-loopback address. The proxy has no transport encryption of its
+   * own between it and its clients, so on a reachable interface it is an open relay for anyone who
+   * can reach the port, unless `auth` is set too. Default: `false`.
+   */
+  allowNonLoopback?: boolean;
+  /** `Proxy-Authorization: Basic` credentials every client of the proxy must send. */
+  auth?: KoonProxyAuth;
+  /** Connections accepted at once; further ones wait for a slot to free up. Default: 512. */
+  maxConnections?: number;
+}
+
+/** Options of `Koon.verify()`: how its client connects to the fingerprint services. */
+export interface KoonVerifyOptions {
+  /**
+   * Browser profile to impersonate, such as `chrome`, `firefox154`, `chrome-macos`,
+   * `safari-mobile266` or `okhttp5`. Without a version it is the newest one, without an OS desktop
+   * browsers impersonate Windows and Safari macOS. Default: `"chrome"`.
+   */
+  browser?: Browser;
+  /**
+   * Proxy URL: `http://`, `https://`, `socks5://` or `socks5h://` (the same: the proxy resolves the
+   * host name), optionally with `user:pass@`. An `https://` proxy is reached over TLS and its
+   * certificate is verified (see `proxyCaCerts`).
+   */
+  proxy?: string;
+  /**
+   * Proxy URLs to rotate through: each request, and each retry, takes the next one. Takes priority
+   * over `proxy`.
+   */
+  proxies?: string[];
+  /**
+   * Timeout of a whole request in seconds, fractions allowed: connecting, redirects and the body.
+   * `0` means no timeout. Default: 30.
+   */
+  timeout?: number;
+  /**
+   * Skip certificate verification of origins. `https://` proxies are still verified (see
+   * `ignoreProxyTlsErrors`). Default: `false`.
+   */
+  ignoreTlsErrors?: boolean;
+  /**
+   * Certificates (PEM, one or more) trusted for the TLS connection to `https://` proxies in
+   * addition to the built-in roots, like curl's `--proxy-cacert`: for a proxy with a self-signed
+   * certificate or one from a private CA. Origins are still verified against the built-in roots
+   * only. Invalid PEM fails with `INVALID_ARGUMENT`.
+   */
+  proxyCaCerts?: string | Buffer;
+  /**
+   * Skip certificate verification of `https://` proxies, like curl's `--proxy-insecure`. The
+   * connection stays encrypted, but anyone on the way to the proxy can pose as it and read the
+   * proxy credentials and the hosts requested. Origins are still verified. Prefer `proxyCaCerts`.
+   * Default: `false`.
+   */
+  ignoreProxyTlsErrors?: boolean;
+  /** Resume TLS sessions. Default: `true`. */
+  sessionResumption?: boolean;
+  /** DNS-over-HTTPS provider, any case: `cloudflare` or `google`. */
+  doh?: string;
+  /** Local IP address outgoing connections are bound to. */
+  localAddress?: string;
+  /**
+   * Automatic retries on transport errors. With `proxies`, each retry takes the next proxy. A
+   * request that may already have reached the server is retried only for idempotent methods.
+   * Default: 0.
+   */
+  retries?: number;
+  /**
+   * The user's language, such as `de-AT`, to match the proxy's country. The Accept-Language header
+   * becomes what the profile's browser sends for it: Chrome the list of the UI language it picks
+   * (`de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7`), Safari `de-DE,de;q=0.9`.
+   */
+  locale?: string;
+  /**
+   * Headers of the HTTP CONNECT request to the proxy, in order: session IDs, geo-targeting,
+   * authentication.
+   */
+  proxyHeaders?: KoonHeadersInit;
+  /**
+   * Resolve hosts to IPv4 (`4`) or IPv6 (`6`) only, e.g. for a proxy that speaks IPv4 alone. `v4`,
+   * `ipv6` and the like work too.
+   */
+  ipVersion?: 4 | 6 | string;
+  /**
+   * Entries in curl's `--resolve` format, `host:port:address[,address...]` (IPv6 in brackets):
+   * requests to that host and port connect to the address instead of resolving the host. The TLS
+   * server name, Host header and cookies stay the host's. An invalid entry fails with
+   * `INVALID_ARGUMENT`.
+   */
+  resolve?: string[];
+  /**
+   * Maximum response body size in bytes, decompressed: past it, a response fails with `BODY_ERROR`
+   * instead of growing the buffer further, also when a compressed body decodes past it. Reading a
+   * streaming response chunk by chunk without decoding it is not capped. `0` disables it. Default:
+   * 100 MiB.
+   */
+  maxResponseBody?: number;
+  /**
+   * Pins Chrome 151+'s `PqcBandwidthExperiment` server-padding field trial group instead of drawing
+   * one when the client is built: `none` (not in the study) or the bytes of padding the group asks
+   * for (e.g. `6000`). The study ended on 2026-10-30, so a client no longer draws one. No effect on
+   * a profile without the trial.
+   */
+  serverPadding?: string | number;
+}
+// END GENERATED options
 
 /**
  * Machine-readable error codes koon throws, exposed as `err.code`.
@@ -255,35 +558,6 @@ export interface KoonWsMessage {
   isText: boolean;
   /** Message data. */
   data: Buffer;
-}
-
-export interface KoonRequestOptions {
-  /** Additional headers for this request, in order. Override client-level headers. */
-  headers?: KoonHeadersInit;
-  /** Per-request timeout in seconds, fractions allowed. 0 means no timeout. Overrides client-level timeout. */
-  timeout?: number;
-  /** Per-request proxy URL (http://, https://, socks5://). Overrides client-level proxy. */
-  proxy?: string;
-  /** Follow redirects for this request only. Overrides the client-level default. */
-  followRedirects?: boolean;
-  /** Maximum redirects to follow for this request only (a whole number). Overrides the client-level default. */
-  maxRedirects?: number;
-  /** Hook called before each request of this call (including redirects), in place of the client's. */
-  onRequest?: OnRequestHook;
-  /** Hook called after each response of this call (including redirects), in place of the client's. */
-  onResponse?: OnResponseHook;
-  /** Hook called before following a redirect of this call, in place of the client's. Return false to stop redirecting. */
-  onRedirect?: OnRedirectHook;
-}
-
-export interface KoonStreamingOptions extends KoonRequestOptions {
-  /**
-   * Decode the body's Content-Encoding (gzip, deflate, br, zstd and stacked codings) as it
-   * is read; a coding koon does not know arrives as it is. `false` gives the bytes as sent.
-   * The headers stay as received either way, Content-Encoding and Content-Length included.
-   * Default: true.
-   */
-  decode?: boolean;
 }
 
 export interface KoonMultipartField {
@@ -428,7 +702,7 @@ export class Koon {
    * is then not used). Rejects with `INVALID_ARGUMENT` for an unknown profile; unreachable
    * services are part of the report (`outcome: "unreachable"`).
    */
-  static verify(browser?: string, options?: { proxy?: string }): Promise<KoonVerifyReport>;
+  static verify(browser?: string, options?: KoonVerifyOptions): Promise<KoonVerifyReport>;
 
   /** The User-Agent string from the browser profile. Useful for Puppeteer/Playwright. */
   readonly userAgent: string | null;
@@ -564,69 +838,6 @@ export class KoonWebSocket {
   receive(): Promise<KoonWsMessage | null>;
   /** Send a close frame with an optional close code (0-65535) and reason. */
   close(code?: number, reason?: string): Promise<void>;
-}
-
-export interface KoonProxyOptions {
-  /** Browser profile. Default: "chrome". */
-  browser?: Browser;
-  /** Custom profile JSON. */
-  profileJson?: string;
-  /** Listen address. Default: "127.0.0.1:0". */
-  listenAddr?: string;
-  /** Header mode, case-insensitive: "impersonate" (default) or "passthrough". Any other value throws `INVALID_ARGUMENT`. */
-  headerMode?: 'impersonate' | 'passthrough';
-  /** CA certificate directory. Default: "~/.koon/ca/". */
-  caDir?: string;
-  /**
-   * Timeout in seconds, fractions allowed, for a forwarded request's response head and each
-   * wait for its body. 0 means no timeout. Default: 30.
-   */
-  timeout?: number;
-  /**
-   * Allow `listenAddr` to bind a non-loopback address. Without it, the proxy relays through
-   * koon's fingerprinted TLS/HTTP2 stack with no transport encryption of its own between it and
-   * its client, so on a reachable interface it would otherwise be an open relay for anyone who
-   * can reach the port unless `auth` is also set. Default: false.
-   */
-  allowNonLoopback?: boolean;
-  /** `Proxy-Authorization: Basic` credentials required of every client. Default: none. */
-  auth?: KoonProxyAuth;
-  /** Connections accepted at once; further ones wait for a slot to free up. Default: 512. */
-  maxConnections?: number;
-
-  // How the forwarded requests connect, as for a `Koon` client. The proxy does not follow
-  // redirects and keeps no cookies: the proxied client gets each redirect and keeps its own.
-
-  /** Upstream proxy (http://, https://, socks5://), e.g. a residential proxy. See `KoonOptions.proxy`. */
-  proxy?: string;
-  /** Upstream proxies for round-robin rotation. Takes priority over `proxy`. */
-  proxies?: string[];
-  /** Skip TLS certificate verification of origins. See `KoonOptions.ignoreTlsErrors`. */
-  ignoreTlsErrors?: boolean;
-  /** Certificates trusted for an `https://` upstream proxy. See `KoonOptions.proxyCaCerts`. */
-  proxyCaCerts?: string | Buffer;
-  /** Skip certificate verification of an `https://` upstream proxy. See `KoonOptions.ignoreProxyTlsErrors`. */
-  ignoreProxyTlsErrors?: boolean;
-  /** Headers for the CONNECT request to the upstream proxy, in order. */
-  proxyHeaders?: KoonHeadersInit;
-  /** Enable TLS session resumption to origins. Default: true. */
-  sessionResumption?: boolean;
-  /** DNS-over-HTTPS provider, case-insensitive: "cloudflare" or "google". */
-  doh?: string;
-  /** Bind outgoing connections to a specific local IP address. */
-  localAddress?: string;
-  /** Automatic retries of forwarded requests on transport errors (a whole number). Default: 0. */
-  retries?: number;
-  /** The user's language for the Accept-Language header the profile sends (e.g. "de-AT", see `KoonOptions.locale`); in impersonate mode the client's own is dropped. */
-  locale?: string;
-  /** Restrict DNS resolution to IPv4 (4) or IPv6 (6). */
-  ipVersion?: 4 | 6;
-  /** Entries in curl's `--resolve` format for the forwarded requests. See `KoonOptions.resolve`. */
-  resolve?: string[];
-  /** Maximum forwarded response body size in bytes, decompressed. See `KoonOptions.maxResponseBody`. */
-  maxResponseBody?: number;
-  /** Pins the forwarded requests' server-padding field trial group. See `KoonOptions.serverPadding`. */
-  serverPadding?: string;
 }
 
 export interface KoonProxyAuth {

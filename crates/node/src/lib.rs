@@ -1,20 +1,19 @@
-use std::net::IpAddr;
+use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
-use std::time::Duration;
 
 use http::Method;
 use indexmap::IndexMap;
-use koon_core::dns::DohConfig;
 use koon_core::multipart::Multipart;
+use koon_core::options::{Hook, Kind, OptionError, Options, Scope, Target, Value};
 use koon_core::profile::BrowserProfile;
 use koon_core::{
-    Body, Client, ClientBuilder, CookieParams, Error as KoonError, IpVersion, PartitionKey,
-    ProxyServer, ProxyServerAuth, ProxyServerConfig, SkippedCookie, WsMessage,
+    Body, Client, CookieParams, Error as KoonError, PartitionKey, ProxyServer, SkippedCookie,
+    WsMessage,
 };
 use napi::bindgen_prelude::*;
 use napi::threadsafe_function::{ErrorStrategy, ThreadsafeFunction, ThreadsafeFunctionCallMode};
-use napi::{JsFunction, JsObject, JsString, JsUnknown, NapiValue, Ref, Status, ValueType};
+use napi::{JsFunction, JsObject, JsString, JsUnknown, NapiRaw, NapiValue, Ref, Status, ValueType};
 use napi_derive::napi;
 
 /// Install a panic hook that logs to stderr before aborting.
@@ -82,19 +81,8 @@ fn invalid_argument(message: impl std::fmt::Display) -> napi::Error {
     koon_napi_error(KoonError::InvalidArgument(message.to_string(), None))
 }
 
-/// A timeout in seconds from JS; 0 means no timeout (the core's convention).
-/// Taken as a number rather than napi's `u32`, whose `ToUint32` conversion
-/// turns 0.5 into 0 (no timeout) and -1 into 4294967295.
-fn timeout(secs: f64) -> Result<Duration> {
-    Duration::try_from_secs_f64(secs).map_err(|_| {
-        invalid_argument(format!(
-            "timeout must be a finite number of seconds >= 0, got {secs}"
-        ))
-    })
-}
-
-/// A whole number >= 0 from JS, for the same reason as [`timeout`]: napi's
-/// `ToUint32` would wrap -1 to 4294967295 and truncate 1.5 to 1.
+/// A whole number >= 0 from JS, taken as a number rather than napi's `u32`,
+/// whose `ToUint32` conversion wraps -1 to 4294967295 and truncates 1.5 to 1.
 fn whole_number<T: TryFrom<u64>>(name: &str, value: f64) -> Result<T> {
     if !(value >= 0.0 && value.fract() == 0.0) {
         return Err(invalid_argument(format!(
@@ -107,16 +95,6 @@ fn whole_number<T: TryFrom<u64>>(name: &str, value: f64) -> Result<T> {
         Ok(number) if whole as f64 == value => Ok(number),
         _ => Err(invalid_argument(format!("{name} is too large: {value}"))),
     }
-}
-
-fn ip_version(value: f64) -> Result<IpVersion> {
-    IpVersion::try_from(whole_number::<u8>("ipVersion", value)?).map_err(koon_napi_error)
-}
-
-/// A browser profile from a custom JSON profile, else by name.
-fn resolve_profile(browser: Option<&str>, profile_json: Option<&str>) -> Result<BrowserProfile> {
-    BrowserProfile::from_name_or_json(browser.unwrap_or("chrome"), profile_json)
-        .map_err(koon_napi_error)
 }
 
 /// The method and body of a request, as the core takes them.
@@ -340,230 +318,197 @@ fn unref<T: 'static>(
 // Options
 // ---------------------------------------------------------------------------
 
-/// Options for creating a Koon client (documented in index.d.ts).
-///
-/// `object_to_js = false`: only ever read from JS, never returned to it; the
-/// hook fields hold `ThreadsafeFunction`, which only converts from JS.
-#[napi(object, object_to_js = false)]
-#[derive(Default)]
-pub struct KoonOptions {
-    pub browser: Option<String>,
-    pub profile_json: Option<String>,
-    pub proxy: Option<String>,
-    pub proxies: Option<Vec<String>>,
-    pub timeout: Option<f64>,
-    pub ignore_tls_errors: Option<bool>,
-    pub proxy_ca_certs: Option<Either<String, Buffer>>,
-    pub ignore_proxy_tls_errors: Option<bool>,
-    pub headers: Option<Headers>,
-    pub follow_redirects: Option<bool>,
-    pub max_redirects: Option<f64>,
-    pub cookie_jar: Option<bool>,
-    pub session_resumption: Option<bool>,
-    pub doh: Option<String>,
-    pub local_address: Option<String>,
-    pub retries: Option<f64>,
-    pub locale: Option<String>,
-    pub proxy_headers: Option<Headers>,
-    pub ip_version: Option<f64>,
-    pub resolve: Option<Vec<String>>,
-    /// Maximum response body size in bytes, decompressed; 0 disables it. Default: 100 MiB.
-    pub max_response_body: Option<f64>,
-    /// Pins Chrome >=151's server-padding field trial group instead of drawing it: "none", or
-    /// the bytes of padding the group asks for. The study ended on 2026-10-30.
-    pub server_padding: Option<String>,
-    pub on_request: Option<RequestHookFn>,
-    pub on_response: Option<ResponseHookFn>,
-    pub on_redirect: Option<ResponseHookFn>,
+/// The scope an options argument is read for, and whether its hooks are
+/// unref'd: a client keeps them for its whole lifetime, which must not keep
+/// the Node.js event loop (and so the process) alive after the client is
+/// gone; a request's live only as long as the call.
+pub trait OptionScope {
+    const SCOPE: Scope;
+    const UNREF_HOOKS: bool;
 }
 
-/// Per-request settings; unset fields fall back to the client's.
-#[napi(object, object_to_js = false)]
-#[derive(Default)]
-pub struct KoonRequestOptions {
-    pub headers: Option<Headers>,
-    pub timeout: Option<f64>,
-    pub proxy: Option<String>,
-    pub follow_redirects: Option<bool>,
-    pub max_redirects: Option<f64>,
-    pub on_request: Option<RequestHookFn>,
-    pub on_response: Option<ResponseHookFn>,
-    pub on_redirect: Option<ResponseHookFn>,
+pub struct ClientScope;
+pub struct RequestScope;
+pub struct StreamScope;
+pub struct ProxyScope;
+pub struct VerifyScope;
+
+impl OptionScope for ClientScope {
+    const SCOPE: Scope = Scope::Client;
+    const UNREF_HOOKS: bool = true;
 }
 
-/// The connection-to-origins-and-proxies fields `KoonOptions` and
-/// `KoonProxyOptions` both declare (napi objects map a flat JS shape, so
-/// neither can nest this struct as a field), collected once here so their
-/// application logic lives in `connection_builder` alone instead of twice.
-struct ConnectionOptions {
-    ignore_tls_errors: Option<bool>,
-    proxy: Option<String>,
-    proxies: Option<Vec<String>>,
-    proxy_ca_certs: Option<Either<String, Buffer>>,
-    ignore_proxy_tls_errors: Option<bool>,
-    proxy_headers: Option<Headers>,
-    session_resumption: Option<bool>,
-    doh: Option<String>,
-    local_address: Option<String>,
-    retries: Option<f64>,
-    locale: Option<String>,
-    ip_version: Option<f64>,
-    resolve: Option<Vec<String>>,
-    max_response_body: Option<f64>,
-    server_padding: Option<String>,
+impl OptionScope for RequestScope {
+    const SCOPE: Scope = Scope::Request;
+    const UNREF_HOOKS: bool = false;
 }
 
-/// A core client builder for `profile` with the shared connection options.
-/// Unset options keep the core's defaults.
-fn connection_builder(profile: BrowserProfile, opts: ConnectionOptions) -> Result<ClientBuilder> {
-    let proxy_ca_certs = opts.proxy_ca_certs.map(|pem| match pem {
-        Either::A(text) => text.into_bytes(),
-        Either::B(buffer) => buffer.to_vec(),
-    });
-    let local_address = opts
-        .local_address
-        .as_deref()
-        .map(|address| {
-            address
-                .parse::<IpAddr>()
-                .map_err(|e| invalid_argument(format!("Invalid localAddress '{address}': {e}")))
+impl OptionScope for StreamScope {
+    const SCOPE: Scope = Scope::Stream;
+    const UNREF_HOOKS: bool = false;
+}
+
+impl OptionScope for ProxyScope {
+    const SCOPE: Scope = Scope::Proxy;
+    const UNREF_HOOKS: bool = false;
+}
+
+impl OptionScope for VerifyScope {
+    const SCOPE: Scope = Scope::Verify;
+    const UNREF_HOOKS: bool = false;
+}
+
+/// An options object (documented in index.d.ts), read into the core's
+/// [`Options`] on the JS thread: every key is checked against the option
+/// table, so a misspelled one throws `INVALID_ARGUMENT` instead of being
+/// dropped. `undefined` and `null` are no options.
+pub struct Opts<S>(Options, PhantomData<S>);
+
+impl<S> Opts<S> {
+    fn into_inner(self) -> Options {
+        self.0
+    }
+}
+
+impl<S> TypeName for Opts<S> {
+    fn type_name() -> &'static str {
+        "Options"
+    }
+
+    fn value_type() -> ValueType {
+        ValueType::Object
+    }
+}
+
+impl<S> ValidateNapiValue for Opts<S> {}
+
+impl<S: OptionScope> FromNapiValue for Opts<S> {
+    unsafe fn from_napi_value(
+        env: napi::sys::napi_env,
+        value: napi::sys::napi_value,
+    ) -> Result<Self> {
+        // SAFETY: `env` and `value` come from napi-rs, which calls this with
+        // the environment of the current call.
+        let (env, value) = unsafe {
+            (
+                Env::from_raw(env),
+                JsUnknown::from_raw_unchecked(env, value),
+            )
+        };
+        read_options(env, value, S::SCOPE, S::UNREF_HOOKS).map(|options| Self(options, PhantomData))
+    }
+}
+
+fn option_error(error: OptionError) -> napi::Error {
+    koon_napi_error(error.into())
+}
+
+fn read_options(env: Env, value: JsUnknown, scope: Scope, unref_hooks: bool) -> Result<Options> {
+    let mut options = Options::new(scope, Target::Node);
+    match value.get_type()? {
+        ValueType::Undefined | ValueType::Null => return Ok(options),
+        ValueType::Object if !value.is_array()? && !value.is_buffer()? => {}
+        _ => return Err(invalid_argument("options must be an object")),
+    }
+    // SAFETY: an object of the current call's environment.
+    let object = unsafe { JsObject::from_raw_unchecked(env.raw(), value.raw()) };
+    for key in own_keys(env, &object)? {
+        let spec = options.spec(&key).map_err(option_error)?;
+        let value: JsUnknown = object.get_named_property(&key)?;
+        let value = match spec.kind {
+            Kind::Hook(hook) if value.get_type()? == ValueType::Function => {
+                hook_value(env, &value, hook, unref_hooks)?
+            }
+            Kind::Headers if value.get_type()? == ValueType::Object && !value.is_buffer()? => {
+                // SAFETY: as above.
+                let headers = unsafe { Headers::from_napi_value(env.raw(), value.raw())? };
+                Value::Pairs(headers.0)
+            }
+            _ => js_value(env, value)?,
+        };
+        options.set_option(spec, value).map_err(option_error)?;
+    }
+    Ok(options)
+}
+
+/// The enumerable string keys of `object`, inherited ones included, as
+/// `for...in` lists them.
+fn own_keys(env: Env, object: &JsObject) -> Result<Vec<String>> {
+    let mut names = std::ptr::null_mut();
+    // SAFETY: a call on an object of the current call's environment, which
+    // writes the array of names to `names`.
+    let names = unsafe {
+        napi::check_status!(napi::sys::napi_get_all_property_names(
+            env.raw(),
+            object.raw(),
+            napi::sys::KeyCollectionMode::include_prototypes,
+            napi::sys::KeyFilter::enumerable | napi::sys::KeyFilter::skip_symbols,
+            napi::sys::KeyConversion::numbers_to_strings,
+            &mut names,
+        ))?;
+        JsObject::from_raw_unchecked(env.raw(), names)
+    };
+    (0..names.get_array_length()?)
+        .map(|index| {
+            names
+                .get_element::<JsString>(index)?
+                .into_utf8()?
+                .into_owned()
         })
-        .transpose()?;
-    let doh = opts
-        .doh
-        .as_deref()
-        .map(|provider| provider.parse::<DohConfig>().map_err(koon_napi_error))
-        .transpose()?;
-    let ip_version = opts.ip_version.map(ip_version).transpose()?;
-    let retries = opts
-        .retries
-        .map(|r| whole_number::<u32>("retries", r))
-        .transpose()?
-        .unwrap_or(0);
-    let max_response_body = opts
-        .max_response_body
-        .map(|max| whole_number::<u64>("maxResponseBody", max))
-        .transpose()?
-        .unwrap_or_else(|| koon_core::ConnectionOptions::default().max_response_body);
-    let server_padding = opts
-        .server_padding
-        .as_deref()
-        .map(|padding| {
-            padding
-                .parse::<koon_core::ServerPadding>()
-                .map_err(koon_napi_error)
-        })
-        .transpose()?;
-
-    let connection = koon_core::ConnectionOptions {
-        ignore_tls_errors: opts.ignore_tls_errors.unwrap_or(false),
-        proxy: opts.proxy,
-        proxies: opts.proxies.unwrap_or_default(),
-        proxy_ca_certs,
-        ignore_proxy_tls_errors: opts.ignore_proxy_tls_errors.unwrap_or(false),
-        proxy_headers: headers(opts.proxy_headers),
-        session_resumption: opts.session_resumption.unwrap_or(true),
-        doh,
-        local_address,
-        retries,
-        locale: opts.locale,
-        ip_version,
-        resolve: opts.resolve.unwrap_or_default(),
-        max_response_body,
-        server_padding,
-    };
-    connection.apply(profile).map_err(koon_napi_error)
+        .collect()
 }
 
-/// A core client builder for every option but the hooks, which need the
-/// `Env` (`Koon` adds them); `KoonProxy` builds its upstream client with
-/// `connection_builder` directly instead, since it has no headers, redirect
-/// or cookie-jar options of its own.
-fn client_builder(opts: KoonOptions) -> Result<ClientBuilder> {
-    let KoonOptions {
-        browser,
-        profile_json,
-        proxy,
-        proxies,
-        timeout: timeout_secs,
-        ignore_tls_errors,
-        proxy_ca_certs,
-        ignore_proxy_tls_errors,
-        headers: headers_opt,
-        follow_redirects,
-        max_redirects,
-        cookie_jar,
-        session_resumption,
-        doh,
-        local_address,
-        retries,
-        locale,
-        proxy_headers,
-        ip_version,
-        resolve,
-        max_response_body,
-        server_padding,
-        ..
-    } = opts;
-
-    let profile = resolve_profile(browser.as_deref(), profile_json.as_deref())?;
-    let connection = ConnectionOptions {
-        ignore_tls_errors,
-        proxy,
-        proxies,
-        proxy_ca_certs,
-        ignore_proxy_tls_errors,
-        proxy_headers,
-        session_resumption,
-        doh,
-        local_address,
-        retries,
-        locale,
-        ip_version,
-        resolve,
-        max_response_body,
-        server_padding,
-    };
-    let mut builder = connection_builder(profile, connection)?.headers(headers(headers_opt));
-    if let Some(secs) = timeout_secs {
-        builder = builder.timeout(timeout(secs)?);
-    }
-    if let Some(follow) = follow_redirects {
-        builder = builder.follow_redirects(follow);
-    }
-    if let Some(max) = max_redirects {
-        builder = builder.max_redirects(whole_number("maxRedirects", max)?);
-    }
-    if let Some(enabled) = cookie_jar {
-        builder = builder.cookie_jar(enabled);
-    }
-    Ok(builder)
+/// A JS value as the core's option [`Value`]; a shape no option takes is
+/// [`Value::Other`], which the core reports with the type it expected.
+fn js_value(env: Env, value: JsUnknown) -> Result<Value> {
+    Ok(match value.get_type()? {
+        ValueType::Undefined | ValueType::Null => Value::Null,
+        ValueType::Boolean => Value::Bool(value.coerce_to_bool()?.get_value()?),
+        ValueType::Number => Value::Float(value.coerce_to_number()?.get_double()?),
+        ValueType::String => Value::Text(value.coerce_to_string()?.into_utf8()?.into_owned()?),
+        ValueType::Object if value.is_buffer()? => {
+            // SAFETY: a Buffer of the current call's environment.
+            let buffer = unsafe { Buffer::from_napi_value(env.raw(), value.raw())? };
+            Value::Bytes(buffer.to_vec())
+        }
+        ValueType::Object if value.is_array()? => {
+            // SAFETY: an array of the current call's environment.
+            match unsafe { Vec::<String>::from_napi_value(env.raw(), value.raw()) } {
+                Ok(texts) => Value::Texts(texts),
+                Err(_) => Value::Other,
+            }
+        }
+        ValueType::Object => {
+            // SAFETY: an object of the current call's environment.
+            match unsafe { IndexMap::<String, String>::from_napi_value(env.raw(), value.raw()) } {
+                Ok(map) => Value::Pairs(map.into_iter().collect()),
+                Err(_) => Value::Other,
+            }
+        }
+        _ => Value::Other,
+    })
 }
 
-/// Core request options. The hooks are not unref'd: they live only as long
-/// as this one call, which keeps the process alive anyway.
-fn request_options(options: Option<KoonRequestOptions>) -> Result<koon_core::RequestOptions> {
-    let Some(opts) = options else {
-        return Ok(koon_core::RequestOptions::default());
-    };
-    Ok(koon_core::RequestOptions {
-        headers: headers(opts.headers),
-        proxy: opts.proxy,
-        timeout: opts.timeout.map(timeout).transpose()?,
-        follow_redirects: opts.follow_redirects,
-        max_redirects: opts
-            .max_redirects
-            .map(|n| whole_number("maxRedirects", n))
-            .transpose()?,
-        on_request: opts
-            .on_request
-            .map(|f| Arc::new(on_request_hook(f)) as koon_core::OnRequestHook),
-        on_response: opts
-            .on_response
-            .map(|f| Arc::new(on_response_hook(f)) as koon_core::OnResponseHook),
-        on_redirect: opts
-            .on_redirect
-            .map(|f| Arc::new(on_redirect_hook(f)) as koon_core::OnRedirectHook),
+/// A hook function as the core's hook value, called on the JS thread.
+fn hook_value(env: Env, value: &JsUnknown, hook: Hook, unref_hooks: bool) -> Result<Value> {
+    // SAFETY: a function of the current call's environment.
+    let (env_raw, raw) = unsafe { (env.raw(), value.raw()) };
+    Ok(match hook {
+        Hook::Request => {
+            let tsfn = unsafe { RequestHookFn::from_napi_value(env_raw, raw)? };
+            let tsfn = if unref_hooks { unref(env, tsfn)? } else { tsfn };
+            Value::RequestHook(Arc::new(on_request_hook(tsfn)))
+        }
+        Hook::Response => {
+            let tsfn = unsafe { ResponseHookFn::from_napi_value(env_raw, raw)? };
+            let tsfn = if unref_hooks { unref(env, tsfn)? } else { tsfn };
+            Value::ResponseHook(Arc::new(on_response_hook(tsfn)))
+        }
+        Hook::Redirect => {
+            let tsfn = unsafe { ResponseHookFn::from_napi_value(env_raw, raw)? };
+            let tsfn = if unref_hooks { unref(env, tsfn)? } else { tsfn };
+            Value::RedirectHook(Arc::new(on_redirect_hook(tsfn)))
+        }
     })
 }
 
@@ -912,24 +857,12 @@ pub struct Koon {
 #[napi]
 impl Koon {
     #[napi(constructor)]
-    pub fn new(env: Env, options: Option<KoonOptions>) -> Result<Self> {
-        let mut opts = options.unwrap_or_default();
-        let on_request = opts.on_request.take();
-        let on_response = opts.on_response.take();
-        let on_redirect = opts.on_redirect.take();
-
-        let mut builder = client_builder(opts)?;
-        if let Some(tsfn) = on_request {
-            builder = builder.on_request(on_request_hook(unref(env, tsfn)?));
-        }
-        if let Some(tsfn) = on_response {
-            builder = builder.on_response(on_response_hook(unref(env, tsfn)?));
-        }
-        if let Some(tsfn) = on_redirect {
-            builder = builder.on_redirect(on_redirect_hook(unref(env, tsfn)?));
-        }
-
-        let client = builder.build().map_err(koon_napi_error)?;
+    pub fn new(options: Opts<ClientScope>) -> Result<Self> {
+        let client = options
+            .into_inner()
+            .client_builder()
+            .and_then(|builder| builder.build())
+            .map_err(koon_napi_error)?;
         Ok(Self {
             client: Arc::new(client),
         })
@@ -955,12 +888,12 @@ impl Koon {
         method: String,
         url: String,
         body: Option<Either<String, Buffer>>,
-        options: Option<KoonRequestOptions>,
+        options: Opts<RequestScope>,
     ) -> Result<KoonResponse> {
         let (method, body) = method_and_body(&method, body)?;
         let response = self
             .client
-            .send(method, &url, body, request_options(options)?)
+            .send(method, &url, body, options.into_inner().request_options())
             .await
             .map_err(koon_napi_error)?;
         Ok(response.into())
@@ -971,11 +904,15 @@ impl Koon {
         &self,
         url: String,
         fields: Vec<KoonMultipartField>,
-        options: Option<KoonRequestOptions>,
+        options: Opts<RequestScope>,
     ) -> Result<KoonResponse> {
         let response = self
             .client
-            .post_multipart(&url, build_multipart(fields)?, request_options(options)?)
+            .post_multipart(
+                &url,
+                build_multipart(fields)?,
+                options.into_inner().request_options(),
+            )
             .await
             .map_err(koon_napi_error)?;
         Ok(response.into())
@@ -987,14 +924,20 @@ impl Koon {
         method: String,
         url: String,
         body: Option<Either<String, Buffer>>,
-        options: Option<KoonRequestOptions>,
+        options: Opts<StreamScope>,
     ) -> Result<KoonStreamingResponse> {
         let (method, body) = method_and_body(&method, body)?;
-        let response = self
+        let options = options.into_inner();
+        let decode = options.decode();
+        let mut response = self
             .client
-            .send_streaming(method, &url, body, request_options(options)?)
+            .send_streaming(method, &url, body, options.request_options())
             .await
             .map_err(koon_napi_error)?;
+        // Before the caller can read the first chunk.
+        if decode {
+            response.decode_content();
+        }
         Ok(response.into())
     }
 
@@ -1007,10 +950,10 @@ impl Koon {
         method: String,
         url: String,
         body: Option<Either<String, Buffer>>,
-        options: Option<KoonRequestOptions>,
+        options: Opts<RequestScope>,
     ) -> Result<KoonPendingResponse> {
         let (method, body) = method_and_body(&method, body)?;
-        let options = request_options(options)?;
+        let options = options.into_inner().request_options();
         let client = self.client.clone();
         let (sender, receiver) = tokio::sync::oneshot::channel();
         let task = spawn(async move {
@@ -1417,58 +1360,6 @@ impl KoonWebSocket {
 // KoonProxy
 // ---------------------------------------------------------------------------
 
-/// Options for starting a MITM proxy server (documented in index.d.ts).
-#[napi(object, object_to_js = false)]
-#[derive(Default)]
-pub struct KoonProxyOptions {
-    pub browser: Option<String>,
-    pub profile_json: Option<String>,
-    pub listen_addr: Option<String>,
-    pub header_mode: Option<String>,
-    pub ca_dir: Option<String>,
-    pub timeout: Option<f64>,
-    /// Allow `listen_addr` to bind a non-loopback address (an open relay
-    /// through koon's fingerprinted TLS/HTTP2 stack unless `auth` is also
-    /// set). Default: `false`.
-    pub allow_non_loopback: Option<bool>,
-    /// `Proxy-Authorization: Basic` credentials required of every client.
-    pub auth: Option<KoonProxyAuth>,
-    /// Connections accepted at once; further ones wait for a slot to free up.
-    pub max_connections: Option<f64>,
-    // The upstream client's connection options, as in `KoonOptions`.
-    pub proxy: Option<String>,
-    pub proxies: Option<Vec<String>>,
-    pub ignore_tls_errors: Option<bool>,
-    pub proxy_ca_certs: Option<Either<String, Buffer>>,
-    pub ignore_proxy_tls_errors: Option<bool>,
-    pub proxy_headers: Option<Headers>,
-    pub session_resumption: Option<bool>,
-    pub doh: Option<String>,
-    pub local_address: Option<String>,
-    pub retries: Option<f64>,
-    pub locale: Option<String>,
-    pub ip_version: Option<f64>,
-    pub resolve: Option<Vec<String>>,
-    pub max_response_body: Option<f64>,
-    pub server_padding: Option<String>,
-}
-
-/// `Proxy-Authorization: Basic` credentials a `KoonProxy` requires of its clients.
-#[napi(object)]
-pub struct KoonProxyAuth {
-    pub username: String,
-    pub password: String,
-}
-
-impl From<KoonProxyAuth> for ProxyServerAuth {
-    fn from(auth: KoonProxyAuth) -> Self {
-        Self {
-            username: auth.username,
-            password: auth.password,
-        }
-    }
-}
-
 type RunningProxy = Arc<std::sync::Mutex<Option<ProxyServer>>>;
 
 /// Every proxy started and not shut down yet: a server stops once dropped,
@@ -1493,79 +1384,11 @@ pub struct KoonProxy {
 #[napi]
 impl KoonProxy {
     #[napi(factory)]
-    pub async fn start(options: Option<KoonProxyOptions>) -> Result<Self> {
-        let KoonProxyOptions {
-            browser,
-            profile_json,
-            listen_addr,
-            header_mode,
-            ca_dir,
-            timeout: timeout_secs,
-            allow_non_loopback,
-            auth,
-            max_connections,
-            proxy,
-            proxies,
-            ignore_tls_errors,
-            proxy_ca_certs,
-            ignore_proxy_tls_errors,
-            proxy_headers,
-            session_resumption,
-            doh,
-            local_address,
-            retries,
-            locale,
-            ip_version,
-            resolve,
-            max_response_body,
-            server_padding,
-        } = options.unwrap_or_default();
-
-        let profile = resolve_profile(browser.as_deref(), profile_json.as_deref())?;
-        // The upstream client takes the same connection options as a `Koon`
-        // client does; the proxy turns redirects and the cookie jar off.
-        let connection = ConnectionOptions {
-            ignore_tls_errors,
-            proxy,
-            proxies,
-            proxy_ca_certs,
-            ignore_proxy_tls_errors,
-            proxy_headers,
-            session_resumption,
-            doh,
-            local_address,
-            retries,
-            locale,
-            ip_version,
-            resolve,
-            max_response_body,
-            server_padding,
-        };
-        let mut client = connection_builder(profile, connection)?;
-        if let Some(secs) = timeout_secs {
-            client = client.timeout(timeout(secs)?);
-        }
-        let mut config = ProxyServerConfig {
-            ca_dir,
-            client,
-            ..ProxyServerConfig::default()
-        };
-        if let Some(address) = listen_addr {
-            config.listen_addr = address;
-        }
-        if let Some(mode) = &header_mode {
-            config.header_mode = mode.parse().map_err(koon_napi_error)?;
-        }
-        if let Some(allow) = allow_non_loopback {
-            config.allow_non_loopback = allow;
-        }
-        if let Some(auth) = auth {
-            config.auth = Some(auth.into());
-        }
-        if let Some(max) = max_connections {
-            config.max_connections = whole_number("maxConnections", max)?;
-        }
-
+    pub async fn start(options: Opts<ProxyScope>) -> Result<Self> {
+        let config = options
+            .into_inner()
+            .proxy_config()
+            .map_err(koon_napi_error)?;
         let server = ProxyServer::start(config).await.map_err(koon_napi_error)?;
         let proxy = Self {
             port: server.port(),
@@ -1608,8 +1431,12 @@ impl KoonProxy {
 /// The fingerprint self-test of `koon_core::verify` for one profile, as the
 /// report's JSON; index.js parses it for `Koon.verify()`.
 #[napi]
-pub async fn verify_json(browser: String, proxy: Option<String>) -> Result<String> {
-    koon_core::verify::verify(&browser, proxy.as_deref())
+pub async fn verify_json(browser: String, options: Opts<VerifyScope>) -> Result<String> {
+    let mut options = options.into_inner();
+    options
+        .set("browser", Value::Text(browser))
+        .map_err(option_error)?;
+    koon_core::verify::verify_options(options)
         .await
         .map(|report| report.to_json())
         .map_err(koon_napi_error)
