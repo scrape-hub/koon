@@ -1,0 +1,42 @@
+name: Freshness
+
+# Weekly: are koon's newest profiles the browsers' current stable releases, and are Chrome's
+# network field trials the reviewed ones (crates/core/tests/network_freshness.rs)? A failure means
+# a profile update or a review is due.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - name: Install build deps
+        run: sudo apt-get update && sudo apt-get install -y cmake build-essential
+
+      - name: Cargo cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-freshness-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Check
+        run: cargo test -p koon-core --test network_freshness -- --ignored
