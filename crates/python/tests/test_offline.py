@@ -875,7 +875,9 @@ def test_multipart_file_field_with_empty_data_stays_a_file(base_url):
 
 
 @pytest.mark.parametrize(
-    "field", [{"name": "empty"}, {"value": "no name"}], ids=["no-value", "no-name"]
+    "field",
+    [{"name": "empty"}, {"value": "no name"}, {"name": "both", "value": "a", "file_data": b"b"}],
+    ids=["no-value", "no-name", "both"],
 )
 def test_invalid_multipart_field_is_invalid_argument(base_url, field):
     with pytest.raises(KoonInvalidArgument) as exc_info:

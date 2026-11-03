@@ -181,7 +181,14 @@ fn build_multipart(fields: Vec<Bound<'_, PyAny>>) -> PyResult<Multipart> {
         .into_iter()
         .try_fold(Multipart::new(), |form, field| {
             match (field.file_data, field.value) {
-                (Some(data), _) => Ok(form.file(
+                (Some(_), Some(_)) => Err(koon_err(
+                    INVALID_ARGUMENT,
+                    format!(
+                        "form field '{}' must have either 'value' (text) or 'file_data' (bytes), not both",
+                        field.name
+                    ),
+                )),
+                (Some(data), None) => Ok(form.file(
                     field.name,
                     field.filename.unwrap_or_else(|| "file".into()),
                     field

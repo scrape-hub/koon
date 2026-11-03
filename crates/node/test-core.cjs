@@ -76,6 +76,11 @@ async function testErrorCodes() {
   }
   await expectThrows(() => new Koon({ profileJson: '{' }), 'malformed profileJson', 'JSON_ERROR');
   await expectThrows(() => new Koon({ proxy: 'ftp://proxy:21' }), 'unsupported proxy scheme', 'PROXY_ERROR');
+  await expectThrows(
+    () => client.postMultipart('http://127.0.0.1:9/', [{ name: 'f', value: 'a', fileData: Buffer.from('b') }]),
+    'a multipart field with value and fileData',
+    'INVALID_ARGUMENT'
+  );
   await expectThrows(() => new Koon({ proxies: ['nonsense'] }), 'invalid proxy list', 'PROXY_ERROR');
   await expectThrows(() => new Koon({ doh: 'quad9' }), 'unknown DoH provider', 'INVALID_ARGUMENT');
   await expectThrows(() => new Koon({ localAddress: 'nope' }), 'invalid localAddress', 'INVALID_ARGUMENT');

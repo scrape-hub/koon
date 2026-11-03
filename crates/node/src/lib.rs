@@ -717,6 +717,12 @@ pub struct KoonMultipartField {
 fn build_multipart(fields: Vec<KoonMultipartField>) -> Result<Multipart> {
     let mut multipart = Multipart::new();
     for field in fields {
+        if field.value.is_some() && field.file_data.is_some() {
+            return Err(invalid_argument(format!(
+                "multipart field '{}' has both value and fileData",
+                field.name
+            )));
+        }
         multipart = if let Some(data) = field.file_data {
             multipart.file(
                 field.name,

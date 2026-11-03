@@ -58,6 +58,8 @@ Rust only:
 
 - Node and the CLI on Linux need glibc 2.28 instead of 2.38.
 - Node and Python: a `KoonProxy` runs until `shutdown()`.
+- Node and Python: a multipart field with both `value` and `fileData` is an
+  error.
 - CLI: `--timeout` covers the body.
 - CLI: `koon --help` no longer claims to pass every bot protection.
 
