@@ -253,6 +253,9 @@ fn unknown_length(headers: &mut Vec<(String, String)>, protocol: Protocol) {
     }
 }
 
+/// HTTP/1.1 connections per origin of Chromium and Firefox (see [`Client::h1_slot`]).
+const H1_CONNECTIONS_PER_HOST: usize = 6;
+
 /// One hop's request as it goes out, with the jar's cookies of the moment.
 struct Outgoing<'a> {
     hop: &'a Hop,
@@ -613,7 +616,11 @@ impl super::Client {
                 return Ok(parts);
             }
         }
-        while let Some((mut conn, info)) = self.pool.take_h1(key) {
+        loop {
+            let slot = self.h1_slot(key).await;
+            let Some((mut conn, info)) = self.pool.take_h1(key) else {
+                break;
+            };
             // The server may have closed it while it sat in the pool.
             if !is_idle_and_open(&mut conn) {
                 continue;
@@ -636,6 +643,7 @@ impl super::Client {
                         method: &out.hop.method,
                         target: &target,
                         headers,
+                        slot,
                     },
                     &out.hop.body,
                 )
@@ -748,6 +756,23 @@ impl super::Client {
     /// Whether a request may go out again after it failed with `e`: when it did not leave or its
     /// method is idempotent, and its body can be sent again. A request that could not be built
     /// never goes out.
+    /// One of the HTTP/1.1 connection slots of `key`, for a profile whose browser keeps at most a
+    /// few per origin and queues further requests: Chromium's `kMaxSocketsPerGroup`
+    /// (`net/socket/client_socket_pool_manager.cc`) and Firefox's
+    /// `network.http.max-persistent-connections-per-server` are both 6. `None` for a key known to
+    /// speak HTTP/2 or HTTP/3, and for Safari (not captured yet) and `OkHttp` (whose dispatcher
+    /// limits requests per host, not connections).
+    async fn h1_slot(&self, key: &PoolKey) -> Option<tokio::sync::OwnedSemaphorePermit> {
+        let limit = match headers::Family::of(&self.profile) {
+            headers::Family::Chromium | headers::Family::Firefox => H1_CONNECTIONS_PER_HOST,
+            _ => return None,
+        };
+        if self.pool.is_multiplexed(key) {
+            return None;
+        }
+        self.pool.h1_slot(key, limit).await
+    }
+
     fn may_resend(e: &ExchangeError, hop: &Hop) -> bool {
         let resend = match e {
             ExchangeError::NotSent(_) => true,
@@ -805,6 +830,13 @@ impl super::Client {
         let mut quic_failed = false;
 
         let parts = loop {
+            // Taken before connecting, as a browser counts a connection that is still being set
+            // up; given back below if it turns out multiplexed.
+            let slot = if direct_quic {
+                None
+            } else {
+                self.h1_slot(key).await
+            };
             // Nothing is sent before the connection is up.
             let fresh = match h3_port {
                 Some(h3_port) if direct_quic => self.connect_direct_quic(key, h3_port).await,
@@ -817,6 +849,7 @@ impl super::Client {
 
             let error = match fresh {
                 Fresh::Mux(mux, info, id) => {
+                    drop(slot);
                     let is_h3 = matches!(mux, Mux::H3(_));
                     // Boxed so `exchange_on_new_connection`'s future does not carry `send_mux`'s.
                     match Box::pin(self.send_mux(mux, info, false, out)).await {
@@ -864,6 +897,7 @@ impl super::Client {
                                 method: &hop.method,
                                 target: &target,
                                 headers,
+                                slot,
                             },
                             &hop.body,
                         )

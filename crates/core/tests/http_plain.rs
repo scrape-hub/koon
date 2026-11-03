@@ -780,6 +780,64 @@ async fn a_hop_that_got_its_response_is_not_retried() {
     assert_eq!(*count.lock().unwrap(), 1);
 }
 
+/// A keep-alive server that answers each request after 300 ms and records the most
+/// connections open at once and the connections in all.
+async fn counting_server() -> (u16, Arc<Mutex<(usize, usize, usize)>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    // (open, peak, total)
+    let counts = Arc::new(Mutex::new((0, 0, 0)));
+    let c = counts.clone();
+    tokio::spawn(async move {
+        while let Ok((mut stream, _)) = listener.accept().await {
+            let c = c.clone();
+            tokio::spawn(async move {
+                {
+                    let mut counts = c.lock().unwrap();
+                    counts.0 += 1;
+                    counts.1 = counts.1.max(counts.0);
+                    counts.2 += 1;
+                }
+                let mut buf = Vec::new();
+                while fill(&mut stream, &mut buf).await {
+                    buf.clear();
+                    tokio::time::sleep(Duration::from_millis(300)).await;
+                    let answer = b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok";
+                    if stream.write_all(answer).await.is_err() {
+                        break;
+                    }
+                }
+                c.lock().unwrap().0 -= 1;
+            });
+        }
+    });
+    (port, counts)
+}
+
+/// Ten requests at once from one client: the most connections open at once, and in all.
+async fn ten_at_once(profile: koon_core::BrowserProfile) -> (usize, usize) {
+    let (port, counts) = counting_server().await;
+    let client = Client::builder(profile).build().unwrap();
+    let url = format!("http://127.0.0.1:{port}/");
+    let requests = (0..10).map(|_| client.get(&url));
+    for response in futures_util::future::join_all(requests).await {
+        assert_eq!(response.unwrap().status, 200);
+    }
+    let (_, peak, total) = *counts.lock().unwrap();
+    (peak, total)
+}
+
+#[tokio::test]
+async fn chrome_and_firefox_keep_six_http1_connections_per_host() {
+    for profile in [Chrome::latest(), Firefox::latest()] {
+        let (peak, total) = ten_at_once(profile).await;
+        assert_eq!((peak, total), (6, 6));
+    }
+    // Safari (not captured yet) opens one per request, as before.
+    let (peak, _) = ten_at_once(koon_core::Safari::latest()).await;
+    assert_eq!(peak, 10);
+}
+
 #[tokio::test]
 async fn a_redirect_to_an_unsupported_scheme_is_not_retried() {
     let server = Server::start().await;

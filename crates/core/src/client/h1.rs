@@ -21,6 +21,8 @@ pub(super) struct SendContext<'a> {
     pub target: &'a str,
     /// Written verbatim.
     pub headers: Vec<(String, String)>,
+    /// The HTTP/1.1 slot the connection holds until its body is read.
+    pub slot: Option<tokio::sync::OwnedSemaphorePermit>,
 }
 
 impl super::Client {
@@ -44,6 +46,7 @@ impl super::Client {
             method,
             target,
             headers,
+            slot,
         } = ctx;
         let bytes_sent = if body.is_stream() {
             let stream = body
@@ -93,6 +96,7 @@ impl super::Client {
             BodyStream::Empty
         } else {
             BodyStream::Http1(Box::new(Http1Body {
+                _slot: slot,
                 reader,
                 state,
                 reuse,

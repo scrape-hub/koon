@@ -14,6 +14,9 @@ const MAX_IDLE_H1_PER_ORIGIN: usize = 6;
 /// Most origins remembered as speaking HTTP/2 or HTTP/3.
 const MAX_MULTIPLEXED_ORIGINS: usize = 1024;
 
+/// Keys with HTTP/1.1 slot counters kept once none is in use (see [`ConnectionPool::h1_slot`]).
+const MAX_IDLE_H1_SLOT_KEYS: usize = 1024;
+
 /// Pool key: scheme, origin and the proxy the connection goes through. Connections are never shared
 /// across proxies: a different proxy URL (including its credentials, which often carry a session
 /// ID) is a different exit.
@@ -108,6 +111,8 @@ pub(crate) struct ConnectionPool {
     /// Keys known to be multiplexed, each with the gate a request holds while it opens a connection
     /// to it.
     multiplexed: Mutex<HashMap<PoolKey, Arc<tokio::sync::Mutex<()>>>>,
+    /// The HTTP/1.1 connections in use per key, as slots (see [`h1_slot`](Self::h1_slot)).
+    h1_slots: Mutex<HashMap<PoolKey, Arc<tokio::sync::Semaphore>>>,
 }
 
 impl ConnectionPool {
@@ -118,6 +123,7 @@ impl ConnectionPool {
             idle_timeout,
             next_id: AtomicU64::new(0),
             multiplexed: Mutex::new(HashMap::new()),
+            h1_slots: Mutex::new(HashMap::new()),
         }
     }
 
@@ -289,6 +295,34 @@ impl ConnectionPool {
     /// For a key known to be multiplexed, wait until no other request is opening a connection to
     /// it, and hold that turn: the connection a request opens is then shared by the ones waiting
     /// behind it, as in Chrome. `None` for other keys, whose requests connect in parallel.
+    /// Whether `key` is known to speak HTTP/2 or HTTP/3.
+    pub fn is_multiplexed(&self, key: &PoolKey) -> bool {
+        crate::util::lock_recover(&self.multiplexed).contains_key(key)
+    }
+
+    /// Wait for one of `limit` slots of `key`: a request holds one while it opens or uses an
+    /// HTTP/1.1 connection, and further requests queue for it, as a browser keeps at most a few
+    /// such connections per origin. Dropping the permit frees the slot.
+    pub async fn h1_slot(
+        &self,
+        key: &PoolKey,
+        limit: usize,
+    ) -> Option<tokio::sync::OwnedSemaphorePermit> {
+        let semaphore = {
+            let mut slots = crate::util::lock_recover(&self.h1_slots);
+            if slots.len() >= MAX_IDLE_H1_SLOT_KEYS {
+                // A key nobody holds or waits for has all its slots free: forget it.
+                slots.retain(|_, slots| Arc::strong_count(slots) > 1);
+            }
+            slots
+                .entry(key.clone())
+                .or_insert_with(|| Arc::new(tokio::sync::Semaphore::new(limit)))
+                .clone()
+        };
+        // Never closed, so this always gets a permit.
+        semaphore.acquire_owned().await.ok()
+    }
+
     pub async fn connect_gate(&self, key: &PoolKey) -> Option<OwnedMutexGuard<()>> {
         let gate = crate::util::lock_recover(&self.multiplexed)
             .get(key)?

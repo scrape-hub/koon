@@ -35,6 +35,7 @@ Rust only:
 
 **Requests and connections**
 
+- Chromium and Firefox profiles open at most 6 HTTP/1.1 connections per host.
 - A request whose response has arrived is not retried.
 - Proxy credentials in the URL are percent-decoded.
 - Chrome profiles no longer join the ended handshake-padding trial.

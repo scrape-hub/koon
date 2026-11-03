@@ -61,6 +61,9 @@ pub struct PoolReturn {
 
 /// An HTTP/1.1 body being read from its connection.
 pub struct Http1Body {
+    /// The connection's HTTP/1.1 slot (see [`ConnectionPool::h1_slot`](crate::pool::ConnectionPool::h1_slot)),
+    /// freed with the body.
+    pub _slot: Option<tokio::sync::OwnedSemaphorePermit>,
     pub reader: BodyReader<BoxedIo>,
     pub state: BodyState,
     pub reuse: Option<PoolReturn>,
