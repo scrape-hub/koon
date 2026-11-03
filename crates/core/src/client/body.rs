@@ -22,6 +22,9 @@ pub enum ExchangeError {
     NotSent(Error),
     /// The request may have been processed: only idempotent requests may be replayed.
     Sent(Error),
+    /// The response head arrived and the body (or what follows it) failed: the server processed
+    /// the request, and hooks and the cookie jar have seen the response, so it is never replayed.
+    Received(Error),
     /// The request could not be built (an invalid header): no connection can send it, so it is
     /// never replayed.
     Invalid(Error),
@@ -30,13 +33,13 @@ pub enum ExchangeError {
 impl ExchangeError {
     pub fn error(&self) -> &Error {
         match self {
-            Self::NotSent(e) | Self::Sent(e) | Self::Invalid(e) => e,
+            Self::NotSent(e) | Self::Sent(e) | Self::Received(e) | Self::Invalid(e) => e,
         }
     }
 
     pub fn into_error(self) -> Error {
         match self {
-            Self::NotSent(e) | Self::Sent(e) | Self::Invalid(e) => e,
+            Self::NotSent(e) | Self::Sent(e) | Self::Received(e) | Self::Invalid(e) => e,
         }
     }
 }

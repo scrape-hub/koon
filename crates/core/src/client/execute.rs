@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use http::{Method, Uri};
@@ -424,14 +425,22 @@ impl super::Client {
         let mut restarted = std::collections::HashSet::new();
 
         loop {
+            // Set once the hop's response head is in: a timeout after it is no case for a retry.
+            let received = AtomicBool::new(false);
             // Boxed so this loop's future does not carry the size of the whole
             // send/exchange/connect call chain below it.
             let attempt = tokio::time::timeout_at(
                 deadline,
-                Box::pin(self.attempt_hop(&hop, options, proxy, collect, &restarted)),
+                Box::pin(self.attempt_hop(&hop, options, proxy, collect, &restarted, &received)),
             )
             .await
-            .unwrap_or(Err(ExchangeError::Sent(Error::Timeout)));
+            .unwrap_or_else(|_| {
+                Err(if received.load(Ordering::Relaxed) {
+                    ExchangeError::Received(Error::Timeout)
+                } else {
+                    ExchangeError::Sent(Error::Timeout)
+                })
+            });
 
             match attempt {
                 Ok(HopOutcome::Final(parts, body)) => return Ok((parts, hop.url, body)),
@@ -468,7 +477,8 @@ impl super::Client {
     }
 
     /// One attempt at one hop: send it and, if it is the final one and `collect` is set, read its
-    /// body. `restarted` names the origins whose Critical-CH restarted the request already.
+    /// body. `restarted` names the origins whose Critical-CH restarted the request already;
+    /// `received` is set once the response head is in.
     async fn attempt_hop(
         &self,
         hop: &Hop,
@@ -476,6 +486,7 @@ impl super::Client {
         proxy: Option<&ProxyConfig>,
         collect: bool,
         restarted: &std::collections::HashSet<String>,
+        received: &AtomicBool,
     ) -> Result<HopOutcome, ExchangeError> {
         self.fire_on_request(options, hop.method.as_str(), &hop.url)
             .map_err(ExchangeError::Invalid)?;
@@ -505,6 +516,7 @@ impl super::Client {
                 proxy,
             )
             .await?;
+        received.store(true, Ordering::Relaxed);
         self.track_bytes(parts.bytes_sent, parts.head_bytes);
         if let Some(jar) = &self.cookie_jar {
             crate::util::lock_recover(jar).store_from_response(&hop.url, &parts.headers);
@@ -534,7 +546,7 @@ impl super::Client {
         // Like browsers, a redirect status without Location is just a response.
         if follow && is_redirect(parts.status) {
             if let Some(location) = header_value(&parts.headers, "location") {
-                let next = resolve_redirect(&hop.url, location).map_err(ExchangeError::Sent)?;
+                let next = resolve_redirect(&hop.url, location).map_err(ExchangeError::Received)?;
                 if self
                     .fire_on_redirect(options, parts.status, &next, &parts.headers)
                     .map_err(ExchangeError::Invalid)?
@@ -550,7 +562,7 @@ impl super::Client {
                     .body
                     .collect(size_hint, self.max_response_body)
                     .await
-                    .map_err(ExchangeError::Sent)?,
+                    .map_err(ExchangeError::Received)?,
             )
         } else {
             None
@@ -740,7 +752,7 @@ impl super::Client {
         let resend = match e {
             ExchangeError::NotSent(_) => true,
             ExchangeError::Sent(_) => is_idempotent(&hop.method),
-            ExchangeError::Invalid(_) => false,
+            ExchangeError::Received(_) | ExchangeError::Invalid(_) => false,
         };
         resend && hop.body.replayable()
     }

@@ -745,6 +745,41 @@ async fn a_non_idempotent_hop_is_retried_only_before_it_was_sent() {
     assert_eq!(posts(&server), 2);
 }
 
+/// A server that answers every request with a head announcing 100 bytes, sends 10 and closes.
+/// Counts the requests.
+async fn short_body() -> (u16, Arc<Mutex<usize>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let count = Arc::new(Mutex::new(0));
+    let c = count.clone();
+    tokio::spawn(async move {
+        while let Ok((mut stream, _)) = listener.accept().await {
+            let mut buf = Vec::new();
+            if fill(&mut stream, &mut buf).await {
+                *c.lock().unwrap() += 1;
+                let head = b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n0123456789";
+                let _ = stream.write_all(head).await;
+            }
+        }
+    });
+    (port, count)
+}
+
+#[tokio::test]
+async fn a_hop_that_got_its_response_is_not_retried() {
+    let (port, count) = short_body().await;
+    let client = Client::builder(Chrome::latest())
+        .max_retries(3)
+        .build()
+        .unwrap();
+    let err = client
+        .get(&format!("http://127.0.0.1:{port}/"))
+        .await
+        .unwrap_err();
+    assert!(err.is_retryable(), "{err}");
+    assert_eq!(*count.lock().unwrap(), 1);
+}
+
 #[tokio::test]
 async fn a_redirect_to_an_unsupported_scheme_is_not_retried() {
     let server = Server::start().await;

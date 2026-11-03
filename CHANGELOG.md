@@ -28,6 +28,7 @@ Rust only:
 
 **Requests and connections**
 
+- A request whose response has arrived is not retried.
 - Proxy credentials in the URL are percent-decoded.
 
 **Bindings and CLI**
