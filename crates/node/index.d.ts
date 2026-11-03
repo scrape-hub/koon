@@ -341,9 +341,9 @@ export interface KoonCookie {
   hostOnly?: boolean;
   /**
    * CHIPS partition key: Playwright's top-level site (`'https://example.com'`) or CDP's object.
-   * `setCookies()` imports a cookie partitioned under its own site (such as Cloudflare's
-   * `cf_clearance`) and skips (and reports) the others: browsers send those only to frames
-   * embedded in another site, never with a top-level request.
+   * A partitioned cookie goes only with requests from pages of that site; `cookies()` gives the
+   * site. `setCookies()` skips (and reports) a cookie with a cross-site ancestor or an opaque
+   * key: browsers send those only in frames below another site.
    */
   partitionKey?: string | { topLevelSite: string; hasCrossSiteAncestor?: boolean } | null;
   /** Playwright's flag for a partition key with a cross-site ancestor; `true` skips the cookie. */
@@ -358,7 +358,7 @@ export interface KoonSkippedCookie {
   index: number;
   /** The cookie's name. */
   name: string;
-  /** Why it was not imported, e.g. an invalid value or domain, or another site's partition. */
+  /** Why it was not imported, e.g. an invalid value or domain, or a frame's partition. */
   reason: string;
 }
 
@@ -465,7 +465,7 @@ export class Koon {
    * Insert or replace cookies imported from an external source (e.g. a
    * browser's cookie jar via Playwright/CDP `cookies()`). Every valid cookie
    * is imported; the others, e.g. one with an invalid value or domain or
-   * one partitioned under another site, are skipped and returned, so one odd
+   * one partitioned in a frame below another site, are skipped and returned, so one odd
    * cookie does not cost a whole browser export. An empty array means all were imported.
    * A cookie whose `expires` is in the past deletes the stored cookie with the
    * same `name`, `domain` and `path` instead, as in browsers (Playwright's

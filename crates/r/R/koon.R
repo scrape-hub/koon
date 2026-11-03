@@ -111,7 +111,8 @@ NULL
 #'     field names: `name`, `value`, `domain` (with a leading dot for domain
 #'     cookies), `path`, `expires` (Unix seconds, -1 for session cookies),
 #'     `httpOnly`, `secure`, `sameSite` (`NA` for a cookie without one),
-#'     `hostOnly`.}
+#'     `hostOnly`, `partitionKey` (the top-level site of a partitioned cookie,
+#'     `NA` for others).}
 #'   \item{`$set_cookies(cookies)`}{Import cookies, e.g. from a browser via
 #'     Playwright or CDP: a data frame like the one `$cookies()` returns
 #'     (`jsonlite::fromJSON()` of Playwright's `cookies()` gives one) or a list
@@ -119,16 +120,15 @@ NULL
 #'     (optionally with `path`) or `url`; `expires`, `httpOnly`, `secure`,
 #'     `sameSite` and `hostOnly` are optional. Every valid cookie is
 #'     imported; the others are skipped, e.g. one with an invalid value or
-#'     domain. A partitioned (CHIPS) cookie is imported when it is partitioned
-#'     under its own site (such as Cloudflare's `cf_clearance`); its
-#'     `partitionKey` is Playwright's top-level site (`"https://example.com"`)
-#'     or CDP's key object (a list with `topLevelSite` and
-#'     `hasCrossSiteAncestor`, or a row of the nested data frame
-#'     `jsonlite::fromJSON()` makes of those). Cookies of another site's
-#'     partition, with a cross-site ancestor (`hasCrossSiteAncestor` or
+#'     domain. A partitioned (CHIPS) cookie keeps its partition and goes only
+#'     with requests from pages of its top-level site; its `partitionKey` is
+#'     Playwright's top-level site (`"https://example.com"`) or CDP's key
+#'     object (a list with `topLevelSite` and `hasCrossSiteAncestor`, or a row
+#'     of the nested data frame `jsonlite::fromJSON()` makes of those).
+#'     Cookies with a cross-site ancestor (`hasCrossSiteAncestor` or
 #'     Playwright's `_crHasCrossSiteAncestor`) or with
-#'     `partitionKeyOpaque = TRUE` are skipped: browsers send those only to
-#'     embedded frames. Returns the skipped cookies invisibly,
+#'     `partitionKeyOpaque = TRUE` are skipped: browsers send those only in
+#'     frames below another site. Returns the skipped cookies invisibly,
 #'     as a data frame with `index` (their row or element in `cookies`),
 #'     `name` and `reason`, with no rows when all were imported. A cookie
 #'     whose `expires` is in the past deletes the stored cookie with the same

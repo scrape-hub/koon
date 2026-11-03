@@ -988,10 +988,16 @@ impl Koon {
         let text = |get: fn(&CookieParams) -> Option<&str>| -> Vec<&str> {
             cookies.iter().map(|c| get(c).unwrap_or_default()).collect()
         };
-        // NA for a cookie without SameSite, which set_cookies() reads back as none.
+        // NA for a cookie without SameSite or partition, which set_cookies() reads back as none.
         let mut same_site = Strings::new(cookies.len());
+        let mut partition_key = Strings::new(cookies.len());
         for (i, c) in cookies.iter().enumerate() {
             same_site.set_elt(i, Rstr::from(c.same_site.clone()));
+            let site = match &c.partition_key {
+                Some(PartitionKey::Site { top_level_site, .. }) => Some(top_level_site.clone()),
+                _ => None,
+            };
+            partition_key.set_elt(i, Rstr::from(site));
         }
         data_frame!(
             name = text(|c| Some(&c.name)),
@@ -1008,7 +1014,8 @@ impl Koon {
             hostOnly = cookies
                 .iter()
                 .map(|c| c.host_only.unwrap_or(false))
-                .collect::<Vec<bool>>()
+                .collect::<Vec<bool>>(),
+            partitionKey = partition_key
         )
     }
 

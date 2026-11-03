@@ -31,8 +31,8 @@ impl Client {
     /// [`set_cookies`](Self::set_cookies) from the Playwright/CDP shape (see [`CookieParams`]), with
     /// the same checks and the same deletion by a past `expires`; a cookie whose fields don't
     /// convert (e.g. both `url` and `domain`) is skipped too, and so is a partitioned (CHIPS) one
-    /// from another site's partition, which browsers send only to embedded frames. Fails as
-    /// `set_cookies` does.
+    /// with a cross-site ancestor or an opaque key, which browsers send only in frames below
+    /// another site. Fails as `set_cookies` does.
     pub fn set_cookie_params(
         &self,
         cookies: Vec<CookieParams>,
@@ -122,6 +122,7 @@ mod tests {
             same_site: SameSite::Lax,
             host_only,
             creation_time: SystemTime::now(),
+            partition_key: None,
         }
     }
 
@@ -149,33 +150,47 @@ mod tests {
     }
 
     #[test]
-    fn set_cookie_params_skips_and_reports_third_party_partitioned_cookies() {
+    fn set_cookie_params_keeps_partitions_and_skips_frame_only_ones() {
         let client = Client::new(Chrome::latest()).unwrap();
-        let param = |name: &str, top_level_site: Option<&str>| CookieParams {
+        let param = |name: &str, top_level_site: Option<&str>, cross_site_ancestor| CookieParams {
             name: name.to_string(),
             value: "v".to_string(),
             domain: Some("example.com".to_string()),
+            secure: true,
             partition_key: top_level_site.map(|site| PartitionKey::Site {
                 top_level_site: site.to_string(),
-                cross_site_ancestor: false,
+                cross_site_ancestor,
             }),
             ..CookieParams::default()
         };
         let skipped = client
             .set_cookie_params(vec![
-                param("plain", None),
-                param("first_party", Some("https://example.com")),
-                param("third_party", Some("https://other.com")),
+                param("plain", None, false),
+                param("first_party", Some("https://example.com"), false),
+                param("third_party", Some("https://other.com"), false),
+                param("in_a_frame", Some("https://example.com"), true),
             ])
             .unwrap();
         assert_eq!(skipped.len(), 1);
         assert_eq!(
             (skipped[0].index, skipped[0].name.as_str()),
-            (2, "third_party")
+            (3, "in_a_frame")
         );
         assert!(skipped[0].reason.contains("partitioned"), "{skipped:?}");
-        let names: Vec<String> = client.cookies().into_iter().map(|c| c.name).collect();
-        assert_eq!(names, ["plain", "first_party"]);
+        let partitions: Vec<(String, Option<String>)> = client
+            .cookies()
+            .into_iter()
+            .map(|c| (c.name, c.partition_key))
+            .collect();
+        let site = |site: &str| Some(site.to_string());
+        assert_eq!(
+            partitions,
+            [
+                ("plain".to_string(), None),
+                ("first_party".to_string(), site("https://example.com")),
+                ("third_party".to_string(), site("https://other.com")),
+            ]
+        );
     }
 
     #[test]

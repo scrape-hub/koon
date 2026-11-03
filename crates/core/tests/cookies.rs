@@ -20,6 +20,7 @@ fn imported_cookie(name: &str, domain: &str, host_only: bool) -> Cookie {
         same_site: SameSite::Lax,
         host_only,
         creation_time: SystemTime::now(),
+        partition_key: None,
     }
 }
 

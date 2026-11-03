@@ -656,22 +656,38 @@ fn partition_key(
     }))
 }
 
-impl From<CookieParams> for KoonCookie {
+/// A cookie as `cookies()` returns it, in the shape `setCookies()` takes.
+#[napi(object, object_from_js = false)]
+pub struct KoonExportedCookie {
+    pub name: String,
+    pub value: String,
+    pub domain: Option<String>,
+    pub path: Option<String>,
+    pub expires: Option<f64>,
+    pub secure: bool,
+    pub http_only: bool,
+    pub same_site: Option<String>,
+    pub host_only: Option<bool>,
+    /// The top-level site of a partitioned cookie.
+    pub partition_key: Option<String>,
+}
+
+impl From<CookieParams> for KoonExportedCookie {
     fn from(cookie: CookieParams) -> Self {
         Self {
             name: cookie.name,
             value: cookie.value,
             domain: cookie.domain,
             path: cookie.path,
-            url: cookie.url,
             expires: cookie.expires,
-            secure: Some(cookie.secure),
-            http_only: Some(cookie.http_only),
+            secure: cookie.secure,
+            http_only: cookie.http_only,
             same_site: cookie.same_site,
             host_only: cookie.host_only,
-            partition_key: None,
-            cr_has_cross_site_ancestor: None,
-            partition_key_opaque: None,
+            partition_key: cookie.partition_key.and_then(|key| match key {
+                PartitionKey::Site { top_level_site, .. } => Some(top_level_site),
+                PartitionKey::Opaque => None,
+            }),
         }
     }
 }
@@ -1078,11 +1094,11 @@ impl Koon {
     }
 
     #[napi]
-    pub fn cookies(&self) -> Vec<KoonCookie> {
+    pub fn cookies(&self) -> Vec<KoonExportedCookie> {
         self.client
             .cookie_params()
             .into_iter()
-            .map(KoonCookie::from)
+            .map(KoonExportedCookie::from)
             .collect()
     }
 

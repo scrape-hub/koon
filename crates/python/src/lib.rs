@@ -276,6 +276,7 @@ struct ExportedCookie {
     secure: bool,
     same_site: Option<String>,
     host_only: Option<bool>,
+    partition_key: Option<String>,
 }
 
 impl From<CookieParams> for ExportedCookie {
@@ -290,6 +291,10 @@ impl From<CookieParams> for ExportedCookie {
             secure: c.secure,
             same_site: c.same_site,
             host_only: c.host_only,
+            partition_key: c.partition_key.and_then(|key| match key {
+                PartitionKey::Site { top_level_site, .. } => Some(top_level_site),
+                PartitionKey::Opaque => None,
+            }),
         }
     }
 }

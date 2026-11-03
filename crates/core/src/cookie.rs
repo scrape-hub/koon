@@ -6,7 +6,6 @@ use http::Uri;
 use serde::{Deserialize, Serialize};
 
 use crate::error::Error;
-use crate::util::same_site;
 
 /// A `name=value` pair may not exceed this many bytes, matching the limit browsers enforce on a
 /// single cookie (RFC 6265 recommends at least 4096).
@@ -88,8 +87,24 @@ pub(crate) enum SameSiteRules {
 /// Chromium's `kLaxAllowUnsafeMaxAge` (`net/cookies/cookie_constants.cc`).
 const LAX_ALLOW_UNSAFE_MAX_AGE: Duration = Duration::from_secs(2 * 60);
 
-/// The request a cookie would go with, as `SameSite` sees it (RFC 6265bis §5.8.3).
-#[derive(Debug, Clone, Copy)]
+/// What a browser engine does with unpartitioned cookies on a third-party request, one to another
+/// site than its page.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ThirdPartyCookies {
+    /// Chromium (third-party cookies are on by default) and `OkHttp`: sent and set as on any
+    /// request.
+    Allowed,
+    /// Firefox's Total Cookie Protection (`network.cookie.cookieBehavior` 5): the request carries
+    /// only the cookies of its page's partition, and its response sets cookies there.
+    Partitioned,
+    /// Safari: the request carries only partitioned cookies, and only a `Partitioned` cookie from
+    /// its response is kept.
+    Blocked,
+}
+
+/// The request a cookie would go with, as `SameSite` and cookie partitioning see it (RFC 6265bis
+/// §5.8.3).
+#[derive(Debug, Clone)]
 pub(crate) struct CookieContext {
     /// The request is same-site with the page it comes from (or comes from no page).
     pub same_site: bool,
@@ -99,11 +114,37 @@ pub(crate) struct CookieContext {
     /// `nsHttpRequestHead::IsSafeMethod`).
     pub safe_method: bool,
     pub rules: SameSiteRules,
+    /// The site of the top-level page with its scheme ([`top_level_site`]): the request's own for a
+    /// navigation or a request from no page, else the page's. Partitioned cookies are keyed by it.
+    pub top_level_site: String,
+    /// The request goes to another site than its top-level page, compared without the scheme.
+    pub third_party: bool,
+    pub third_party_cookies: ThirdPartyCookies,
 }
 
 impl CookieContext {
+    /// A top-level request to `url` without browser cookie rules.
+    pub(crate) fn top_level(url: &Uri) -> Self {
+        Self {
+            same_site: true,
+            top_level_navigation: true,
+            safe_method: true,
+            rules: SameSiteRules::Ignored,
+            top_level_site: top_level_site(url),
+            third_party: false,
+            third_party_cookies: ThirdPartyCookies::Allowed,
+        }
+    }
+
     /// Whether `cookie` goes with this request.
     fn includes(&self, cookie: &Cookie, now: SystemTime) -> bool {
+        let in_partition = match &cookie.partition_key {
+            Some(key) => *key == self.top_level_site,
+            None => !self.third_party || self.third_party_cookies == ThirdPartyCookies::Allowed,
+        };
+        if !in_partition {
+            return false;
+        }
         if self.same_site || self.rules == SameSiteRules::Ignored {
             return true;
         }
@@ -123,6 +164,46 @@ impl CookieContext {
             },
         }
     }
+
+    /// Whether the response to this request may set `cookie` (RFC 6265bis §5.7 step 22): a
+    /// cross-site request that is no top-level navigation sets only `SameSite=None` cookies, an
+    /// unspecified one counting as `Lax` for Chromium.
+    fn may_set(&self, cookie: &Cookie) -> bool {
+        if self.same_site || self.top_level_navigation || self.rules == SameSiteRules::Ignored {
+            return true;
+        }
+        match cookie.same_site {
+            SameSite::None => true,
+            SameSite::Unspecified => self.rules != SameSiteRules::Chromium,
+            SameSite::Strict | SameSite::Lax => false,
+        }
+    }
+
+    /// The partition a cookie from the response to this request goes to (`Some(None)`: none), or
+    /// `None` when the browser drops it. `partitioned` is its `Partitioned` attribute (CHIPS), which
+    /// requires `Secure` and which clients without browser cookie rules ignore.
+    fn partition_for(&self, cookie: &Cookie, partitioned: bool) -> Option<Option<String>> {
+        if partitioned && self.rules != SameSiteRules::Ignored {
+            return cookie.secure.then(|| Some(self.top_level_site.clone()));
+        }
+        if !self.third_party {
+            return Some(None);
+        }
+        match self.third_party_cookies {
+            ThirdPartyCookies::Allowed => Some(None),
+            ThirdPartyCookies::Partitioned => Some(Some(self.top_level_site.clone())),
+            ThirdPartyCookies::Blocked => None,
+        }
+    }
+}
+
+/// A URL's site with its scheme, the form of a partition key (`https://example.com`).
+pub(crate) fn top_level_site(url: &Uri) -> String {
+    format!(
+        "{}://{}",
+        url.scheme_str().unwrap_or("https"),
+        crate::util::site(url.host().unwrap_or(""))
+    )
 }
 
 /// A single stored HTTP cookie.
@@ -160,6 +241,11 @@ pub struct Cookie {
         deserialize_with = "deserialize_time"
     )]
     pub creation_time: SystemTime,
+    /// The top-level site (`https://example.com`) of a partitioned cookie (CHIPS, or Firefox's
+    /// Total Cookie Protection): it goes only with requests from pages of that site. `None` for an
+    /// unpartitioned cookie.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub partition_key: Option<String>,
 }
 
 fn serialize_expires<S: serde::Serializer>(
@@ -211,16 +297,18 @@ impl CookieJar {
         }
     }
 
-    /// Insert or replace a cookie, keyed by (name, domain, path, `host_only`): a host-only and a
-    /// domain cookie of the same name coexist, as in browsers. Replacing keeps the original
-    /// creation time (RFC 6265 §5.3 step 11.3). A cookie whose `expires` is already past removes
-    /// the matching stored cookie instead (a `Set-Cookie` deletion).
+    /// Insert or replace a cookie, keyed by (name, domain, path, `host_only`, partition): a
+    /// host-only and a domain cookie of the same name coexist, as in browsers, and so do the
+    /// cookies of different partitions. Replacing keeps the original creation time (RFC 6265 §5.3
+    /// step 11.3). A cookie whose `expires` is already past removes the matching stored cookie
+    /// instead (a `Set-Cookie` deletion).
     pub(crate) fn set(&mut self, mut cookie: Cookie) {
         let existing = self.cookies.iter().position(|stored| {
             stored.name == cookie.name
                 && stored.domain == cookie.domain
                 && stored.path == cookie.path
                 && stored.host_only == cookie.host_only
+                && stored.partition_key == cookie.partition_key
         });
 
         let expired = matches!(cookie.expires, Some(exp) if exp <= SystemTime::now());
@@ -237,8 +325,20 @@ impl CookieJar {
         }
     }
 
-    /// Parse Set-Cookie headers from a response and store the cookies a browser would accept.
+    /// Parse Set-Cookie headers from the response to a top-level request and store the cookies a
+    /// browser would accept.
     pub fn store_from_response(&mut self, url: &Uri, headers: &[(String, String)]) {
+        self.store_from_response_in(url, headers, &CookieContext::top_level(url));
+    }
+
+    /// Store the cookies of a response to a request in `context` that its browser would accept,
+    /// each in the partition the browser puts it in.
+    pub(crate) fn store_from_response_in(
+        &mut self,
+        url: &Uri,
+        headers: &[(String, String)],
+        context: &CookieContext,
+    ) {
         let mut set_cookies = headers
             .iter()
             .filter(|(name, _)| name.eq_ignore_ascii_case("set-cookie"))
@@ -251,9 +351,18 @@ impl CookieJar {
         let secure_origin = is_secure_origin(url, &host);
         let mut stored = false;
         for (_, value) in set_cookies {
-            let Some(cookie) = parse_set_cookie(value, &host, url.path(), secure_origin) else {
+            let Some((mut cookie, partitioned)) =
+                parse_set_cookie(value, &host, url.path(), secure_origin)
+            else {
                 continue;
             };
+            if !context.may_set(&cookie) {
+                continue;
+            }
+            let Some(partition_key) = context.partition_for(&cookie, partitioned) else {
+                continue;
+            };
+            cookie.partition_key = partition_key;
             if !secure_origin && self.shadows_secure_cookie(&cookie) {
                 continue;
             }
@@ -328,16 +437,10 @@ impl CookieJar {
         self.cookies.retain(|_| !evict.next().unwrap_or(false));
     }
 
-    /// Build a Cookie header value for the given URL, as for a same-site request. Returns None if
-    /// no cookies match.
+    /// Build a Cookie header value for the given URL, as for a top-level same-site request.
+    /// Returns None if no cookies match.
     pub fn cookie_header(&self, url: &Uri) -> Option<String> {
-        let context = CookieContext {
-            same_site: true,
-            top_level_navigation: true,
-            safe_method: true,
-            rules: SameSiteRules::Ignored,
-        };
-        self.cookie_header_for(url, &context)
+        self.cookie_header_for(url, &CookieContext::top_level(url))
     }
 
     /// Build the Cookie header of a request in `context`: `SameSite` decides which matching
@@ -467,9 +570,10 @@ pub struct CookieParams {
     pub same_site: Option<String>,
     /// Overrides whether the cookie is host-only.
     pub host_only: Option<bool>,
-    /// The partition of a partitioned (CHIPS) cookie. Only a partition keyed by the cookie's own
-    /// site converts: browsers send cookies of other partitions only to embedded frames, which
-    /// koon never loads (`Client::set_cookie_params` skips and reports them).
+    /// The partition of a partitioned (CHIPS) cookie: a top-level site, whose pages' requests
+    /// carry it. A key with a cross-site ancestor or an opaque one does not convert: browsers send
+    /// those cookies only in frames below another site, which koon never loads
+    /// (`Client::set_cookie_params` skips and reports them).
     pub partition_key: Option<PartitionKey>,
 }
 
@@ -487,23 +591,6 @@ pub enum PartitionKey {
     },
     /// An opaque key (a sandboxed or fenced frame).
     Opaque,
-}
-
-impl PartitionKey {
-    /// Whether browsers send a cookie of `domain` from this partition on a top-level request to
-    /// that domain, the only kind of request koon makes.
-    fn is_first_party_of(&self, domain: &str) -> bool {
-        match self {
-            Self::Site {
-                top_level_site,
-                cross_site_ancestor: false,
-            } => url::Url::parse(top_level_site)
-                .ok()
-                .and_then(|url| url.host_str().map(|host| same_site(host, domain)))
-                .unwrap_or(false),
-            _ => false,
-        }
-    }
 }
 
 impl std::fmt::Display for PartitionKey {
@@ -582,6 +669,19 @@ impl CookieParams {
             }
         };
 
+        let partition_key = match self.partition_key {
+            None => None,
+            Some(PartitionKey::Site {
+                top_level_site,
+                cross_site_ancestor: false,
+            }) => Some(top_level_site),
+            Some(key) => {
+                return Err(format!(
+                    "partitioned under {key}: browsers send it only in frames below another site, \
+                     which koon never loads"
+                ));
+            }
+        };
         let mut cookie = Cookie {
             name: self.name,
             value: self.value,
@@ -593,17 +693,9 @@ impl CookieParams {
             same_site,
             host_only: self.host_only.unwrap_or(default_host_only),
             creation_time: SystemTime::now(),
+            partition_key,
         };
         validate_imported(&mut cookie)?;
-        if let Some(key) = self
-            .partition_key
-            .filter(|key| !key.is_first_party_of(&cookie.domain))
-        {
-            return Err(format!(
-                "partitioned under {key}: browsers send it only to embedded frames, never on a \
-                 top-level request"
-            ));
-        }
         Ok(cookie)
     }
 }
@@ -638,7 +730,13 @@ impl From<&Cookie> for CookieParams {
             secure: cookie.secure,
             same_site: cookie.same_site.as_str().map(str::to_string),
             host_only: Some(cookie.host_only),
-            partition_key: None,
+            partition_key: cookie
+                .partition_key
+                .clone()
+                .map(|top_level_site| PartitionKey::Site {
+                    top_level_site,
+                    cross_site_ancestor: false,
+                }),
         }
     }
 }
@@ -673,6 +771,16 @@ pub(crate) fn validate_imported(cookie: &mut Cookie) -> Result<(), &'static str>
         cookie.host_only = true;
     }
     cookie.domain = host.to_string();
+    if let Some(key) = &cookie.partition_key {
+        let site = key
+            .parse::<Uri>()
+            .ok()
+            .filter(|url| {
+                matches!(url.scheme_str(), Some("http" | "https")) && url.host().is_some()
+            })
+            .ok_or("partition key must be a site such as https://example.com")?;
+        cookie.partition_key = Some(top_level_site(&site));
+    }
     if !cookie.path.starts_with('/') {
         return Err("path must start with '/'");
     }
@@ -760,13 +868,14 @@ fn is_secure_origin(url: &Uri, host: &str) -> bool {
 }
 
 /// Parse a single `Set-Cookie` header value received from `host` (lowercase) for a request to
-/// `request_path` (RFC 6265bis §5.6 and §5.7). Returns `None` for a cookie a browser would ignore.
+/// `request_path` (RFC 6265bis §5.6 and §5.7), with whether it has the `Partitioned` attribute.
+/// Returns `None` for a cookie a browser would ignore.
 fn parse_set_cookie(
     header: &str,
     host: &str,
     request_path: &str,
     secure_origin: bool,
-) -> Option<Cookie> {
+) -> Option<(Cookie, bool)> {
     // §5.6 step 1: a control character anywhere voids the whole header.
     if header.bytes().any(is_control_except_htab) {
         return None;
@@ -830,7 +939,7 @@ fn parse_set_cookie(
     )
     .ok()?;
 
-    Some(Cookie {
+    let cookie = Cookie {
         name: name.to_string(),
         value: value.to_string(),
         domain,
@@ -842,7 +951,9 @@ fn parse_set_cookie(
         same_site: attrs.same_site,
         host_only,
         creation_time: now,
-    })
+        partition_key: None,
+    };
+    Some((cookie, attrs.partitioned))
 }
 
 /// The `Set-Cookie` attributes accumulated from the `; name=value` pairs after the cookie's own
@@ -855,6 +966,7 @@ struct Attributes<'a> {
     max_age: Option<SystemTime>,
     expires: Option<SystemTime>,
     same_site: SameSite,
+    partitioned: bool,
 }
 
 /// Parse the `; name=value` pairs following a `Set-Cookie` header's own name and value, keeping the
@@ -868,6 +980,7 @@ fn parse_attributes<'a>(parts: impl Iterator<Item = &'a str>, now: SystemTime) -
         max_age: None,
         expires: None,
         same_site: SameSite::Unspecified,
+        partitioned: false,
     };
     for attribute in parts {
         let (key, value) = match attribute.split_once('=') {
@@ -877,6 +990,7 @@ fn parse_attributes<'a>(parts: impl Iterator<Item = &'a str>, now: SystemTime) -
         match key.to_ascii_lowercase().as_str() {
             "secure" => attrs.secure = true,
             "httponly" => attrs.http_only = true,
+            "partitioned" => attrs.partitioned = true,
             "domain" => {
                 // §5.6.3: an empty Domain attribute is ignored, leaving the cookie host-only.
                 let domain = normalize_domain(value);
@@ -1138,7 +1252,7 @@ mod tests {
     }
 
     fn parse(header: &str) -> Option<Cookie> {
-        parse_set_cookie(header, "example.com", "/", true)
+        parse_set_cookie(header, "example.com", "/", true).map(|(cookie, _)| cookie)
     }
 
     fn test_cookie(name: &str, domain: &str, path: &str, host_only: bool) -> Cookie {
@@ -1153,6 +1267,7 @@ mod tests {
             same_site: SameSite::Lax,
             host_only,
             creation_time: SystemTime::now(),
+            partition_key: None,
         }
     }
 
@@ -1183,6 +1298,7 @@ mod tests {
             &[],
             &headers,
             false,
+            None,
         );
         jar.cookie_header_for(&uri(url), &context)
     }
@@ -1239,11 +1355,166 @@ mod tests {
     #[test]
     fn firefox_and_safari_treat_unspecified_as_none() {
         use crate::profile::HeaderFamily::{Firefox, Safari};
-        let fetch = [CROSS_SITE, ("Accept", "*/*")];
+        let form = [
+            CROSS_SITE,
+            ("Content-Type", "application/x-www-form-urlencoded"),
+        ];
         for family in [Firefox, Safari] {
-            let cookies = sent(family, ALL, OLD, "GET", "https://example.com/", &fetch);
+            let cookies = sent(family, ALL, OLD, "POST", "https://example.com/", &form);
             assert_eq!(cookies.as_deref(), Some("none=1; unset=1"));
         }
+    }
+
+    /// The context of a request from a page with these headers to `url`.
+    fn context(
+        family: crate::profile::HeaderFamily,
+        method: &str,
+        url: &str,
+        headers: &[(&str, &str)],
+    ) -> CookieContext {
+        let headers: Vec<(String, String)> = headers
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        crate::client::headers::cookie_context(
+            family,
+            &method.parse().unwrap(),
+            &uri(url),
+            &[],
+            &headers,
+            false,
+            None,
+        )
+    }
+
+    /// Feed `set_cookies` to the jar as the response to a GET from a page with `headers` to `url`.
+    fn store_in(
+        family: crate::profile::HeaderFamily,
+        jar: &mut CookieJar,
+        url: &str,
+        headers: &[(&str, &str)],
+        set_cookies: &[&str],
+    ) {
+        let response: Vec<(String, String)> = set_cookies
+            .iter()
+            .map(|value| ("set-cookie".to_string(), value.to_string()))
+            .collect();
+        jar.store_from_response_in(&uri(url), &response, &context(family, "GET", url, headers));
+    }
+
+    /// The Cookie header of a GET from a page with `headers` to `url`.
+    fn header(
+        family: crate::profile::HeaderFamily,
+        jar: &CookieJar,
+        url: &str,
+        headers: &[(&str, &str)],
+    ) -> Option<String> {
+        jar.cookie_header_for(&uri(url), &context(family, "GET", url, headers))
+    }
+
+    const FETCH: [(&str, &str); 2] = [CROSS_SITE, ("Accept", "*/*")];
+
+    #[test]
+    fn only_chromium_sends_unpartitioned_cookies_to_third_parties() {
+        use crate::profile::HeaderFamily::{Chromium, Firefox, Safari};
+        let url = "https://example.com/";
+        assert_eq!(
+            sent(Chromium, ALL, OLD, "GET", url, &FETCH).as_deref(),
+            Some("none=1")
+        );
+        // Total Cookie Protection and Safari's tracking prevention.
+        for family in [Firefox, Safari] {
+            assert_eq!(
+                sent(family, ALL, OLD, "GET", url, &FETCH),
+                None,
+                "{family:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn third_party_responses_set_cookies_as_each_browser_does() {
+        use crate::profile::HeaderFamily::{Chromium, Firefox, OkHttp, Safari};
+        let url = "https://example.com/";
+        let set = [
+            "tp=1; SameSite=None; Secure",
+            "lax=1; SameSite=Lax; Secure",
+            "strict=1; SameSite=Strict; Secure",
+            "unset=1; Secure",
+            "chips=1; SameSite=None; Secure; Partitioned",
+        ];
+        // What the next request from the same page carries, and what a typed URL does.
+        for (family, from_page, typed) in [
+            (Chromium, Some("tp=1; chips=1"), Some("tp=1")),
+            (Firefox, Some("tp=1; unset=1; chips=1"), None),
+            (Safari, Some("chips=1"), None),
+            (
+                OkHttp,
+                Some("tp=1; lax=1; strict=1; unset=1; chips=1"),
+                Some("tp=1; lax=1; strict=1; unset=1; chips=1"),
+            ),
+        ] {
+            let mut jar = CookieJar::new();
+            store_in(family, &mut jar, url, &FETCH, &set);
+            assert_eq!(
+                header(family, &jar, url, &FETCH).as_deref(),
+                from_page,
+                "{family:?}"
+            );
+            assert_eq!(
+                header(family, &jar, url, &[]).as_deref(),
+                typed,
+                "{family:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_partitioned_cookie_stays_with_its_top_level_site() {
+        use crate::profile::HeaderFamily::{Chromium, Firefox, Safari};
+        let url = "https://example.com/";
+        let set = [
+            "chips=1; SameSite=None; Secure; Partitioned",
+            "plain=1; SameSite=None; Secure",
+            "insecure=1; Partitioned",
+        ];
+        let from_http_page = [("Referer", "http://example.com/"), ("Accept", "*/*")];
+        for family in [Chromium, Firefox, Safari] {
+            let mut jar = CookieJar::new();
+            store_in(family, &mut jar, url, &[], &set);
+            let partition = jar.cookies()[0].partition_key.as_deref();
+            assert_eq!(partition, Some("https://example.com"), "{family:?}");
+            assert_eq!(jar.cookies().len(), 2, "Partitioned needs Secure");
+            assert_eq!(
+                header(family, &jar, url, &[]).as_deref(),
+                Some("chips=1; plain=1")
+            );
+            let third_party = header(family, &jar, url, &FETCH);
+            let expected = (family == Chromium).then_some("plain=1");
+            assert_eq!(third_party.as_deref(), expected, "{family:?}");
+            // A page of the same host over http has a top-level site of its own.
+            let from_http = header(family, &jar, url, &from_http_page);
+            assert_eq!(from_http.as_deref(), Some("plain=1"), "{family:?}");
+        }
+    }
+
+    #[test]
+    fn a_partitioned_cookie_keeps_its_partition_in_a_saved_jar() {
+        let mut jar = CookieJar::new();
+        store_in(
+            crate::profile::HeaderFamily::Chromium,
+            &mut jar,
+            "https://example.com/",
+            &FETCH,
+            &["chips=1; SameSite=None; Secure; Partitioned"],
+        );
+        let json = jar.to_json().unwrap();
+        let loaded = CookieJar::from_json(&json).unwrap();
+        let key = loaded.cookies()[0].partition_key.as_deref();
+        assert_eq!(key, Some("https://other.example"));
+        let mut plain = CookieJar::new();
+        store(&mut plain, "https://example.com/", &["a=1"]);
+        assert!(!plain.to_json().unwrap().contains("partition_key"));
     }
 
     #[test]
@@ -1278,7 +1549,7 @@ mod tests {
         let url = uri("https://example.com/");
         for (family, same_site) in [(Chromium, true), (Firefox, false), (Safari, false)] {
             let context =
-                crate::client::headers::cookie_context(family, &method, &url, &[], &[], true);
+                crate::client::headers::cookie_context(family, &method, &url, &[], &[], true, None);
             assert_eq!(context.same_site, same_site, "{family:?}");
             assert!(context.top_level_navigation && context.safe_method);
         }
@@ -1427,9 +1698,10 @@ mod tests {
 
     #[test]
     fn test_invalid_path_attribute_uses_default_path() {
-        let cookie = parse_set_cookie("a=1; Path=foo", "example.com", "/app/page", true).unwrap();
+        let (cookie, _) =
+            parse_set_cookie("a=1; Path=foo", "example.com", "/app/page", true).unwrap();
         assert_eq!(cookie.path, "/app");
-        let cookie = parse_set_cookie("a=1; Path=", "example.com", "/app/page", true).unwrap();
+        let (cookie, _) = parse_set_cookie("a=1; Path=", "example.com", "/app/page", true).unwrap();
         assert_eq!(cookie.path, "/app");
     }
 
@@ -2108,7 +2380,7 @@ mod tests {
     }
 
     #[test]
-    fn test_params_partitioned_only_under_the_cookies_own_site() {
+    fn test_params_keep_the_partition_of_a_top_level_site() {
         let site = |top_level_site: &str, cross_site_ancestor| PartitionKey::Site {
             top_level_site: top_level_site.to_string(),
             cross_site_ancestor,
@@ -2122,22 +2394,23 @@ mod tests {
             .into_cookie()
         };
 
-        for (domain, top_level_site) in [
-            (".example.com", "https://example.com"),
-            ("www.example.com", "https://example.com"),
+        for (top_level_site, partition) in [
+            ("https://example.com", "https://example.com"),
+            ("https://other.com", "https://other.com"),
+            ("https://www.other.com/", "https://other.com"),
         ] {
-            assert!(
-                convert(domain, site(top_level_site, false)).is_ok(),
-                "{domain}"
-            );
+            let cookie = convert("example.com", site(top_level_site, false)).unwrap();
+            assert_eq!(cookie.partition_key.as_deref(), Some(partition));
+            let exported = CookieParams::from(&cookie).partition_key;
+            assert_eq!(exported, Some(site(partition, false)));
         }
         for (key, reason) in [
-            (site("https://other.com", false), "under https://other.com:"),
             (
                 site("https://example.com", true),
                 "with a cross-site ancestor",
             ),
             (PartitionKey::Opaque, "under an opaque key"),
+            (site("example.com", false), "partition key must be a site"),
         ] {
             let err = convert("example.com", key).unwrap_err();
             assert!(err.contains(reason), "{err}");

@@ -4,7 +4,10 @@ test_that("cookies round-trip in the Playwright shape", {
   client$get(paste0(base, "/set-cookie"))
   cookies <- client$cookies()
   expect_s3_class(cookies, "data.frame")
-  expect_named(cookies, c("name", "value", "domain", "path", "expires", "httpOnly", "secure", "sameSite", "hostOnly"))
+  expect_named(
+    cookies,
+    c("name", "value", "domain", "path", "expires", "httpOnly", "secure", "sameSite", "hostOnly", "partitionKey")
+  )
   expect_setequal(cookies$name, c("session", "theme"))
   expect_true(cookies$httpOnly[cookies$name == "session"])
   expect_identical(cookies$expires[cookies$name == "session"], -1)
@@ -36,11 +39,12 @@ test_that("cookies round-trip in the Playwright shape", {
 
 test_that("set_cookies() reports the skipped cookies invisibly", {
   client <- Koon$new("chrome")
-  # A list of named lists: one valid, one invalid value, one partitioned under another site.
+  # A list of named lists: one valid, one invalid value, one partitioned in a frame below another site.
   visible <- withVisible(client$set_cookies(list(
     list(name = "ok", value = "1", domain = "example.com"),
     list(name = "bad", value = "a;b", domain = "example.com"),
-    list(name = "chips", value = "1", domain = "example.com", partitionKey = "https://other.com")
+    list(name = "chips", value = "1", domain = "example.com", partitionKey = "https://other.com",
+         `_crHasCrossSiteAncestor` = TRUE)
   )))
   expect_false(visible$visible)
   skipped <- visible$value
@@ -66,12 +70,12 @@ test_that("set_cookies() reports the skipped cookies invisibly", {
   # Cookies the core cannot import are skipped and reported, not errors.
   expect_identical(client$set_cookies(list(list(name = "c", value = "3")))$name, "c")
   expect_identical(
-    client$set_cookies(list(list(name = "c", value = "3", domain = "x.test", partitionKey = "https://y.test")))$name,
+    client$set_cookies(list(list(name = "c", value = "3", domain = "x.test", partitionKeyOpaque = TRUE)))$name,
     "c"
   )
 })
 
-test_that("only cookies partitioned under their own site are imported", {
+test_that("partitioned cookies keep their top-level site", {
   # jsonlite makes a nested data frame of CDP's partition key objects.
   cdp <- jsonlite::fromJSON('[
     {"name": "plain", "value": "1", "domain": "x.test", "partitionKey": null},
@@ -87,10 +91,17 @@ test_that("only cookies partitioned under their own site are imported", {
   expect_true(is.data.frame(cdp$partitionKey))
   importer <- Koon$new()
   skipped <- importer$set_cookies(cdp)
-  expect_identical(skipped$name, c("other", "ancestor", "opaque"))
-  expect_identical(skipped$index, c(3L, 4L, 5L))
+  expect_identical(skipped$name, c("ancestor", "opaque"))
+  expect_identical(skipped$index, c(4L, 5L))
   expect_match(skipped$reason, "partitioned")
-  expect_setequal(importer$cookies()$name, c("plain", "own", "not_opaque"))
+  cookies <- importer$cookies()
+  expect_identical(
+    cookies$partitionKey[match(c("plain", "own", "other", "not_opaque"), cookies$name)],
+    c(NA, "https://x.test", "https://y.test", NA)
+  )
+  copy <- Koon$new()
+  copy$set_cookies(cookies)
+  expect_identical(copy$cookies(), cookies)
 
   # Playwright's shape: the top-level site as a string, its ancestor flag beside it.
   playwright <- Koon$new()

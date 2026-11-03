@@ -955,22 +955,26 @@ impl Client {
             .as_str()
             .parse()
             .map_err(|_| Error::Url(url::ParseError::InvalidDomainCharacter))?;
-        // A handshake is no navigation: Origin (the socket's own unless set) decides `SameSite`.
-        let cookie = self.cookie_jar.as_ref().and_then(|jar| {
-            let context = headers::cookie_context(
+        // A handshake is no navigation: Origin (the socket's own unless set) decides `SameSite`
+        // and the partition.
+        let cookie_context = self.cookie_jar.is_some().then(|| {
+            headers::cookie_context(
                 headers::Family::of(&self.profile),
                 &http::Method::GET,
                 &http_uri,
                 &self.custom_headers,
                 &extra_headers,
                 false,
-            );
-            let context = crate::cookie::CookieContext {
-                top_level_navigation: false,
-                ..context
-            };
-            crate::util::lock_recover(jar).cookie_header_for(&http_uri, &context)
+                Some(false),
+            )
         });
+        let cookie = self
+            .cookie_jar
+            .as_ref()
+            .zip(cookie_context.as_ref())
+            .and_then(|(jar, context)| {
+                crate::util::lock_recover(jar).cookie_header_for(&http_uri, context)
+            });
 
         let target = ws::WsTarget {
             uri: &uri,
@@ -986,8 +990,12 @@ impl Client {
         let (ws, response_headers) = tokio::time::timeout(self.timeout, handshake)
             .await
             .map_err(|_| Error::Timeout)??;
-        if let Some(jar) = &self.cookie_jar {
-            crate::util::lock_recover(jar).store_from_response(&http_uri, &response_headers);
+        if let (Some(jar), Some(context)) = (&self.cookie_jar, &cookie_context) {
+            crate::util::lock_recover(jar).store_from_response_in(
+                &http_uri,
+                &response_headers,
+                context,
+            );
         }
         Ok(ws)
     }

@@ -306,17 +306,22 @@ async function testCookies() {
     { name: 'ancestor', value: 'v', domain: 'a.example', partitionKey: 'https://a.example', _crHasCrossSiteAncestor: true },
     { name: 'opaque', value: 'v', domain: 'a.example', partitionKeyOpaque: true },
   ]);
+  const partitions = partitioning.cookies().map((c) => [c.name, c.partitionKey ?? null]);
   check(
-    'cookies partitioned under their own site are imported',
-    JSON.stringify(partitioning.cookies().map((c) => c.name)) === JSON.stringify(['kept', 'cdp', 'pw']),
-    JSON.stringify(partitioning.cookies().map((c) => c.name))
+    'partitioned cookies keep their top-level site',
+    JSON.stringify(partitions) ===
+      JSON.stringify([['kept', null], ['cdp', 'https://a.example'], ['pw', 'https://a.example'], ['otherSite', 'https://b.example']]),
+    JSON.stringify(partitions)
   );
   check(
-    'cookies of other partitions are skipped and reported',
-    JSON.stringify(partitioned.map((c) => [c.index, c.name])) === JSON.stringify([[3, 'otherSite'], [4, 'ancestor'], [5, 'opaque']]) &&
+    'cookies partitioned in frames are skipped and reported',
+    JSON.stringify(partitioned.map((c) => [c.index, c.name])) === JSON.stringify([[4, 'ancestor'], [5, 'opaque']]) &&
       partitioned.every((c) => c.reason.includes('partitioned')),
     JSON.stringify(partitioned)
   );
+  const reimported = new Koon();
+  reimported.setCookies(partitioning.cookies());
+  check('an exported partition imports again', JSON.stringify(reimported.cookies()) === JSON.stringify(partitioning.cookies()));
   await expectThrows(
     () => new Koon().setCookies([{ name: 'x', value: 'v', domain: 'a.example', partitionKey: 1 }]),
     'a partitionKey that is neither a string nor an object',

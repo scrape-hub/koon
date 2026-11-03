@@ -188,10 +188,10 @@ def test_missing_domain_and_url_skips_the_cookie():
     client.close()
 
 
-def test_partitioned_cookies_import_only_from_their_own_site():
-    """Browsers send a cookie partitioned under its own site (Cloudflare's
-    cf_clearance) on top-level requests, the others only to frames embedded
-    in another site."""
+def test_partitioned_cookies_keep_their_top_level_site():
+    """A partitioned cookie goes with requests from pages of its top-level
+    site; one with a cross-site ancestor only in frames, which koon never
+    loads."""
     client = KoonSync("chrome")
     skipped = client.set_cookies(
         [
@@ -219,9 +219,19 @@ def test_partitioned_cookies_import_only_from_their_own_site():
             {"name": "opaque", "value": "1", "domain": "example.com", "partitionKeyOpaque": True},
         ]
     )
-    assert [c["name"] for c in client.cookies()] == ["kept", "cdp", "pw"]
-    assert [(s["index"], s["name"]) for s in skipped] == [(3, "other_site"), (4, "ancestor"), (5, "opaque")]
+    partitions = [(c["name"], c["partitionKey"]) for c in client.cookies()]
+    assert partitions == [
+        ("kept", None),
+        ("cdp", "https://example.com"),
+        ("pw", "https://example.com"),
+        ("other_site", "https://other.com"),
+    ]
+    assert [(s["index"], s["name"]) for s in skipped] == [(4, "ancestor"), (5, "opaque")]
     assert all("partitioned" in s["reason"] for s in skipped)
+    copy = KoonSync("chrome")
+    copy.set_cookies(client.cookies())
+    assert copy.cookies() == client.cookies()
+    copy.close()
     client.close()
 
 

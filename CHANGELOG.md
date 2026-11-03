@@ -17,6 +17,7 @@ Rust only:
 
 - `Error` and `SameSite` are `#[non_exhaustive]`, with the new variants
   `Error::ResponseTooLarge` and `SameSite::Unspecified`.
+- `Cookie` has a `partition_key` field.
 - `ServerPaddingTrial` has an `ends_at` field, and `draw` takes the time.
 
 ### Added
@@ -37,6 +38,12 @@ Rust only:
 
 - Cookies without SameSite count as Lax for Chromium profiles, as None for
   Firefox and Safari.
+- Third-party cookies follow each browser: Chrome allows them, Firefox
+  partitions them, Safari blocks them.
+- `Partitioned` cookies (CHIPS) stay with their top-level site, also in imports
+  and exports.
+- Cross-site responses that are no navigation set no `SameSite=Strict` or
+  `Lax` cookies.
 - Cookies from an IP address host are host-only.
 - `load_session()` skips the cookies `set_cookies()` skips.
 - R: malformed `set_cookies()` fields raise `koon_invalid_argument`.

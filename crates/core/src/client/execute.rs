@@ -493,21 +493,28 @@ impl super::Client {
     ) -> Result<HopOutcome, ExchangeError> {
         self.fire_on_request(options, hop.method.as_str(), &hop.url)
             .map_err(ExchangeError::Invalid)?;
-        let cookie = self.cookie_jar.as_ref().and_then(|jar| {
+        let cookie_context = self.cookie_jar.is_some().then(|| {
             let (client, request) = match &hop.source {
                 HeaderSource::Raw(raw) => (&[][..], raw.as_slice()),
                 HeaderSource::Profile => (&hop.client_headers[..], &hop.request_headers[..]),
             };
-            let context = headers::cookie_context(
+            headers::cookie_context(
                 headers::Family::of(&self.profile),
                 &hop.method,
                 &hop.url,
                 client,
                 request,
                 hop.cross_site_redirect,
-            );
-            crate::util::lock_recover(jar).cookie_header_for(&hop.url, &context)
+                None,
+            )
         });
+        let cookie = self
+            .cookie_jar
+            .as_ref()
+            .zip(cookie_context.as_ref())
+            .and_then(|(jar, context)| {
+                crate::util::lock_recover(jar).cookie_header_for(&hop.url, context)
+            });
 
         let mut parts = self
             .exchange(
@@ -521,8 +528,12 @@ impl super::Client {
             .await?;
         received.store(true, Ordering::Relaxed);
         self.track_bytes(parts.bytes_sent, parts.head_bytes);
-        if let Some(jar) = &self.cookie_jar {
-            crate::util::lock_recover(jar).store_from_response(&hop.url, &parts.headers);
+        if let (Some(jar), Some(context)) = (&self.cookie_jar, &cookie_context) {
+            crate::util::lock_recover(jar).store_from_response_in(
+                &hop.url,
+                &parts.headers,
+                context,
+            );
         }
         // A failing hook ends the request here; the response is dropped unread. Hook errors are
         // never retried.
