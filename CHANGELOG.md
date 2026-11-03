@@ -19,6 +19,9 @@ Rust only:
   `Error::ResponseTooLarge` and `SameSite::Unspecified`.
 - `Cookie` has a `partition_key` field.
 - `ServerPaddingTrial` has an `ends_at` field, and `draw` takes the time.
+- A request's transport failure is `Error::InPhase`; `Error::phase()`
+  gives the phase, `Error::kind()` the error to match on. `code()` and the
+  `is_*` checks are no longer `const`.
 
 ### Added
 
@@ -32,6 +35,8 @@ Rust only:
 - Python: `verify()` takes the connection options of `Koon`; `ip_version` also
   takes names such as `"v4"`.
 - Python: `KoonSync.websocket()`, a blocking `KoonSyncWebSocket`.
+- `phase` on errors in Node, Python and R: how far a request got before a
+  transport failure, `connect` (nothing sent), `request` or `body`.
 
 ### Changed
 

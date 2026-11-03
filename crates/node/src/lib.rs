@@ -49,17 +49,22 @@ fn init_module() {
 // ---------------------------------------------------------------------------
 
 /// A core error as a JS error. The code goes into the message as a `[CODE]`
-/// prefix, which index.js copies into `err.code`: napi-rs sets `code` to its
-/// own status name, and an async function can only reject with that. A
-/// hook's error becomes `[HOOK_ERROR] #id`, for which index.js rejects with
-/// the value the hook threw (see [`hook_outcome`]).
+/// prefix, `[CODE:phase]` for a request's transport failure, which index.js
+/// moves into `err.code` and `err.phase`: napi-rs sets `code` to its own
+/// status name, and an async function can only reject with that. A hook's
+/// error becomes `[HOOK_ERROR] #id`, for which index.js rejects with the
+/// value the hook threw (see [`hook_outcome`]).
 fn koon_napi_error(error: KoonError) -> napi::Error {
-    napi::Error::from_reason(match error {
+    let phase = error.phase();
+    napi::Error::from_reason(match error.into_kind() {
         KoonError::Hook(inner) => match inner.downcast::<ThrownByHook>() {
             Ok(thrown) => format!("[HOOK_ERROR] #{}", thrown.0),
             Err(other) => format!("[HOOK_ERROR] {other}"),
         },
-        error => format!("[{}] {error}", error.code()),
+        error => match phase {
+            Some(phase) => format!("[{}:{}] {error}", error.code(), phase.as_str()),
+            None => format!("[{}] {error}", error.code()),
+        },
     })
 }
 

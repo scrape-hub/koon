@@ -94,6 +94,53 @@ pub enum Error {
     /// which the request fails with. Never retried.
     #[error("Hook failed: {0}")]
     Hook(#[source] Box<dyn std::error::Error + Send + Sync>),
+    /// A request's transport failure with the phase it happened in ([`Error::phase`]); its message,
+    /// code and source are the inner error's, which [`Error::kind`] returns to match on.
+    #[error(transparent)]
+    InPhase(PhasedError),
+}
+
+/// How far a request got before it failed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Phase {
+    /// Nothing was sent: resolving the host, connecting, the TLS handshake or a proxy's CONNECT
+    /// failed. Sending the request again cannot repeat it.
+    Connect,
+    /// The request was sent, or was being sent, and no response head arrived.
+    Request,
+    /// The response head arrived and reading or decoding the body failed.
+    Body,
+}
+
+impl Phase {
+    /// `"connect"`, `"request"` or `"body"`, as the bindings report it.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Connect => "connect",
+            Self::Request => "request",
+            Self::Body => "body",
+        }
+    }
+}
+
+/// The error and phase of [`Error::InPhase`].
+#[derive(Debug)]
+pub struct PhasedError {
+    pub phase: Phase,
+    pub error: Box<Error>,
+}
+
+impl std::fmt::Display for PhasedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.error.fmt(f)
+    }
+}
+
+impl std::error::Error for PhasedError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.error.source()
+    }
 }
 
 impl From<tungstenite::error::Error> for Error {
@@ -103,9 +150,44 @@ impl From<tungstenite::error::Error> for Error {
 }
 
 impl Error {
-    /// Machine-readable error code string for programmatic error handling.
-    pub const fn code(&self) -> &'static str {
+    /// The phase of the request this error failed, for a transport failure of a request.
+    pub const fn phase(&self) -> Option<Phase> {
         match self {
+            Self::InPhase(phased) => Some(phased.phase),
+            _ => None,
+        }
+    }
+
+    /// The error without its phase, to match on.
+    pub fn kind(&self) -> &Self {
+        match self {
+            Self::InPhase(phased) => &phased.error,
+            other => other,
+        }
+    }
+
+    /// The error without its phase, owned.
+    pub fn into_kind(self) -> Self {
+        match self {
+            Self::InPhase(phased) => *phased.error,
+            other => other,
+        }
+    }
+
+    /// This error with `phase`; one that has a phase keeps it.
+    pub(crate) fn in_phase(self, phase: Phase) -> Self {
+        match self {
+            Self::InPhase(_) => self,
+            error => Self::InPhase(PhasedError {
+                phase,
+                error: Box::new(error),
+            }),
+        }
+    }
+
+    /// Machine-readable error code string for programmatic error handling.
+    pub fn code(&self) -> &'static str {
+        match self.kind() {
             Self::Tls(_) | Self::TlsStack(_) => "TLS_ERROR",
             Self::Http2(_) => "HTTP2_ERROR",
             Self::Quic(..) => "QUIC_ERROR",
@@ -127,32 +209,33 @@ impl Error {
             Self::InvalidCookie(_) => "INVALID_COOKIE",
             Self::InvalidArgument(..) => "INVALID_ARGUMENT",
             Self::Hook(_) => "HOOK_ERROR",
+            Self::InPhase(phased) => phased.error.code(),
         }
     }
 
     /// Check if this is a timeout error.
-    pub const fn is_timeout(&self) -> bool {
-        matches!(self, Self::Timeout)
+    pub fn is_timeout(&self) -> bool {
+        matches!(self.kind(), Self::Timeout)
     }
 
     /// Check if this is a proxy error.
-    pub const fn is_proxy_error(&self) -> bool {
-        matches!(self, Self::Proxy(..))
+    pub fn is_proxy_error(&self) -> bool {
+        matches!(self.kind(), Self::Proxy(..))
     }
 
     /// Check if this is a TLS error.
-    pub const fn is_tls_error(&self) -> bool {
-        matches!(self, Self::Tls(_) | Self::TlsStack(_))
+    pub fn is_tls_error(&self) -> bool {
+        matches!(self.kind(), Self::Tls(_) | Self::TlsStack(_))
     }
 
     /// Check if this is a connection error: the host did not resolve or the connection failed.
-    pub const fn is_connection_error(&self) -> bool {
-        matches!(self, Self::Dns(..) | Self::ConnectionFailed(..))
+    pub fn is_connection_error(&self) -> bool {
+        matches!(self.kind(), Self::Dns(..) | Self::ConnectionFailed(..))
     }
 
     /// Check if this error is an HTTP/2 GOAWAY from the remote peer.
     pub fn is_h2_goaway(&self) -> bool {
-        match self {
+        match self.kind() {
             Self::Http2(e) => e.is_go_away() && e.is_remote(),
             _ => false,
         }
@@ -160,9 +243,9 @@ impl Error {
 
     /// Whether this error provably occurred before any request was sent (during DNS/TCP, the TLS
     /// handshake, or a proxy CONNECT): safe to retry even for a non-idempotent method like POST.
-    pub const fn is_pre_send(&self) -> bool {
+    pub fn is_pre_send(&self) -> bool {
         matches!(
-            self,
+            self.kind(),
             Self::Dns(..)
                 | Self::ConnectionFailed(..)
                 | Self::Tls(_)
@@ -175,10 +258,10 @@ impl Error {
     /// GOAWAY, timeout, proxy, protocol, QUIC/H3 errors). Unless
     /// [`is_pre_send`](Self::is_pre_send), only idempotent requests retry.
     pub fn is_retryable(&self) -> bool {
-        match self {
+        match self.kind() {
             Self::Http2(e) => e.is_io() || e.is_go_away(),
-            _ => matches!(
-                self,
+            kind => matches!(
+                kind,
                 Self::Dns(..)
                     | Self::ConnectionFailed(..)
                     | Self::Tls(_)
@@ -206,6 +289,21 @@ mod tests {
         assert_eq!(err.to_string(), "Connection failed: connect failed: boom");
         let source = std::error::Error::source(&err).expect("source must be populated");
         assert_eq!(source.to_string(), "boom");
+    }
+
+    #[test]
+    fn a_phase_keeps_the_code_message_and_source() {
+        let io_err = std::io::Error::other("boom");
+        let err = Error::ConnectionFailed(format!("connect failed: {io_err}"), boxed(io_err))
+            .in_phase(Phase::Connect);
+        assert_eq!(err.phase(), Some(Phase::Connect));
+        assert_eq!(err.code(), "CONNECTION_FAILED");
+        assert_eq!(err.to_string(), "Connection failed: connect failed: boom");
+        let source = std::error::Error::source(&err).expect("source must be populated");
+        assert_eq!(source.to_string(), "boom");
+        assert!(err.is_connection_error() && err.is_retryable());
+        assert!(matches!(err.kind(), Error::ConnectionFailed(..)));
+        assert_eq!(err.in_phase(Phase::Body).phase(), Some(Phase::Connect));
     }
 
     #[test]

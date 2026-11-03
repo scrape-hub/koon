@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use common::h3::{H3Server, h3_route_server};
 use common::routes::{Proto, STALL, tcp_server};
-use koon_core::{Chrome, Client, ClientBuilder, Error, RequestOptions};
+use koon_core::{Chrome, Client, ClientBuilder, Error, Phase, RequestOptions};
 
 const HOST: &str = "matrix.koon.test";
 const PROTOS: [Proto; 3] = [Proto::H1, Proto::H2, Proto::H3];
@@ -88,7 +88,7 @@ async fn timeout_covers_a_stalled_head_and_a_stalled_body() {
             let started = Instant::now();
             let result = target.get(path, RequestOptions::default()).await;
             assert!(
-                matches!(result, Err(Error::Timeout)),
+                matches!(result.as_ref().map_err(Error::kind), Err(Error::Timeout)),
                 "{proto:?} {path}: {result:?}"
             );
             assert!(started.elapsed() < STALL, "{proto:?} {path}");
@@ -121,7 +121,7 @@ async fn a_streamed_body_times_out_while_it_stalls() {
         let started = Instant::now();
         let result = stream.collect_body().await;
         assert!(
-            matches!(result, Err(Error::Timeout)),
+            matches!(result.as_ref().map_err(Error::kind), Err(Error::Timeout)),
             "{proto:?}: {result:?}"
         );
         assert!(started.elapsed() < STALL, "{proto:?}");
@@ -135,7 +135,10 @@ async fn max_response_body_caps_plain_and_decoded_bodies() {
         for path in ["/big", "/gzip"] {
             let result = target.get(path, RequestOptions::default()).await;
             assert!(
-                matches!(result, Err(Error::ResponseTooLarge(1000))),
+                matches!(
+                    result.as_ref().map_err(Error::kind),
+                    Err(Error::ResponseTooLarge(1000))
+                ),
                 "{proto:?} {path}: {result:?}"
             );
             let mut stream = target
@@ -151,7 +154,10 @@ async fn max_response_body_caps_plain_and_decoded_bodies() {
             stream.decode_content();
             let collected = stream.collect_body().await;
             assert!(
-                matches!(collected, Err(Error::ResponseTooLarge(1000))),
+                matches!(
+                    collected.as_ref().map_err(Error::kind),
+                    Err(Error::ResponseTooLarge(1000))
+                ),
                 "{proto:?} {path} streamed: {collected:?}"
             );
         }
@@ -195,7 +201,10 @@ async fn redirects_follow_the_options() {
 
         let too_many = target.get("/redirect/3", RequestOptions::default()).await;
         assert!(
-            matches!(too_many, Err(Error::TooManyRedirects)),
+            matches!(
+                too_many.as_ref().map_err(Error::kind),
+                Err(Error::TooManyRedirects)
+            ),
             "{proto:?}: {too_many:?}"
         );
 
@@ -312,4 +321,58 @@ async fn locale_sets_the_accept_language() {
             "{proto:?}: {echo}"
         );
     }
+}
+
+#[tokio::test]
+async fn errors_carry_the_phase_they_happened_in() {
+    for proto in PROTOS {
+        let target = Target::new(proto, |b| b.timeout(TIMEOUT)).await;
+        for (path, phase) in [("/slow-head", Phase::Request), ("/slow-body", Phase::Body)] {
+            let err = target
+                .get(path, RequestOptions::default())
+                .await
+                .unwrap_err();
+            assert_eq!(err.phase(), Some(phase), "{proto:?} {path}: {err}");
+            assert_eq!(err.code(), "TIMEOUT");
+        }
+        let mut stream = target
+            .client
+            .send_streaming(
+                http::Method::GET,
+                &target.url("/slow-body"),
+                None::<Vec<u8>>,
+                RequestOptions::default(),
+            )
+            .await
+            .unwrap();
+        let err = stream.collect_body().await.unwrap_err();
+        assert_eq!(err.phase(), Some(Phase::Body), "{proto:?}");
+    }
+    // Nothing listens there: the request fails before anything is sent.
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let err = Client::new(Chrome::latest())
+        .unwrap()
+        .get(&format!("http://127.0.0.1:{port}/"))
+        .await
+        .unwrap_err();
+    assert_eq!(err.phase(), Some(Phase::Connect), "{err}");
+    assert_eq!(err.code(), "CONNECTION_FAILED");
+
+    // A timeout that runs out while connecting: nothing was sent either.
+    let silent = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = silent.local_addr().unwrap().port();
+    let err = Client::builder(Chrome::latest())
+        .timeout(TIMEOUT)
+        .build()
+        .unwrap()
+        .get(&format!("https://127.0.0.1:{port}/"))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "TIMEOUT");
+    assert_eq!(err.phase(), Some(Phase::Connect), "{err}");
+    drop(silent);
 }

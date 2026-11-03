@@ -224,7 +224,10 @@ Failures raise conditions of class \code{c("koon_<code>", "koon_error", "error",
 is also in the condition's \code{code} field: \code{"TIMEOUT"}, \code{"DNS_ERROR"},
 \code{"CONNECTION_FAILED"}, \code{"TLS_ERROR"}, \code{"PROXY_ERROR"}, \code{"INVALID_URL"},
 \code{"TOO_MANY_REDIRECTS"}, \code{"INVALID_ARGUMENT"}, \code{"INVALID_COOKIE"},
-\code{"JSON_ERROR"}, ... An error raised by a callback fails the request and is
+\code{"JSON_ERROR"}, ... A request's transport failure has a \code{phase} field too:
+\code{"connect"} (nothing was sent, so sending it again cannot repeat it),
+\code{"request"} (no response head yet) or \code{"body"}; other errors have none
+(\code{NULL}). An error raised by a callback fails the request and is
 re-raised unchanged: the same condition object, with its own classes.
 
 Requests block, but Ctrl-C / Esc stops them and raises an ordinary R

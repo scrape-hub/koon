@@ -159,7 +159,7 @@ fn builder_with_proxy(proxy: &str) -> ClientBuilder {
 }
 
 fn proxy_error(result: Result<koon_core::HttpResponse, Error>) -> String {
-    match result {
+    match result.map_err(Error::into_kind) {
         Err(Error::Proxy(msg, _)) => msg,
         Err(e) => panic!("expected a proxy error, got {e}"),
         Ok(resp) => panic!("expected a proxy error, got status {}", resp.status),
@@ -216,7 +216,7 @@ async fn proxy_ca_certs_are_trusted_for_the_proxy_only() {
     // The origin's certificate comes from the same CA, which is trusted for
     // the proxy only.
     let origin_url = format!("https://127.0.0.1:{origin}/");
-    match client.get(&origin_url).await {
+    match client.get(&origin_url).await.map_err(Error::into_kind) {
         Err(Error::Tls(e)) => assert!(e.to_string().contains("CERTIFICATE_VERIFY_FAILED"), "{e}"),
         Err(e) => panic!("expected the origin's TLS to fail, got {e}"),
         Ok(resp) => panic!("the origin was trusted: {}", resp.status),
@@ -255,7 +255,11 @@ async fn accepting_invalid_proxy_certificates_leaves_origins_verified() {
         .unwrap();
     let resp = client.get("http://example.test/").await.unwrap();
     assert_eq!(resp.text(), "proxied");
-    match client.get(&format!("https://127.0.0.1:{origin}/")).await {
+    match client
+        .get(&format!("https://127.0.0.1:{origin}/"))
+        .await
+        .map_err(Error::into_kind)
+    {
         Err(Error::Tls(e)) => assert!(e.to_string().contains("CERTIFICATE_VERIFY_FAILED"), "{e}"),
         Err(e) => panic!("expected the origin's TLS to fail, got {e}"),
         Ok(resp) => panic!("the origin was trusted: {}", resp.status),

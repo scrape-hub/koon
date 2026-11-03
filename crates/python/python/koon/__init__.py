@@ -45,7 +45,11 @@ class KoonError(RuntimeError):
     Carries a machine-readable ``code`` (e.g. ``"TIMEOUT"``, ``"TLS_ERROR"``,
     ``"INVALID_COOKIE"``) alongside the usual exception message, which has the
     form ``"[CODE] description"``. Picklable: the code is parsed back from the
-    message."""
+    message. ``phase`` is how far a request got before a transport failure:
+    ``"connect"`` (nothing was sent), ``"request"`` (no response head yet) or
+    ``"body"``; ``None`` for other errors."""
+
+    phase = None
 
     @property
     def code(self):

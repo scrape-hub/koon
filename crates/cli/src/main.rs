@@ -363,7 +363,7 @@ impl From<koon_core::Error> for CliError {
 /// Exit code for a koon error: curl's 63 for a body over `--max-response-body`, as for its
 /// `--max-filesize`; else by its code.
 fn error_exit_code(e: &koon_core::Error) -> u8 {
-    if matches!(e, koon_core::Error::ResponseTooLarge(_)) {
+    if matches!(e.kind(), koon_core::Error::ResponseTooLarge(_)) {
         RESPONSE_TOO_LARGE_EXIT
     } else {
         exit_code(e.code())

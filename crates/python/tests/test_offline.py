@@ -502,10 +502,27 @@ def test_koon_error_survives_pickle(base_url):
     err = exc_info.value
     assert type(err).__module__ == "koon"
 
+    assert err.phase == "request"
+
     restored = pickle.loads(pickle.dumps(err))
     assert type(restored) is KoonError
     assert restored.code == "TIMEOUT"
+    assert restored.phase == "request"
     assert str(restored) == str(err)
+
+
+def test_a_refused_connection_is_in_the_connect_phase():
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    with pytest.raises(KoonError) as exc_info:
+        KoonSync("chrome").get(f"http://127.0.0.1:{port}/")
+    assert exc_info.value.code == "CONNECTION_FAILED"
+    assert exc_info.value.phase == "connect"
+    assert str(exc_info.value).startswith("[CONNECTION_FAILED] ")
+    with pytest.raises(KoonInvalidArgument) as exc_info:
+        KoonSync(doh="quad9")
+    assert exc_info.value.phase is None
 
 
 @pytest.mark.parametrize("timeout", [float("nan"), float("inf"), -1.0, 1e300])

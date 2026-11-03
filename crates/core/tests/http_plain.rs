@@ -442,7 +442,7 @@ async fn per_request_timeout_covers_the_whole_request() {
         )
         .await
         .unwrap_err();
-    assert!(matches!(err, Error::Timeout));
+    assert!(matches!(err.kind(), Error::Timeout));
 }
 
 #[tokio::test]
@@ -913,7 +913,7 @@ async fn a_redirect_to_an_unsupported_scheme_is_not_retried() {
         )
         .await
         .unwrap_err();
-    assert!(matches!(err, Error::UnsupportedScheme(_)), "{err}");
+    assert!(matches!(err.kind(), Error::UnsupportedScheme(_)), "{err}");
     assert_eq!(posts(&server), 1);
 }
 
@@ -999,7 +999,7 @@ async fn a_stream_body_of_the_wrong_length_fails() {
         .post(&server.url("/"), Body::sized_stream(parts(&["abc"]), 5))
         .await
         .unwrap_err();
-    assert!(matches!(err, Error::Body(..)), "{err}");
+    assert!(matches!(err.kind(), Error::Body(..)), "{err}");
 }
 
 #[tokio::test]
@@ -1069,7 +1069,7 @@ async fn redirects_of_a_stream_body_follow_fetch() {
         )
         .await
         .unwrap_err();
-    assert!(matches!(err, Error::Body(..)), "{err}");
+    assert!(matches!(err.kind(), Error::Body(..)), "{err}");
 
     // 303 turns it into a GET without a body.
     let resp = client

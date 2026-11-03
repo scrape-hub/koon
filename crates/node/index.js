@@ -150,18 +150,26 @@ function prepareOptions(options) {
 // Error codes
 // ---------------------------------------------------------------------------
 
-// Native errors carry their code as a "[CODE] message" prefix (see
+// Native errors carry their code, and the phase of a request's transport
+// failure, as a "[CODE] message" or "[CODE:phase] message" prefix (see
 // koon_napi_error in src/lib.rs); napi-rs itself sets `err.code` to one of
-// its status names. Its argument conversion errors ("StringExpected", ...)
+// its status names. The phase moves to `err.phase`, the message keeps
+// "[CODE] ". napi-rs's argument conversion errors ("StringExpected", ...)
 // are invalid arguments too. Other errors, such as an exception a caller's
 // own getter threw, pass through unchanged.
 const NAPI_ARGUMENT_STATUS = /^(InvalidArg|[A-Za-z]+Expected)$/;
 
 function attachErrorCode(err) {
   if (err instanceof Error) {
-    const match = /^\[([A-Z0-9_]+)\] /.exec(err.message);
+    const match = /^\[([A-Z0-9_]+)(?::([a-z]+))?\] /.exec(err.message);
     if (match) {
       err.code = match[1];
+      if (match[2]) {
+        err.phase = match[2];
+        const prefix = `[${match[1]}:${match[2]}]`;
+        err.message = `[${match[1]}]${err.message.slice(prefix.length)}`;
+        if (typeof err.stack === 'string') err.stack = err.stack.replace(prefix, `[${match[1]}]`);
+      }
     } else if (NAPI_ARGUMENT_STATUS.test(err.code)) {
       err.code = 'INVALID_ARGUMENT';
       err.message = `[INVALID_ARGUMENT] ${err.message}`;

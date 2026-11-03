@@ -4,7 +4,7 @@ use std::sync::Arc;
 use bytes::{Buf, Bytes};
 use tokio::task::JoinHandle;
 
-use crate::error::Error;
+use crate::error::{Error, Phase};
 use crate::http1::{BodyReader, BodyState};
 use crate::pool::{ConnInfo, ConnectionPool, PoolKey};
 
@@ -40,6 +40,17 @@ impl ExchangeError {
     pub fn into_error(self) -> Error {
         match self {
             Self::NotSent(e) | Self::Sent(e) | Self::Received(e) | Self::Invalid(e) => e,
+        }
+    }
+
+    /// The error with the phase this failure happened in; a request that could not be built
+    /// failed in none.
+    pub fn into_phased_error(self) -> Error {
+        match self {
+            Self::NotSent(e) => e.in_phase(Phase::Connect),
+            Self::Sent(e) => e.in_phase(Phase::Request),
+            Self::Received(e) => e.in_phase(Phase::Body),
+            Self::Invalid(e) => e,
         }
     }
 }

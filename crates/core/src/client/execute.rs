@@ -5,7 +5,7 @@ use http::{Method, Uri};
 use tokio::sync::OwnedMutexGuard;
 use tokio::time::Instant;
 
-use crate::error::Error;
+use crate::error::{Error, Phase};
 use crate::pool::{ConnInfo, Mux, PoolKey, PooledMux};
 use crate::proxy::{ProxyConfig, ProxyKind};
 use crate::streaming::StreamingResponse;
@@ -267,6 +267,16 @@ struct Outgoing<'a> {
     cookie: Option<&'a str>,
     /// A Critical-CH restarted the request (see [`HeaderInput::restarted`]).
     restarted: bool,
+    progress: &'a Progress,
+}
+
+/// How far one attempt at a hop got, for the phase of a timeout that cuts it off.
+#[derive(Default)]
+struct Progress {
+    /// A connection is ready and the request goes out on it.
+    sending: AtomicBool,
+    /// The response head is in.
+    received: AtomicBool,
 }
 
 /// A connection opened for a request.
@@ -333,10 +343,12 @@ impl super::Client {
         let body = if raw.len() > BLOCKING_DECODE && encoding.is_some() {
             tokio::task::spawn_blocking(move || decompress_body(raw, encoding.as_deref(), max))
                 .await
-                .map_err(|e| Error::Io(std::io::Error::other(e)))??
+                .map_err(|e| Error::Io(std::io::Error::other(e)))
+                .and_then(|decoded| decoded)
         } else {
-            decompress_body(raw, encoding.as_deref(), max)?
-        };
+            decompress_body(raw, encoding.as_deref(), max)
+        }
+        .map_err(|e| e.in_phase(Phase::Body))?;
         Ok(HttpResponse {
             status: parts.status,
             headers: parts.headers,
@@ -435,19 +447,22 @@ impl super::Client {
 
         loop {
             // Set once the hop's response head is in: a timeout after it is no case for a retry.
-            let received = AtomicBool::new(false);
+            let progress = Progress::default();
             // Boxed so this loop's future does not carry the size of the whole
             // send/exchange/connect call chain below it.
             let attempt = tokio::time::timeout_at(
                 deadline,
-                Box::pin(self.attempt_hop(&hop, options, proxy, collect, &restarted, &received)),
+                Box::pin(self.attempt_hop(&hop, options, proxy, collect, &restarted, &progress)),
             )
             .await
             .unwrap_or_else(|_| {
-                Err(if received.load(Ordering::Relaxed) {
+                Err(if progress.received.load(Ordering::Relaxed) {
                     ExchangeError::Received(Error::Timeout)
-                } else {
+                } else if progress.sending.load(Ordering::Relaxed) {
                     ExchangeError::Sent(Error::Timeout)
+                } else {
+                    // Nothing went out, though a retry still treats it as possibly sent.
+                    ExchangeError::Sent(Error::Timeout.in_phase(Phase::Connect))
                 })
             });
 
@@ -475,7 +490,7 @@ impl super::Client {
                     let retry =
                         retries_left > 0 && e.error().is_retryable() && Self::may_resend(&e, &hop);
                     if !retry {
-                        return Err(e.into_error());
+                        return Err(e.into_phased_error());
                     }
                     retries_left -= 1;
                     proxy = self.pick_proxy(proxy_override.as_ref());
@@ -487,7 +502,7 @@ impl super::Client {
 
     /// One attempt at one hop: send it and, if it is the final one and `collect` is set, read its
     /// body. `restarted` names the origins whose Critical-CH restarted the request already;
-    /// `received` is set once the response head is in.
+    /// `progress` records how far the attempt got.
     async fn attempt_hop(
         &self,
         hop: &Hop,
@@ -495,7 +510,7 @@ impl super::Client {
         proxy: Option<&ProxyConfig>,
         collect: bool,
         restarted: &std::collections::HashSet<String>,
-        received: &AtomicBool,
+        progress: &Progress,
     ) -> Result<HopOutcome, ExchangeError> {
         self.fire_on_request(options, hop.method.as_str(), &hop.url)
             .map_err(ExchangeError::Invalid)?;
@@ -536,11 +551,12 @@ impl super::Client {
                     context: &context,
                     cookie: cookie.as_deref(),
                     restarted: !restarted.is_empty(),
+                    progress,
                 },
                 proxy,
             )
             .await?;
-        received.store(true, Ordering::Relaxed);
+        progress.received.store(true, Ordering::Relaxed);
         self.track_bytes(parts.bytes_sent, parts.head_bytes);
         if let (Some(jar), Some(context)) = (&self.cookie_jar, &cookie_context) {
             crate::util::lock_recover(jar).store_from_response_in(
@@ -1037,7 +1053,7 @@ impl super::Client {
     }
 
     /// The headers of one request on `protocol` over the connection `info` describes, in wire order
-    /// and casing.
+    /// and casing. Every path builds them right before it sends, so this marks `out` as going out.
     fn request_headers(
         &self,
         out: &Outgoing<'_>,
@@ -1045,6 +1061,7 @@ impl super::Client {
         proxy_headers: Option<&[(String, String)]>,
         info: &ConnInfo,
     ) -> Vec<(String, String)> {
+        out.progress.sending.store(true, Ordering::Relaxed);
         let hop = out.hop;
         let length = hop.body.length();
         match &hop.source {

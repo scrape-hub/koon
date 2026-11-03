@@ -15,6 +15,16 @@ test_that("failures are classed conditions with a code", {
   expect_koon_error(Koon$new(max_redirects = 1)$get(paste0(base, "/redirect/3")), "TOO_MANY_REDIRECTS")
 })
 
+test_that("a request's transport failure names its phase", {
+  base <- test_server_url()
+  err <- expect_koon_error(Koon$new(timeout = 0.5)$get(paste0(base, "/slow?s=3")), "TIMEOUT")
+  expect_identical(err$phase, "request")
+  err <- expect_koon_error(Koon$new(timeout = 10)$get("http://127.0.0.1:1/"), "CONNECTION_FAILED")
+  expect_identical(err$phase, "connect")
+  expect_match(conditionMessage(err), "^\\[CONNECTION_FAILED\\] ")
+  expect_null(expect_koon_error(Koon$new(doh = "quad9"), "INVALID_ARGUMENT")$phase)
+})
+
 test_that("bad client arguments are INVALID_ARGUMENT errors", {
   expect_koon_error(Koon$new("netscape4"), "INVALID_ARGUMENT")
   expect_koon_error(Koon$new("chrome999"), "INVALID_ARGUMENT")

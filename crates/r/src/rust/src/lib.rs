@@ -48,8 +48,13 @@ type RResult<T> = std::result::Result<T, RError>;
 /// `koon_unwrap()` in `R/koon.R` raises.
 enum RError {
     /// A koon error: its code (`koon_core::Error::code()`, `INVALID_ARGUMENT`
-    /// for bad arguments) and message.
-    Koon { code: &'static str, message: String },
+    /// for bad arguments), message and, for a request's transport failure,
+    /// phase.
+    Koon {
+        code: &'static str,
+        message: String,
+        phase: Option<&'static str>,
+    },
     /// The condition an R callback raised; R re-raises it unchanged.
     Callback(Robj),
     /// The user pressed Ctrl-C / Esc during a request; R delivers the
@@ -62,6 +67,7 @@ impl RError {
         RError::Koon {
             code: "INVALID_ARGUMENT",
             message: message.into(),
+            phase: None,
         }
     }
 
@@ -69,6 +75,7 @@ impl RError {
         RError::Koon {
             code: "INTERNAL_ERROR",
             message: message.into(),
+            phase: None,
         }
     }
 }
@@ -78,6 +85,7 @@ impl From<koon_core::Error> for RError {
         RError::Koon {
             code: e.code(),
             message: e.to_string(),
+            phase: e.phase().map(koon_core::Phase::as_str),
         }
     }
 }
@@ -85,7 +93,14 @@ impl From<koon_core::Error> for RError {
 impl From<RError> for Robj {
     fn from(e: RError) -> Robj {
         match e {
-            RError::Koon { code, message } => list!(code = code, message = message).into(),
+            RError::Koon {
+                code,
+                message,
+                phase,
+            } => {
+                let phase = phase.map_or_else(|| Robj::from(()), Robj::from);
+                list!(code = code, message = message, phase = phase).into()
+            }
             RError::Callback(condition) => list!(condition = condition).into(),
             RError::Interrupt => list!(interrupt = true).into(),
         }
@@ -395,6 +410,7 @@ fn cookie(index: usize, get: impl Fn(&str) -> RResult<Option<Robj>>) -> RResult<
     let invalid = |name: &str, expected: &str| RError::Koon {
         code: "INVALID_ARGUMENT",
         message: format!("cookie {index}: `{name}` must be {expected}"),
+        phase: None,
     };
     let text = |name: &str| -> RResult<Option<String>> {
         get(name)?

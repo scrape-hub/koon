@@ -91,6 +91,23 @@ async function testErrorCodes() {
   await expectThrows(() => client.request(42, 'http://127.0.0.1/'), 'napi type error in a method', 'INVALID_ARGUMENT');
   await expectThrows(() => client.request('BAD METHOD', 'http://127.0.0.1/'), 'invalid method', 'INVALID_ARGUMENT');
   await expectThrows(() => client.get('ftp://example.com/'), 'unsupported URL scheme', 'INVALID_URL');
+  const closed = require('net').createServer();
+  await new Promise((resolve) => closed.listen(0, '127.0.0.1', resolve));
+  const { port } = closed.address();
+  await new Promise((resolve) => closed.close(resolve));
+  try {
+    await client.get(`http://127.0.0.1:${port}/`);
+    check('a refused connection fails', false);
+  } catch (err) {
+    check('a refused connection is in the connect phase', err.phase === 'connect', err.phase);
+    check('the phase stays out of the message', err.message.startsWith('[CONNECTION_FAILED] '), err.message);
+    check('the phase stays out of the stack', !/CONNECTION_FAILED:connect/.test(err.stack), err.stack);
+  }
+  try {
+    new Koon({ doh: 'quad9' });
+  } catch (err) {
+    check('an argument error has no phase', err.phase === undefined, err.phase);
+  }
   await expectThrows(() => client.loadSession('not json'), 'loadSession with bad JSON', 'JSON_ERROR');
   await expectThrows(
     () => client.loadSessionFromFile(path.join(os.tmpdir(), 'koon-missing', 'session.json')),

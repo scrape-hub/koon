@@ -941,6 +941,10 @@ class KoonError(RuntimeError):
     """
 
     code: str
+    phase: Optional[Literal["connect", "request", "body"]]
+    """How far a request got before a transport failure: ``"connect"`` (nothing
+    was sent, so sending it again cannot repeat it), ``"request"`` (no response
+    head yet) or ``"body"``; ``None`` for other errors."""
 
 class KoonInvalidArgument(KoonError, ValueError):
     """An invalid argument value: a ``KoonError`` with code

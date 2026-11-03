@@ -32,7 +32,7 @@ pub use client::{
     decode_body_text, parse_method,
 };
 pub use cookie::{Cookie, CookieJar, CookieParams, PartitionKey, SameSite, SkippedCookie};
-pub use error::Error;
+pub use error::{Error, Phase, PhasedError};
 pub use multipart::{BoundaryStyle, Multipart, Part};
 pub use profile::{
     Brave, Browser, BrowserProfile, Chrome, DEFAULT_OS, Edge, Firefox, HeaderFamily,

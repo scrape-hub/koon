@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use crate::client::ContentDecoder;
 use crate::client::body::{BodyStream, ResponseParts};
-use crate::error::Error;
+use crate::error::{Error, Phase};
 
 /// A streaming HTTP response that delivers the body in chunks. Unlike
 /// [`HttpResponse`](crate::client::HttpResponse), the body is not buffered: each
@@ -92,8 +92,14 @@ impl StreamingResponse {
     }
 
     /// Receive the next body chunk. Returns `None` when the body is complete. Fails with
-    /// [`Error::Timeout`] if no data arrives within the client's timeout.
+    /// [`Error::Timeout`] if no data arrives within the client's timeout; every error is in
+    /// [`Phase::Body`].
     pub async fn next_chunk(&mut self) -> Option<Result<Vec<u8>, Error>> {
+        let chunk = self.read_chunk().await;
+        chunk.map(|chunk| chunk.map_err(|e| e.in_phase(Phase::Body)))
+    }
+
+    async fn read_chunk(&mut self) -> Option<Result<Vec<u8>, Error>> {
         loop {
             let chunk = match tokio::time::timeout(self.idle_timeout, self.body.next()).await {
                 Err(_) => return Some(Err(Error::Timeout)),
@@ -139,7 +145,7 @@ impl StreamingResponse {
             let chunk = chunk?;
             total += chunk.len() as u64;
             if total > self.max_body {
-                return Err(Error::ResponseTooLarge(self.max_body));
+                return Err(Error::ResponseTooLarge(self.max_body).in_phase(Phase::Body));
             }
             body.extend_from_slice(&chunk);
         }

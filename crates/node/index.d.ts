@@ -506,8 +506,16 @@ export type KoonErrorCode =
    */
   | 'INVALID_ARGUMENT';
 
+/**
+ * How far a request got before it failed: `connect` (nothing was sent, so sending it again
+ * cannot repeat it), `request` (sent, no response head yet) or `body` (reading the body).
+ */
+export type KoonErrorPhase = 'connect' | 'request' | 'body';
+
 export interface KoonError extends Error {
   code: KoonErrorCode;
+  /** Set for a request's transport failure (connection, TLS, timeout, ...). */
+  phase?: KoonErrorPhase;
 }
 
 export class KoonResponse {

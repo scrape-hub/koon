@@ -225,7 +225,10 @@ NULL
 #' is also in the condition's `code` field: `"TIMEOUT"`, `"DNS_ERROR"`,
 #' `"CONNECTION_FAILED"`, `"TLS_ERROR"`, `"PROXY_ERROR"`, `"INVALID_URL"`,
 #' `"TOO_MANY_REDIRECTS"`, `"INVALID_ARGUMENT"`, `"INVALID_COOKIE"`,
-#' `"JSON_ERROR"`, ... An error raised by a callback fails the request and is
+#' `"JSON_ERROR"`, ... A request's transport failure has a `phase` field too:
+#' `"connect"` (nothing was sent, so sending it again cannot repeat it),
+#' `"request"` (no response head yet) or `"body"`; other errors have none
+#' (`NULL`). An error raised by a callback fails the request and is
 #' re-raised unchanged: the same condition object, with its own classes.
 #'
 #' Requests block, but Ctrl-C / Esc stops them and raises an ordinary R
@@ -322,13 +325,13 @@ koon_unwrap <- function(x) {
     # Only reached when a calling handler resumed the interrupt.
     err <- list(code = "INTERRUPTED", message = "Request interrupted")
   }
-  stop(koon_error(err$code, err$message))
+  stop(koon_error(err$code, err$message, err$phase))
 }
 
-koon_error <- function(code, message) {
+koon_error <- function(code, message, phase = NULL) {
   structure(
     class = c(paste0("koon_", tolower(code)), "koon_error", "error", "condition"),
-    list(message = sprintf("[%s] %s", code, message), call = NULL, code = code)
+    list(message = sprintf("[%s] %s", code, message), call = NULL, code = code, phase = phase)
   )
 }
 

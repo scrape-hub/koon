@@ -52,15 +52,24 @@ fn koon_err(code: &str, message: impl std::fmt::Display) -> PyErr {
     }
 }
 
-/// A `koon_core::Error` as a [`KoonError`], keeping its code. A hook's
-/// error is the exception the hook raised (see [`call_hook`]).
+/// A `koon_core::Error` as a [`KoonError`], keeping its code and, for a
+/// request's transport failure, its `phase`. A hook's error is the
+/// exception the hook raised (see [`call_hook`]).
 fn to_koon_err(e: koon_core::Error) -> PyErr {
-    match e {
+    let phase = e.phase();
+    match e.into_kind() {
         koon_core::Error::Hook(inner) => match inner.downcast::<PyErr>() {
             Ok(raised) => *raised,
             Err(other) => koon_err("HOOK_ERROR", other),
         },
-        e => koon_err(e.code(), e),
+        e => {
+            let err = koon_err(e.code(), e);
+            if let Some(phase) = phase {
+                // An exception instance takes attributes; failing that, it has no phase.
+                let _ = Python::attach(|py| err.value(py).setattr("phase", phase.as_str()));
+            }
+            err
+        }
     }
 }
 
