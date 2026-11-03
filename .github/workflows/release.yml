@@ -635,9 +635,74 @@ jobs:
           name: sdist
           path: dist/*.tar.gz
 
+  # ─── Install test: the built packages as users install them ────────
+  smoke:
+    needs: [build-node-windows, build-node-linux, build-node-macos-arm64, build-node-macos-x64, build-python-windows, build-python-linux, build-python-macos-arm64, build-python-macos-x64, build-cli-windows, build-cli-linux, build-cli-macos-arm64, build-cli-macos-x64]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            node: linux-x64-gnu
+            wheel: x86_64
+            cli: koon-linux-x64
+            images: node:22 node:24 python:3.11-slim python:3.15-slim rockylinux:8
+          - runner: ubuntu-24.04-arm
+            node: linux-arm64-gnu
+            wheel: aarch64
+            cli: koon-linux-arm64
+            images: node:22 node:24 python:3.11-slim python:3.15-slim rockylinux:8
+          - runner: windows-latest
+            node: win32-x64-msvc
+            wheel: win_amd64
+            cli: koon-windows-x64.exe
+          - runner: macos-latest
+            node: darwin-arm64
+            wheel: arm64
+            cli: koon-macos-arm64
+          - runner: macos-15-intel
+            node: darwin-x64
+            wheel: x86_64
+            cli: koon-macos-x64
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Download packages
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts/
+          merge-multiple: true
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      # The oldest Python the abi3 wheel admits; Linux tests in the images instead.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install and run
+        run: bash .github/smoke/run.sh artifacts ${{ matrix.node }} ${{ matrix.wheel }} ${{ matrix.cli }} ${{ matrix.images }}
+
+      - uses: actions/setup-python@v7
+        if: ${{ !matrix.images }}
+        with:
+          python-version: "3.14t"
+
+      - name: Install and run on free-threaded Python
+        if: ${{ !matrix.images }}
+        run: ONLY=python bash .github/smoke/run.sh artifacts ${{ matrix.node }} ${{ matrix.wheel }} ${{ matrix.cli }}
+
   # ─── Publish to npm ─────────────────────────────────────────────────
   publish-npm:
-    needs: [licenses, build-node-windows, build-node-linux, build-node-macos-arm64, build-node-macos-x64]
+    needs: [licenses, build-node-windows, build-node-linux, build-node-macos-arm64, build-node-macos-x64, smoke]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     # Trusted publishing: npm mints a short-lived credential from the OIDC token
@@ -713,7 +778,7 @@ jobs:
 
   # ─── Publish to PyPI ────────────────────────────────────────────────
   publish-pypi:
-    needs: [build-python-windows, build-python-linux, build-python-macos-arm64, build-python-macos-x64, sdist]
+    needs: [build-python-windows, build-python-linux, build-python-macos-arm64, build-python-macos-x64, sdist, smoke]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     # Trusted publishing: PyPI accepts the OIDC token of this workflow in the
@@ -748,7 +813,7 @@ jobs:
 
   # ─── GitHub Release with binaries ───────────────────────────────────
   publish-github:
-    needs: [licenses, build-node-windows, build-node-linux, build-node-macos-arm64, build-node-macos-x64, build-python-windows, build-python-linux, build-python-macos-arm64, build-python-macos-x64, build-cli-windows, build-cli-linux, build-cli-macos-arm64, build-cli-macos-x64, build-r-windows, build-r-macos, sdist]
+    needs: [licenses, build-node-windows, build-node-linux, build-node-macos-arm64, build-node-macos-x64, build-python-windows, build-python-linux, build-python-macos-arm64, build-python-macos-x64, build-cli-windows, build-cli-linux, build-cli-macos-arm64, build-cli-macos-x64, build-r-windows, build-r-macos, sdist, smoke]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     permissions:
