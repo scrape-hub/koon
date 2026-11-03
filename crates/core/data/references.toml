@@ -1,0 +1,414 @@
+# The fingerprints of the real browsers that `koon verify` and tests/fingerprint.rs compare a
+# profile with, as tls.browserleaks.com and quic.browserleaks.com report them. A field left out is
+# not checked. crates/core/tests/generated.rs writes src/verify/references.rs from this file
+# (KOON_BLESS=1).
+#
+# `updated` is the day the entry last changed. `covers` says where a reference applies: a browser's
+# versions `from` to `to` on the OS listed, ending at the last version whose fingerprint was
+# verified (Safari's releases in src/profile/safari name their references themselves).
+# `server_padding` names the reference a client in Chrome's PqcBandwidthExperiment field trial is
+# compared with instead: the extension changes the JA4, the JA3N and the QUIC JA4.
+
+[[reference]]
+id = "chromium-old-alps"
+about = "Chromium up to 134: the old ALPS codepoint 0x4469, no `trust_anchors`."
+source = "Chromium 131-134 (ALPS codepoint 0x4469): real Chrome 131-134 captures"
+updated = 2026-09-28
+ja4 = "t13d1516h2_8daaf6152771_02713d6af862"
+ja3n_hash = "dee19b855b658c6aa0f575eda2525e19"
+akamai_hash = "52d84b11737d980aef856699f885ca86"
+akamai_text = "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p"
+covers = [
+  { browser = "chrome", from = 131, to = 134, os = ["windows", "macos", "linux", "android"] },
+  { browser = "edge", from = 131, to = 134, os = ["windows", "macos", "android"] },
+]
+
+[[reference]]
+id = "chromium-new-alps"
+about = "Chromium 135-149 without `trust_anchors`: the new ALPS codepoint 0x44CD."
+source = "Chromium 135-149 (ALPS codepoint 0x44CD): real Chrome 135-140, Chrome 135-149 on Android, Edge and Opera 124-125 captures; Samsung Internet 29 and 30 (Chromium 136 and 143) on Android"
+updated = 2026-09-28
+ja4 = "t13d1516h2_8daaf6152771_d8a2da3f94cd"
+ja3n_hash = "8e19337e7524d2573be54efb2b0784c9"
+akamai_hash = "52d84b11737d980aef856699f885ca86"
+akamai_text = "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p"
+covers = [
+  { browser = "chrome", from = 135, to = 149, os = ["windows", "macos", "linux", "android"] },
+  { browser = "edge", from = 135, to = 149, os = ["windows", "macos", "android"] },
+  { browser = "opera", from = 124, to = 133, os = ["windows", "macos", "linux"] },
+  { browser = "samsung", from = 29, to = 30, os = ["android"] },
+]
+
+[[reference]]
+id = "chromium-mldsa-trust-anchors"
+about = "Chrome 152+ and Opera 136+: ML-DSA signature algorithms and `trust_anchors`."
+source = "Chromium 152+ with trust_anchors (ML-DSA signature algorithms): real Chrome 153 and Opera 136 captures, Chrome 152 and 154 on Android; Chrome 155 from tls.browserleaks.com and a ClientHello capture"
+updated = 2026-09-28
+ja4 = "t13d1517h2_8daaf6152771_cb7bf5808d99"
+ja3n_hash = "bd4930bd9b000ee684830e44bab76fdf"
+akamai_hash = "52d84b11737d980aef856699f885ca86"
+akamai_text = "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p"
+server_padding = "chrome-server-padding"
+covers = [
+  { browser = "chrome", from = 152, to = 155, os = ["windows", "macos", "linux", "android"] },
+  { browser = "opera", from = 136, to = 136, os = ["windows", "macos", "linux"] },
+]
+
+[[reference]]
+id = "chromium-mldsa"
+about = "Edge on Chromium 150+, Opera 134-135, Chrome 150-151 and Brave: ML-DSA without `trust_anchors`."
+source = "Chromium 150+ without trust_anchors (ML-DSA signature algorithms): real Opera 134-135 (JA4), Edge 152-154, Edge 153 and Chrome 150-151 on Android (JA4, JA3N, Akamai) captures; desktop Chrome 151 and Edge 151 stable (koon 0.8.1); Brave 1.95.104 and 1.96.59 on Windows, 1.96.59 on Android"
+updated = 2026-09-28
+ja4 = "t13d1516h2_8daaf6152771_806a8c22fdea"
+ja3n_hash = "8e19337e7524d2573be54efb2b0784c9"
+akamai_hash = "52d84b11737d980aef856699f885ca86"
+akamai_text = "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p"
+covers = [
+  { browser = "chrome", from = 150, to = 151, os = ["windows", "macos", "linux", "android"] },
+  { browser = "edge", from = 150, to = 154, os = ["windows", "macos", "android"] },
+  { browser = "opera", from = 134, to = 135, os = ["windows", "macos", "linux"] },
+  { browser = "brave", from = 153, to = 154, os = ["windows", "macos", "linux", "android"] },
+]
+
+[[reference]]
+id = "chrome-quic"
+about = "Chrome 153's QUIC `ClientHello`, also Opera 136's (Chromium 152)."
+source = "QUIC JA4 computed from the QUIC ClientHello of a real Chrome 153 (tests/quic_initial.rs); Chrome 154 only sorts its trust anchor IDs; Chrome 155 from quic.browserleaks.com and a QUIC capture; Chrome 154/155 and Opera 136.0.6008.52 on Linux and macOS from quic.browserleaks.com"
+updated = 2026-09-28
+quic_ja4 = "q13d0312h3_55b375c5d22e_178839b6cec1"
+server_padding = "chrome-quic-server-padding"
+covers = [
+  { browser = "chrome", from = 152, to = 155, os = ["windows", "macos", "linux", "android"] },
+  { browser = "opera", from = 136, to = 136, os = ["windows", "macos", "linux"] },
+]
+
+[[reference]]
+id = "chrome-server-padding"
+about = "Chrome 152+'s `ClientHello` plus `server_padding` (0x12E0), for a client that asks for it (see [`verify_with`])."
+source = "Chrome 152+ with trust_anchors and the server_padding extension of the PqcBandwidthExperiment field trial: real Chrome 153.0.8010.52 and the 154 and 155 betas on a Pixel 9 Pro XL with Android 17 (tls.browserleaks.com and ClientHello captures)"
+updated = 2026-09-28
+ja4 = "t13d1518h2_8daaf6152771_4980c97edce0"
+ja3n_hash = "a3a3161a080b73bda9cc285fb367fcc0"
+akamai_hash = "52d84b11737d980aef856699f885ca86"
+akamai_text = "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p"
+
+[[reference]]
+id = "chrome-quic-server-padding"
+about = "Chrome 152+'s QUIC `ClientHello` plus `server_padding`."
+source = "QUIC JA4 of real Chrome 153.0.8010.52 and the 152 and 155 betas on Android 17 (quic.browserleaks.com)"
+updated = 2026-09-28
+quic_ja4 = "q13d0313h3_55b375c5d22e_eb028bd37c08"
+
+[[reference]]
+id = "chrome-quic-old-alps"
+about = "Chrome 134's QUIC `ClientHello`: the old ALPS codepoint, no `trust_anchors`."
+source = "QUIC JA4 of the real Chrome 134 beta on Android 17 (quic.browserleaks.com)"
+updated = 2026-09-28
+quic_ja4 = "q13d0311h3_55b375c5d22e_5a1f323ef56d"
+covers = [
+  { browser = "chrome", from = 134, to = 134, os = ["windows", "macos", "linux", "android"] },
+]
+
+[[reference]]
+id = "opera-mobile"
+about = "Opera for Android: Chromium 152 without `trust_anchors`, HTTP/2 `MAX_CONCURRENT_STREAMS` instead of `ENABLE_PUSH`."
+source = "Opera for Android 102.1.5206.90382 (Chromium 152.0.7977.82) on a Pixel 9 Pro XL with Android 17 (tls.browserleaks.com and ClientHello captures)"
+updated = 2026-09-28
+ja4 = "t13d1516h2_8daaf6152771_806a8c22fdea"
+ja3n_hash = "8e19337e7524d2573be54efb2b0784c9"
+akamai_hash = "4f04edce68a7ecbe689edce7bf5f23f3"
+akamai_text = "1:65536;3:1000;4:6291456;6:262144|15663105|0|m,a,s,p"
+covers = [
+  { browser = "opera-mobile", from = 102, to = 102, os = ["android"] },
+]
+
+[[reference]]
+id = "chromium-quic-no-trust-anchors"
+about = "The QUIC `ClientHello` of Chromium 135+ without `trust_anchors`: Chrome 135-151, Edge, Brave and Opera for Android."
+source = "QUIC JA4 of the real Chrome 135, 140, 141, 149, 150 and 151 betas on Android 17, Edge 153 and 154 on Windows and macOS (154 also from quic.browserleaks.com), Edge 153 on Android and Brave 1.95.104 and 1.96.59 on Windows and 1.96.59 on Android; Opera for Android 102 sent it with pre_shared_key and early_data in its resumed hello (q13d0313h3_55b375c5d22e_226f3f127bbe), its full one was not captured"
+updated = 2026-09-28
+quic_ja4 = "q13d0311h3_55b375c5d22e_653d80c3fe9d"
+covers = [
+  { browser = "chrome", from = 135, to = 151, os = ["windows", "macos", "linux", "android"] },
+  { browser = "edge", from = 153, to = 154, os = ["windows", "macos", "android"] },
+  { browser = "brave", from = 153, to = 154, os = ["windows", "macos", "linux", "android"] },
+  { browser = "opera-mobile", from = 102, to = 102, os = ["android"] },
+]
+
+[[reference]]
+id = "firefox-135"
+about = "Firefox 135-150 (identical across these versions)."
+source = "Firefox 135-150: real Firefox captures"
+updated = 2026-09-28
+ja4 = "t13d1717h2_5b57614c22b0_3cbfd9057e0d"
+ja3n_hash = "e4147a4860c1f347354f0a84d8787c02"
+akamai_hash = "6ea73faa8fc5aac76bded7bd238f6433"
+akamai_text = "1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s"
+covers = [
+  { browser = "firefox", from = 135, to = 150, os = ["windows", "macos", "linux"] },
+]
+
+[[reference]]
+id = "firefox-151"
+about = "Firefox 151-153: ECDSA AES-128-CBC (0xc009) dropped."
+source = "Firefox 151-153 (without cipher 0xc009): real Firefox captures"
+updated = 2026-09-28
+ja4 = "t13d1617h2_86a278354501_3cbfd9057e0d"
+ja3n_hash = "8099457c290ccfe8c6d958826c26b023"
+akamai_hash = "6ea73faa8fc5aac76bded7bd238f6433"
+akamai_text = "1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s"
+covers = [
+  { browser = "firefox", from = 151, to = 153, os = ["windows", "macos", "linux"] },
+]
+
+[[reference]]
+id = "firefox-154"
+about = "Firefox 154-155: ECDSA AES-256-CBC (0xc00a) dropped as well."
+source = "Firefox 154-155 (without cipher 0xc00a): JA3 and JA3N computed from real Firefox 154.0 and 155.0 ClientHellos"
+updated = 2026-09-28
+ja4 = "t13d1517h2_8daaf6152771_3cbfd9057e0d"
+ja3n_hash = "1d9334692003212ed6c01718554b1b1c"
+ja3_hash = "424f6d9c8b8928c0a0489a4f1a0f3e89"
+akamai_hash = "6ea73faa8fc5aac76bded7bd238f6433"
+akamai_text = "1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s"
+covers = [
+  { browser = "firefox", from = 154, to = 155, os = ["windows", "macos", "linux"] },
+]
+
+[[reference]]
+id = "firefox-156"
+about = "Firefox 156 to 158: no finite-field groups."
+source = "Firefox 156-158 (without ffdhe groups): real Firefox 156.0.1 captures; 157 and 158 from the 157.0 and 158.0b5 betas (ClientHello capture and tls.browserleaks.com)"
+updated = 2026-10-08
+ja4 = "t13d1517h2_8daaf6152771_3cbfd9057e0d"
+ja3n_hash = "f9c6a2c424206e61efb6c1a6325596b5"
+ja3_hash = "9d42e90b0225e779f03141ddcd699df2"
+akamai_hash = "6ea73faa8fc5aac76bded7bd238f6433"
+akamai_text = "1:65536;2:0;4:131072;5:16384|12517377|0|m,p,a,s"
+covers = [
+  { browser = "firefox", from = 156, to = 158, os = ["windows", "macos", "linux"] },
+]
+
+[[reference]]
+id = "firefox-quic"
+about = "Firefox's QUIC `ClientHello` without ML-DSA (155, 157, 158; on Android 146 to 155, 157 and 158)."
+source = "QUIC JA4 of real Firefox 155.0.1, 157.0 beta and 158.0b5 QUIC ClientHellos (157 and 158 also from quic.browserleaks.com); on Android from the 146.0b9, 147.0b9, 150.0b10, 151.0b10, 153.0b13, 154.0b10, 155.0b5, 157.0b5 and 158.0b5 betas (quic.browserleaks.com)"
+updated = 2026-10-08
+quic_ja4 = "q13d0315h3_55b375c5d22e_dc5437974b47"
+covers = [
+  { browser = "firefox", from = 155, to = 155, os = ["windows", "macos", "linux"] },
+  { browser = "firefox", from = 157, to = 158, os = ["windows", "macos", "linux"] },
+  { browser = "firefox", from = 146, to = 155, os = ["android"] },
+  { browser = "firefox", from = 157, to = 158, os = ["android"] },
+]
+
+[[reference]]
+id = "firefox-156-quic"
+about = "Firefox 156's QUIC `ClientHello`: ML-DSA signature algorithms."
+source = "QUIC JA4 computed from the QUIC ClientHello of a real Firefox 156 (tests/quic_initial.rs); on Android from 156.0.1 and the 156.0b5 beta (quic.browserleaks.com)"
+updated = 2026-09-28
+quic_ja4 = "q13d0315h3_55b375c5d22e_bb76f32061e3"
+covers = [
+  { browser = "firefox", from = 156, to = 156, os = ["windows", "macos", "linux"] },
+  { browser = "firefox", from = 156, to = 156, os = ["android"] },
+]
+
+[[reference]]
+id = "firefox-android-146"
+about = "Firefox 146-150 on Android: desktop's `ClientHello`, without SCT."
+source = "Firefox 146-150 on Android (without signed_certificate_timestamp): real 146.0b9, 147.0b9 and 150.0b10 betas on Android 17 (tls.browserleaks.com and ClientHello captures)"
+updated = 2026-09-28
+ja4 = "t13d1716h2_5b57614c22b0_eeeea6562960"
+ja3n_hash = "90634f51dcf65fc506946108904d6913"
+ja3_hash = "2d692a4485ca2f5f2b10ecb2d2909ad3"
+akamai_hash = "41a06cadb1c6385e6d08c8d0dbbea818"
+akamai_text = "1:4096;2:0;4:32768;5:16384|12517377|0|m,p,a,s"
+covers = [
+  { browser = "firefox", from = 146, to = 150, os = ["android"] },
+]
+
+[[reference]]
+id = "firefox-android-151"
+about = "Firefox 151-153 on Android: without 0xc009 and without SCT."
+source = "Firefox 151-153 on Android (without cipher 0xc009 and signed_certificate_timestamp): real 151.0b10 and 153.0b13 betas on Android 17 (tls.browserleaks.com and ClientHello captures)"
+updated = 2026-09-28
+ja4 = "t13d1616h2_86a278354501_eeeea6562960"
+ja3n_hash = "9fdfb10f9cb8fce80779f8ffb5a34f4a"
+ja3_hash = "c43da27af379abb70ab285d8ef656f71"
+akamai_hash = "41a06cadb1c6385e6d08c8d0dbbea818"
+akamai_text = "1:4096;2:0;4:32768;5:16384|12517377|0|m,p,a,s"
+covers = [
+  { browser = "firefox", from = 151, to = 153, os = ["android"] },
+]
+
+[[reference]]
+id = "firefox-android-154"
+about = "Firefox 154 on Android: 0xc00a dropped as well."
+source = "Firefox 154 on Android (without cipher 0xc00a and signed_certificate_timestamp): real 154.0b10 beta on Android 17 (tls.browserleaks.com and ClientHello capture)"
+updated = 2026-09-28
+ja4 = "t13d1516h2_8daaf6152771_eeeea6562960"
+ja3n_hash = "8c3237398318fb048d0bc301bc804de5"
+ja3_hash = "a1d7243639bf3eccacd288639c620582"
+akamai_hash = "41a06cadb1c6385e6d08c8d0dbbea818"
+akamai_text = "1:4096;2:0;4:32768;5:16384|12517377|0|m,p,a,s"
+covers = [
+  { browser = "firefox", from = 154, to = 154, os = ["android"] },
+]
+
+[[reference]]
+id = "firefox-android-155"
+about = "Firefox 155 on Android: `signed_certificate_timestamp`, desktop Firefox 155's `ClientHello`."
+source = "Firefox 155 on Android (signed_certificate_timestamp from 155 on): real 155.0b5 beta on Android 17 (tls.browserleaks.com and ClientHello capture)"
+updated = 2026-09-28
+ja4 = "t13d1517h2_8daaf6152771_3cbfd9057e0d"
+ja3n_hash = "1d9334692003212ed6c01718554b1b1c"
+ja3_hash = "424f6d9c8b8928c0a0489a4f1a0f3e89"
+akamai_hash = "41a06cadb1c6385e6d08c8d0dbbea818"
+akamai_text = "1:4096;2:0;4:32768;5:16384|12517377|0|m,p,a,s"
+covers = [
+  { browser = "firefox", from = 155, to = 155, os = ["android"] },
+]
+
+[[reference]]
+id = "firefox-android-156"
+about = "Firefox 156 to 158 on Android: no finite-field groups, desktop Firefox 156's `ClientHello`."
+source = "Firefox 156-158 on Android (without ffdhe groups): real 156.0.1, 156.0b5, 157.0b5 and 158.0b5 on Android 17 (tls.browserleaks.com and ClientHello captures)"
+updated = 2026-10-08
+ja4 = "t13d1517h2_8daaf6152771_3cbfd9057e0d"
+ja3n_hash = "f9c6a2c424206e61efb6c1a6325596b5"
+ja3_hash = "9d42e90b0225e779f03141ddcd699df2"
+akamai_hash = "41a06cadb1c6385e6d08c8d0dbbea818"
+akamai_text = "1:4096;2:0;4:32768;5:16384|12517377|0|m,p,a,s"
+covers = [
+  { browser = "firefox", from = 156, to = 158, os = ["android"] },
+]
+
+[[reference]]
+id = "safari-macos12-13"
+about = "Safari on macOS 12 and 13: the TLS of macOS 14 (same JA4/JA3/JA3N), but no `SETTINGS_ENABLE_PUSH` at all (macOS 14 sends `2:0`)."
+source = "Safari on macOS 12 and 13 (ecdsa_sha1, no SETTINGS_ENABLE_PUSH): real Safari 15.6 on macOS 12.5, 16.0 (Safari16.0MontereyAuto.pkg, Apple-signed) and 15.6.1 on macOS 12.6, and 16.1 on macOS 13.0"
+updated = 2026-09-28
+ja4 = "t13d2014h2_a09f3c656075_14788d8d241b"
+ja3n_hash = "44f7ed5185d22c92b96da72dbe68d307"
+ja3_hash = "773906b0efdefa24a7f2b8eb6985bf37"
+akamai_hash = "dda308d35f4e5db7b52a61720ca1b122"
+akamai_text = "4:4194304;3:100|10485760|0|m,s,p,a"
+
+[[reference]]
+id = "safari-macos14"
+about = "Safari on macOS 14 and 15.0: TLS 1.0-1.3, `ecdsa_sha1`, 4 MB HTTP/2 window."
+source = "Safari on macOS 14 and 15.0 (ecdsa_sha1, 4 MB HTTP/2 window): real Safari 17.6 on macOS 14.6, 18.0 on macOS 14.7 and 15.0, and Safari 26.6 on macOS 14.8.9"
+updated = 2026-09-28
+ja4 = "t13d2014h2_a09f3c656075_14788d8d241b"
+ja3n_hash = "44f7ed5185d22c92b96da72dbe68d307"
+ja3_hash = "773906b0efdefa24a7f2b8eb6985bf37"
+akamai_hash = "959a7e813b79b909a1a0b00a38e8bba3"
+akamai_text = "2:0;4:4194304;3:100|10485760|0|m,s,p,a"
+
+[[reference]]
+id = "safari-ios16"
+about = "Safari on iOS 16.0 and 16.1: the TLS of iOS 17 (ecdsa_sha1, 2 MB HTTP/2 window), but no `SETTINGS_ENABLE_PUSH` at all (like macOS 12 and 13): iOS 17 sends `2:0`."
+source = "Safari on iOS 16.0 and 16.1 (ecdsa_sha1, no SETTINGS_ENABLE_PUSH): real Safari on the iOS 16.0 (20A360) and 16.1 (20B72) simulators"
+updated = 2026-09-28
+ja4 = "t13d2014h2_a09f3c656075_14788d8d241b"
+ja3n_hash = "44f7ed5185d22c92b96da72dbe68d307"
+ja3_hash = "773906b0efdefa24a7f2b8eb6985bf37"
+akamai_hash = "d5fcbdc393757341115a861bf8d23265"
+akamai_text = "4:2097152;3:100|10485760|0|m,s,p,a"
+
+[[reference]]
+id = "safari-ios17"
+about = "Safari on iOS 17: the TLS of macOS 14, a 2 MB HTTP/2 stream window."
+source = "Safari on iOS 17 (ecdsa_sha1, 2 MB HTTP/2 window): real Safari on the iOS 17.0.1 and 17.5 simulators"
+updated = 2026-09-28
+ja4 = "t13d2014h2_a09f3c656075_14788d8d241b"
+ja3n_hash = "44f7ed5185d22c92b96da72dbe68d307"
+ja3_hash = "773906b0efdefa24a7f2b8eb6985bf37"
+akamai_hash = "ad8424af1cc590e09f7b0c499bf7fcdb"
+akamai_text = "2:0;4:2097152;3:100|10485760|0|m,s,p,a"
+
+[[reference]]
+id = "safari-15.1"
+about = "Safari on macOS 15.1 and iOS 18.0-18.1: macOS 14's TLS, HTTP/2 with `ENABLE_CONNECT_PROTOCOL`."
+source = "Safari on macOS 15.1 and iOS 18.0-18.1 (ecdsa_sha1, ENABLE_CONNECT_PROTOCOL): real Safari 18.1.1 on macOS 15.1.1 and the iOS 18.0 and 18.1 simulators"
+updated = 2026-09-28
+ja4 = "t13d2014h2_a09f3c656075_14788d8d241b"
+ja3n_hash = "44f7ed5185d22c92b96da72dbe68d307"
+ja3_hash = "773906b0efdefa24a7f2b8eb6985bf37"
+akamai_hash = "d4a2dcbfde511b5040ed5a5190a8d78b"
+akamai_text = "2:0;3:100;4:2097152;8:1;9:1|10420225|0|m,s,a,p"
+
+[[reference]]
+id = "safari-15.2"
+about = "Safari on macOS 15.2 and iOS 18.2-18.3: without `ecdsa_sha1`, still `ENABLE_CONNECT_PROTOCOL`."
+source = "Safari on macOS 15.2 and iOS 18.2-18.3 (ENABLE_CONNECT_PROTOCOL): real Safari 18.2 on macOS 15.2 and the iOS 18.2 and 18.3.1 simulators"
+updated = 2026-09-28
+ja4 = "t13d2014h2_a09f3c656075_e42f34c56612"
+ja3n_hash = "44f7ed5185d22c92b96da72dbe68d307"
+ja3_hash = "773906b0efdefa24a7f2b8eb6985bf37"
+akamai_hash = "d4a2dcbfde511b5040ed5a5190a8d78b"
+akamai_text = "2:0;3:100;4:2097152;8:1;9:1|10420225|0|m,s,a,p"
+
+[[reference]]
+id = "safari-15.4"
+about = "Safari on macOS 15.4 to 15.7 and iOS 18.4 and 18.5."
+source = "Safari on macOS 15.4-15.8 and iOS 18.4-18.5: real Safari 18.4 and 18.5 on macOS 15.4 and 15.5, 18.6 on macOS 15.6.1 and 15.8, 26.0.1 on macOS 15.7, 26.6.1 on macOS 15.7.9, and the iOS 18.4 and 18.5 simulators"
+updated = 2026-09-28
+ja4 = "t13d2014h2_a09f3c656075_e42f34c56612"
+ja3n_hash = "44f7ed5185d22c92b96da72dbe68d307"
+ja3_hash = "773906b0efdefa24a7f2b8eb6985bf37"
+akamai_hash = "c52879e43202aeb92740be6e8c86ea96"
+akamai_text = "2:0;3:100;4:2097152;9:1|10420225|0|m,s,a,p"
+
+[[reference]]
+id = "safari-26"
+about = "Safari from macOS/iOS 26 on: X25519MLKEM768, AES-256 first, only TLS 1.2/1.3."
+source = "Safari on macOS and iOS 26 and 27 (X25519MLKEM768): real Safari 26.1 to 26.5, 26.6.2 and 27.0 on macOS 26.1 to 27.0, and the iOS 26.0 to 27.0 simulators"
+updated = 2026-09-28
+ja4 = "t13d2013h2_a09f3c656075_7f0f34a4126d"
+ja3n_hash = "63eaa93caec132011d68ceb96955c1ee"
+ja3_hash = "ecdf4f49dd59effc439639da29186671"
+akamai_hash = "c52879e43202aeb92740be6e8c86ea96"
+akamai_text = "2:0;3:100;4:2097152;9:1|10420225|0|m,s,a,p"
+
+[[reference]]
+id = "safari-quic-sha1"
+about = "Safari's QUIC `ClientHello` with `ecdsa_sha1`: macOS 14/15.0 and iOS 17 (and macOS 15.1, reached only through the DNS HTTPS record)."
+source = "QUIC JA4 of real Safari 17.6 on macOS 14.6, 18.0 on macOS 14.7 and 15.0, and the iOS 17.0.1 and 17.5 simulators"
+updated = 2026-09-28
+quic_ja4 = "q13d0311h3_55b375c5d22e_0e9637bee5d3"
+
+[[reference]]
+id = "safari-quic"
+about = "Safari's QUIC `ClientHello` without `ecdsa_sha1`, from macOS 15.2/iOS 18.3 on."
+source = "QUIC JA4 of real Safari on macOS 15.2 to 27.0 and the iOS 18.3.1 to 27.0 simulators"
+updated = 2026-09-28
+quic_ja4 = "q13d0311h3_55b375c5d22e_f2a83c8e78ae"
+
+[[reference]]
+id = "okhttp4"
+about = "`OkHttp` 4: Conscrypt's cipher order."
+source = "OkHttp 4.12.0 (default OkHttpClient) on a Pixel 9 Pro XL with Android 17 (tls.browserleaks.com and ClientHello captures)"
+updated = 2026-09-28
+ja4 = "t13d1513h2_8daaf6152771_eca864cca44a"
+ja3n_hash = "b6c462146270c94ed8e339bcf4fff25f"
+ja3_hash = "f79b6bad2ad0641e1921aef10262856b"
+akamai_hash = "605a1154008045d7e3cb3c6fb062c0ce"
+akamai_text = "4:16777216|16711681|0|m,p,a,s"
+covers = [
+  { browser = "okhttp", from = 4, to = 4, os = ["android"] },
+]
+
+[[reference]]
+id = "okhttp5"
+about = "`OkHttp` 5: the cipher order of its connection spec."
+source = "OkHttp 5.5.0 (default OkHttpClient) on a Pixel 9 Pro XL with Android 17 (tls.browserleaks.com and ClientHello captures)"
+updated = 2026-09-28
+ja4 = "t13d1513h2_8daaf6152771_eca864cca44a"
+ja3n_hash = "ab22845823d9af0946cb87050d0a5679"
+ja3_hash = "1d714db2228763eab228fc28ce7f8e4f"
+akamai_hash = "605a1154008045d7e3cb3c6fb062c0ce"
+akamai_text = "4:16777216|16711681|0|m,p,a,s"
+covers = [
+  { browser = "okhttp", from = 5, to = 5, os = ["android"] },
+]

@@ -108,7 +108,7 @@ tempfile = "3"
 # Builds the DNS HTTPS-record answers of tests/https_rr.rs's fake nameserver
 # (the crate's own copy is behind the optional "doh" feature).
 hickory-proto = "0.25"
-# Reads data/releases.toml for tests/generated.rs
+# Reads data/*.toml for tests/generated.rs
 toml = "0.9"
 # Self-dependency with the "test-util" feature enabled: lets the integration tests under
 # tests/ use CertAuthority (crate-internal otherwise) as a certificate-minting fixture, the

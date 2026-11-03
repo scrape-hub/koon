@@ -1,6 +1,7 @@
 //! The option docs and types of the bindings, generated from `koon_core::options::OPTIONS`, and
-//! the release tables of the profiles, generated from `data/releases.toml`. The test fails when a
-//! generated part is out of date; `KOON_BLESS=1` rewrites it.
+//! the release tables and fingerprint references of the profiles, generated from `data/releases.toml`
+//! and `data/references.toml`. The test fails when a generated part is out of date; `KOON_BLESS=1`
+//! rewrites it.
 
 use std::path::{Path, PathBuf};
 
@@ -1006,9 +1007,144 @@ fn releases() -> Result<(), String> {
     write_file("crates/core/src/profile/safari/versions.rs", &safari)
 }
 
+// --- Fingerprint references ---------------------------------------------------------------------
+
+const REFERENCES: &str = "crates/core/data/references.toml";
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct References {
+    reference: Vec<ReferenceEntry>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReferenceEntry {
+    id: String,
+    about: String,
+    source: String,
+    updated: toml::value::Datetime,
+    ja4: Option<String>,
+    ja3n_hash: Option<String>,
+    ja3_hash: Option<String>,
+    akamai_hash: Option<String>,
+    akamai_text: Option<String>,
+    quic_ja4: Option<String>,
+    server_padding: Option<String>,
+    #[serde(default)]
+    covers: Vec<Covers>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Covers {
+    browser: String,
+    from: u32,
+    to: u32,
+    os: Vec<String>,
+}
+
+/// The Rust name of a reference: its id in upper case, `-` and `.` as `_`.
+fn reference_const(id: &str) -> String {
+    id.chars()
+        .map(|c| {
+            if c == '-' || c == '.' {
+                '_'
+            } else {
+                c.to_ascii_uppercase()
+            }
+        })
+        .collect()
+}
+
+fn references() -> Result<(), String> {
+    let text = std::fs::read_to_string(repo().join(REFERENCES))
+        .map_err(|e| format!("{REFERENCES}: {e}"))?;
+    let data: References = toml::from_str(&text).map_err(|e| format!("{REFERENCES}: {e}"))?;
+    let ids: Vec<&str> = data.reference.iter().map(|r| r.id.as_str()).collect();
+
+    let mut out = format!(
+        "// Generated from {REFERENCES} by crates/core/tests/generated.rs (KOON_BLESS=1); edit that \
+         file.\n\nuse crate::{{Browser, Os}};\n\nuse super::{{Coverage, Reference}};\n"
+    );
+    let mut tls_covers = String::new();
+    let mut quic_covers = String::new();
+    let mut padding = String::new();
+    for (i, r) in data.reference.iter().enumerate() {
+        if ids[..i].contains(&r.id.as_str()) {
+            return Err(format!("{REFERENCES}: '{}' is listed twice", r.id));
+        }
+        let name = reference_const(&r.id);
+        let value = |v: &Option<String>| match v {
+            Some(v) => format!("Some({v:?})"),
+            None => "None".to_string(),
+        };
+        out.push_str(&format!(
+            "\n/// {}\n///\n/// Updated {}.\npub(crate) const {name}: Reference = Reference {{\n    \
+             id: {:?},\n    source: {:?},\n    ja4: {},\n    ja3n_hash: {},\n    ja3_hash: {},\n    \
+             akamai_hash: {},\n    akamai_text: {},\n    quic_ja4: {},\n}};\n",
+            r.about,
+            r.updated,
+            r.id,
+            r.source,
+            value(&r.ja4),
+            value(&r.ja3n_hash),
+            value(&r.ja3_hash),
+            value(&r.akamai_hash),
+            value(&r.akamai_text),
+            value(&r.quic_ja4),
+        ));
+        if let Some(padded) = &r.server_padding {
+            if !ids.contains(&padded.as_str()) {
+                return Err(format!("{REFERENCES}: {}: no reference '{padded}'", r.id));
+            }
+            padding.push_str(&format!("    (&{name}, &{}),\n", reference_const(padded)));
+        }
+        // TLS references first: `references_for` lists a profile's TLS reference before its QUIC one.
+        let covers = if r.ja4.is_some() || r.akamai_text.is_some() {
+            &mut tls_covers
+        } else {
+            &mut quic_covers
+        };
+        for c in &r.covers {
+            let browser = koon_core::Browser::ALL
+                .into_iter()
+                .find(|b| b.name() == c.browser)
+                .ok_or_else(|| format!("{REFERENCES}: {}: no browser '{}'", r.id, c.browser))?;
+            let os =
+                c.os.iter()
+                    .map(|os| {
+                        os.parse::<koon_core::Os>()
+                            .map(|os| format!("Os::{os:?}"))
+                            .map_err(|_| format!("{REFERENCES}: {}: no OS '{os}'", r.id))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+            if c.from > c.to || c.os.is_empty() {
+                return Err(format!("{REFERENCES}: {}: empty range", r.id));
+            }
+            covers.push_str(&format!(
+                "    Coverage {{ browser: Browser::{browser:?}, from: ({}, 0), to: ({}, 0), os: &[{}], \
+                 reference: &{name} }},\n",
+                c.from,
+                c.to,
+                os.join(", ")
+            ));
+        }
+    }
+    out.push_str(&format!(
+        "\n/// The reference a client in Chrome's `PqcBandwidthExperiment` is compared with instead of \
+         another.\npub(super) const SERVER_PADDING_VARIANTS: &[(&Reference, &Reference)] = &[\n{padding}];\n"
+    ));
+    out.push_str(&format!(
+        "\n/// Which reference applies where, for every browser but Safari.\npub(super) const COVERAGE: \
+         &[Coverage] = &[\n{tls_covers}{quic_covers}];\n"
+    ));
+    write_file("crates/core/src/verify/references.rs", &out)
+}
+
 #[test]
 fn generated_files_are_current() {
-    let stale: Vec<String> = [node(), python(), r(), releases()]
+    let stale: Vec<String> = [node(), python(), r(), releases(), references()]
         .into_iter()
         .filter_map(Result::err)
         .collect();

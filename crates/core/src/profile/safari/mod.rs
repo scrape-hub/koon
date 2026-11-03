@@ -5,9 +5,10 @@ use crate::http2::config::{HeaderCompression, HeadersPriority, SettingId};
 use crate::quic::QuicStack;
 #[cfg(test)]
 use crate::tls::config::TlsVersion;
-use crate::verify::{
-    Reference, SAFARI_15_1, SAFARI_15_2, SAFARI_15_4, SAFARI_26, SAFARI_IOS_16, SAFARI_IOS_17,
-    SAFARI_MACOS_12_13, SAFARI_MACOS_14, SAFARI_QUIC, SAFARI_QUIC_SHA1,
+use crate::verify::Reference;
+use crate::verify::references::{
+    SAFARI_15_1, SAFARI_15_2, SAFARI_15_4, SAFARI_26, SAFARI_IOS16, SAFARI_IOS17,
+    SAFARI_MACOS12_13, SAFARI_MACOS14, SAFARI_QUIC, SAFARI_QUIC_SHA1,
 };
 
 use super::{BrowserProfile, HeaderFamily, LanguageSource, Os, check_platform};
@@ -209,7 +210,7 @@ const MACOS_14: Release = Release {
     },
     quic_supported: true,
     captured: Some("macOS 14.6/14.7"),
-    reference: Some(&SAFARI_MACOS_14),
+    reference: Some(&SAFARI_MACOS14),
 };
 /// macOS 12 Monterey: the TLS and HTTP/2 layer of macOS 14 (same JA4, same HEADERS layout), but
 /// without `SETTINGS_ENABLE_PUSH` and without HTTP/3 at all: no QUIC packet and no DNS HTTPS
@@ -220,7 +221,7 @@ const MACOS_12: Release = Release {
     http2_enable_push: false,
     quic_supported: false,
     captured: Some("macOS 12.5/12.6"),
-    reference: Some(&SAFARI_MACOS_12_13),
+    reference: Some(&SAFARI_MACOS12_13),
     ..MACOS_14
 };
 /// macOS 13 Ventura: the TLS and HTTP/2 layer of macOS 14 without `SETTINGS_ENABLE_PUSH` (like
@@ -234,7 +235,7 @@ const MACOS_13: Release = Release {
         ..QUIC_SONOMA
     },
     captured: Some("macOS 13.0"),
-    reference: Some(&SAFARI_MACOS_12_13),
+    reference: Some(&SAFARI_MACOS12_13),
     ..MACOS_14
 };
 /// macOS 13.6: captured to send exactly the stack of macOS 13.0 (TLS with `ecdsa_sha1`, no
@@ -402,7 +403,7 @@ const MACOS_27: Release = Release {
 const IOS_16: Release = Release {
     http2_enable_push: false,
     captured: Some("iOS 16.0/16.1"),
-    reference: Some(&SAFARI_IOS_16),
+    reference: Some(&SAFARI_IOS16),
     quic: Quic {
         captured: Some("iOS 16.0/16.1"),
         reference: Some(&SAFARI_QUIC_SHA1),
@@ -430,7 +431,7 @@ const IOS_17: Release = Release {
         ..QUIC_SONOMA
     },
     captured: Some("iOS 17.0.1"),
-    reference: Some(&SAFARI_IOS_17),
+    reference: Some(&SAFARI_IOS17),
     ..MACOS_14
 };
 /// The TLS of iOS 17, the HTTP/2 layer of iOS 18. iOS 18.0 to 18.2 sent no QUIC in any capture
