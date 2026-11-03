@@ -109,7 +109,6 @@ Every fingerprint change of every browser is checked against captures from the r
 |---|---|---|---|
 | indeed.com | 403 | 403 | 200 |
 | bloomberg.com | 403 | 403 | 200 |
-| reuters.com | 401 | 401 | 200 |
 | tripadvisor.com | 403 | 403 | 200 |
 | expedia.com | 429 | 429 | 200 |
 | stockx.com | 403 | 403 | 200 |
