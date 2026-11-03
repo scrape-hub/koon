@@ -11,7 +11,9 @@ keywords = ["tls-fingerprint", "browser-impersonation", "anti-bot", "web-scrapin
 categories = ["web-programming::http-client", "network-programming"]
 
 [features]
-default = ["socks"]
+# `doh` is on by default: without it a profile reaches neither HTTP/3 nor real
+# ECH from DNS HTTPS records, unlike the browser it stands for.
+default = ["socks", "doh"]
 socks = ["dep:tokio-socks"]
 # HTTPS/SVCB DNS record support: DNS-over-HTTPS plus ECH, and the plain
 # (non-DoH) query a profile's default configuration uses instead.

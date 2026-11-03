@@ -46,6 +46,10 @@ jobs:
       - name: Run clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      # The default features include `doh`; the core also builds without it.
+      - name: Run clippy without default features
+        run: cargo clippy -p koon-core --no-default-features --features socks --all-targets -- -D warnings
+
       # The workspace's default member is koon-core only; koon-node and
       # koon-python are cdylibs tested by their own jobs below.
       - name: Run tests

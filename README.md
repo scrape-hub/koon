@@ -164,7 +164,7 @@ Chrome Mobile and Firefox Mobile send their desktop counterpart's fingerprint wi
 
 - **Fingerprints on every layer**: TLS, HTTP/2 and HTTP/3 as in the table above; header order, casing and values of navigations, form posts, fetch() calls and WebSocket handshakes, with cookie, referer, origin and your own headers where the browser puts them; the client hints Chromium sends when a site asks for them
 - **HTTP/3 like the browser**: found through Alt-Svc or, on the first connection, the DNS HTTPS record; racing TCP like Chrome or straight to QUIC like Safari, with fallback to TCP; 0-RTT on resumed connections
-- **Encrypted Client Hello and DNS**: real ECH from DNS HTTPS records over TCP and QUIC, read over DNS-over-HTTPS (Cloudflare, Google) or, as Chrome and Firefox do by default, with a plain query to the system's nameserver; ECH GREASE in the browser's shape otherwise (needs the `doh` feature in Rust)
+- **Encrypted Client Hello and DNS**: real ECH from DNS HTTPS records over TCP and QUIC, read over DNS-over-HTTPS (Cloudflare, Google) or, as Chrome and Firefox do by default, with a plain query to the system's nameserver; ECH GREASE in the browser's shape otherwise
 - **Chrome's field trials**: while a Chrome field trial runs, a client may be enrolled like a slice of real Chrome installations; the handshake-padding trial ran until 2026-10-30, and `serverPadding`, `server_padding` or `--server-padding` still pin one of its groups
 - **Fingerprint self-test**: `koon verify` checks your installed koon against the real browsers' fingerprints (see [below](#fingerprint-self-test))
 - **TLS sessions and certificates**: session tickets per origin, used once, over TCP and QUIC; certificates verified against Mozilla's roots plus every trust anchor of the Chrome Root Store
@@ -648,8 +648,9 @@ one fits (6 host not resolved, 7 connection failed, 22 HTTP error with
 ```toml
 [dependencies]
 koon-core = { git = "https://github.com/scrape-hub/koon.git" }
-# DNS-over-HTTPS and ECH from DNS HTTPS records need the `doh` feature:
-# koon-core = { git = "https://github.com/scrape-hub/koon.git", features = ["doh"] }
+# Without the default `doh` feature, profiles find neither HTTP/3 nor real ECH
+# from DNS HTTPS records:
+# koon-core = { git = "https://github.com/scrape-hub/koon.git", default-features = false, features = ["socks"] }
 ```
 
 BoringSSL is built with the optimisation level of your profile. Debug builds

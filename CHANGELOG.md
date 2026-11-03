@@ -21,6 +21,10 @@ Rust only:
 
 - Linux arm64 packages for Node, Python and the CLI.
 
+### Changed
+
+- Rust: `doh` is a default feature of `koon-core`.
+
 ### Fixed
 
 **Cookies**
