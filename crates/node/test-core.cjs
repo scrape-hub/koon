@@ -240,6 +240,13 @@ async function testCookies() {
   client.setCookies(client.cookies());
   check('export feeds straight back into setCookies', client.cookies().length === 1);
 
+  client.setCookies([{ name: 'unset', value: 'v', domain: 'example.com' }]);
+  const unset = client.cookies().find((c) => c.name === 'unset');
+  check('a cookie without sameSite is exported without one', !('sameSite' in unset) || unset.sameSite === undefined, JSON.stringify(unset));
+  client.setCookies([unset]);
+  const again = client.cookies().find((c) => c.name === 'unset');
+  check('and stays without one when it comes back', again.sameSite === undefined, JSON.stringify(again));
+
   client.setCookies([{ name: 'wide', value: 'v', domain: '.Example.com', expires: 1893456000 }]);
   const wide = client.cookies().find((c) => c.name === 'wide');
   check('domain cookie keeps the leading dot, lowercased', wide.domain === '.example.com', wide.domain);

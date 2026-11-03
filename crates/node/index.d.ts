@@ -330,7 +330,11 @@ export interface KoonCookie {
   secure?: boolean;
   /** Not accessible via JavaScript. Defaults to false. */
   httpOnly?: boolean;
-  /** SameSite policy, case-insensitive. Defaults to 'Lax'. */
+  /**
+   * SameSite policy, case-insensitive. Without it the cookie has none, which
+   * Chromium profiles treat as 'Lax' and Firefox and Safari as 'None';
+   * `cookies()` then omits it.
+   */
   sameSite?: 'Strict' | 'Lax' | 'None' | 'strict' | 'lax' | 'none';
   /** Only send to the exact domain. Defaults to whether `domain` has no leading dot (true with `url`). */
   hostOnly?: boolean;

@@ -111,7 +111,8 @@ lines of a saved session file, as \code{readLines()} returns them.}
 \item{\verb{$cookies()}}{All stored cookies as a data frame with Playwright's
 field names: \code{name}, \code{value}, \code{domain} (with a leading dot for domain
 cookies), \code{path}, \code{expires} (Unix seconds, -1 for session cookies),
-\code{httpOnly}, \code{secure}, \code{sameSite}, \code{hostOnly}.}
+\code{httpOnly}, \code{secure}, \code{sameSite} (\code{NA} for a cookie without one),
+\code{hostOnly}.}
 \item{\verb{$set_cookies(cookies)}}{Import cookies, e.g. from a browser via
 Playwright or CDP: a data frame like the one \verb{$cookies()} returns
 (\code{jsonlite::fromJSON()} of Playwright's \code{cookies()} gives one) or a list

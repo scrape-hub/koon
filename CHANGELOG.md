@@ -7,11 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Breaking changes
+
+- A cookie without SameSite keeps none; `cookies()` leaves `sameSite` out for it.
+
+Rust only:
+
+- New variant `SameSite::Unspecified`.
+
 ### Added
 
 - Linux arm64 packages for Node, Python and the CLI.
 
 ### Fixed
+
+**Cookies**
+
+- Cookies without SameSite count as Lax for Chromium profiles, as None for
+  Firefox and Safari.
 
 **Requests and connections**
 

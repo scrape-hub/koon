@@ -169,6 +169,8 @@ struct Hop {
     client_headers: Vec<(String, String)>,
     request_headers: Vec<(String, String)>,
     source: HeaderSource,
+    /// An earlier hop of this request's redirect chain was on another site.
+    cross_site_redirect: bool,
 }
 
 impl Hop {
@@ -185,6 +187,7 @@ impl Hop {
             client_headers: self.client_headers.clone(),
             request_headers: self.request_headers.clone(),
             source: self.source.clone(),
+            cross_site_redirect: self.cross_site_redirect,
         })
     }
 
@@ -217,6 +220,10 @@ impl Hop {
             if let HeaderSource::Raw(raw) = &mut self.source {
                 strip_body_headers(raw);
             }
+        }
+        let hosts = (self.url.host(), next.host());
+        if let (Some(from), Some(to)) = hosts {
+            self.cross_site_redirect |= !crate::util::same_site(from, to);
         }
         self.url = next;
         Ok(())
@@ -404,6 +411,7 @@ impl super::Client {
             client_headers: self.custom_headers.clone(),
             request_headers: options.headers.clone(),
             source,
+            cross_site_redirect: false,
         };
         // Where a Critical-CH restart starts over; a stream body cannot be sent again, which leaves
         // the current hop to repeat.
@@ -471,10 +479,21 @@ impl super::Client {
     ) -> Result<HopOutcome, ExchangeError> {
         self.fire_on_request(options, hop.method.as_str(), &hop.url)
             .map_err(ExchangeError::Invalid)?;
-        let cookie = self
-            .cookie_jar
-            .as_ref()
-            .and_then(|jar| crate::util::lock_recover(jar).cookie_header(&hop.url));
+        let cookie = self.cookie_jar.as_ref().and_then(|jar| {
+            let (client, request) = match &hop.source {
+                HeaderSource::Raw(raw) => (&[][..], raw.as_slice()),
+                HeaderSource::Profile => (&hop.client_headers[..], &hop.request_headers[..]),
+            };
+            let context = headers::cookie_context(
+                headers::Family::of(&self.profile),
+                &hop.method,
+                &hop.url,
+                client,
+                request,
+                hop.cross_site_redirect,
+            );
+            crate::util::lock_recover(jar).cookie_header_for(&hop.url, &context)
+        });
 
         let mut parts = self
             .exchange(

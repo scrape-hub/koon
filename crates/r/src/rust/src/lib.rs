@@ -986,6 +986,11 @@ impl Koon {
         let text = |get: fn(&CookieParams) -> Option<&str>| -> Vec<&str> {
             cookies.iter().map(|c| get(c).unwrap_or_default()).collect()
         };
+        // NA for a cookie without SameSite, which set_cookies() reads back as none.
+        let mut same_site = Strings::new(cookies.len());
+        for (i, c) in cookies.iter().enumerate() {
+            same_site.set_elt(i, Rstr::from(c.same_site.clone()));
+        }
         data_frame!(
             name = text(|c| Some(&c.name)),
             value = text(|c| Some(&c.value)),
@@ -997,7 +1002,7 @@ impl Koon {
                 .collect::<Vec<f64>>(),
             httpOnly = cookies.iter().map(|c| c.http_only).collect::<Vec<bool>>(),
             secure = cookies.iter().map(|c| c.secure).collect::<Vec<bool>>(),
-            sameSite = text(|c| c.same_site.as_deref()),
+            sameSite = same_site,
             hostOnly = cookies
                 .iter()
                 .map(|c| c.host_only.unwrap_or(false))

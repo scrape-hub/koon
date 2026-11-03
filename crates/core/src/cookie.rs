@@ -43,6 +43,8 @@ pub enum SameSite {
     Strict,
     /// Cookie is sent with all requests (requires `Secure`).
     None,
+    /// No (valid) attribute: Chromium treats the cookie as `Lax`, Firefox and Safari as `None`.
+    Unspecified,
 }
 
 impl SameSite {
@@ -58,11 +60,66 @@ impl SameSite {
         .map(|(_, same_site)| same_site)
     }
 
-    const fn as_str(self) -> &'static str {
+    /// The attribute value; `None` for [`SameSite::Unspecified`], which has none.
+    const fn as_str(self) -> Option<&'static str> {
         match self {
-            Self::Strict => "Strict",
-            Self::Lax => "Lax",
-            Self::None => "None",
+            Self::Strict => Some("Strict"),
+            Self::Lax => Some("Lax"),
+            Self::None => Some("None"),
+            Self::Unspecified => None,
+        }
+    }
+}
+
+/// How a browser engine applies `SameSite` when it sends cookies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SameSiteRules {
+    /// Chromium: an unspecified cookie counts as `Lax`, except that one younger than
+    /// [`LAX_ALLOW_UNSAFE_MAX_AGE`] also goes with a cross-site top-level navigation of an unsafe
+    /// method (`CookieBase::IncludeForRequestURL`, "Lax-allowing-unsafe").
+    Chromium,
+    /// Firefox and Safari: an unspecified cookie counts as `None`.
+    UnspecifiedIsNone,
+    /// `OkHttp` and other clients: `SameSite` is never evaluated.
+    Ignored,
+}
+
+/// Chromium's `kLaxAllowUnsafeMaxAge` (`net/cookies/cookie_constants.cc`).
+const LAX_ALLOW_UNSAFE_MAX_AGE: Duration = Duration::from_secs(2 * 60);
+
+/// The request a cookie would go with, as `SameSite` sees it (RFC 6265bis §5.8.3).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct CookieContext {
+    /// The request is same-site with the page it comes from (or comes from no page).
+    pub same_site: bool,
+    /// A top-level navigation (a link, a typed URL or a form submission).
+    pub top_level_navigation: bool,
+    /// The method is GET, HEAD, OPTIONS or TRACE (`HttpUtil::IsMethodSafe`,
+    /// `nsHttpRequestHead::IsSafeMethod`).
+    pub safe_method: bool,
+    pub rules: SameSiteRules,
+}
+
+impl CookieContext {
+    /// Whether `cookie` goes with this request.
+    fn includes(&self, cookie: &Cookie, now: SystemTime) -> bool {
+        if self.same_site || self.rules == SameSiteRules::Ignored {
+            return true;
+        }
+        let lax = self.top_level_navigation && self.safe_method;
+        match cookie.same_site {
+            SameSite::Strict => false,
+            SameSite::Lax => lax,
+            SameSite::None => true,
+            SameSite::Unspecified => match self.rules {
+                SameSiteRules::Chromium => {
+                    lax || (self.top_level_navigation
+                        && now
+                            .duration_since(cookie.creation_time)
+                            .is_ok_and(|age| age < LAX_ALLOW_UNSAFE_MAX_AGE))
+                }
+                SameSiteRules::UnspecifiedIsNone | SameSiteRules::Ignored => true,
+            },
         }
     }
 }
@@ -270,8 +327,21 @@ impl CookieJar {
         self.cookies.retain(|_| !evict.next().unwrap_or(false));
     }
 
-    /// Build a Cookie header value for the given URL. Returns None if no cookies match.
+    /// Build a Cookie header value for the given URL, as for a same-site request. Returns None if
+    /// no cookies match.
     pub fn cookie_header(&self, url: &Uri) -> Option<String> {
+        let context = CookieContext {
+            same_site: true,
+            top_level_navigation: true,
+            safe_method: true,
+            rules: SameSiteRules::Ignored,
+        };
+        self.cookie_header_for(url, &context)
+    }
+
+    /// Build the Cookie header of a request in `context`: `SameSite` decides which matching
+    /// cookies go with it. Returns None if no cookies match.
+    pub(crate) fn cookie_header_for(&self, url: &Uri, context: &CookieContext) -> Option<String> {
         let host = url.host()?.to_ascii_lowercase();
         let path = url.path();
         let secure = is_secure_origin(url, &host);
@@ -289,6 +359,7 @@ impl CookieJar {
                         domain_matches(&host, &c.domain)
                     }
                     && path_matches(path, &c.path)
+                    && context.includes(c, now)
             })
             .collect();
         if matching.is_empty() {
@@ -505,7 +576,7 @@ impl CookieParams {
             }
         };
         let same_site = match self.same_site.as_deref() {
-            None => SameSite::Lax,
+            None => SameSite::Unspecified,
             Some(value) => {
                 SameSite::parse(value).ok_or("sameSite must be 'Strict', 'Lax' or 'None'")?
             }
@@ -565,7 +636,7 @@ impl From<&Cookie> for CookieParams {
             expires: Some(expires),
             http_only: cookie.http_only,
             secure: cookie.secure,
-            same_site: Some(cookie.same_site.as_str().to_string()),
+            same_site: cookie.same_site.as_str().map(str::to_string),
             host_only: Some(cookie.host_only),
             partition_key: None,
         }
@@ -790,7 +861,7 @@ fn parse_attributes<'a>(parts: impl Iterator<Item = &'a str>, now: SystemTime) -
         http_only: false,
         max_age: None,
         expires: None,
-        same_site: SameSite::Lax,
+        same_site: SameSite::Unspecified,
     };
     for attribute in parts {
         let (key, value) = match attribute.split_once('=') {
@@ -818,8 +889,10 @@ fn parse_attributes<'a>(parts: impl Iterator<Item = &'a str>, now: SystemTime) -
                     attrs.expires = Some(time.min(now + MAX_COOKIE_AGE));
                 }
             }
-            // An unknown value leaves the default (Lax).
-            "samesite" => attrs.same_site = SameSite::parse(value).unwrap_or(SameSite::Lax),
+            // RFC 6265bis §5.6.7: an unknown value is ignored.
+            "samesite" => {
+                attrs.same_site = SameSite::parse(value).unwrap_or(SameSite::Unspecified);
+            }
             _ => {}
         }
     }
@@ -1063,6 +1136,134 @@ mod tests {
             same_site: SameSite::Lax,
             host_only,
             creation_time: SystemTime::now(),
+        }
+    }
+
+    /// The cookies a request from `referer` (none: typed URL) with `method` to `url` carries, for a
+    /// jar that got `set_cookies` from `url` `age` ago.
+    fn sent(
+        family: crate::profile::HeaderFamily,
+        set_cookies: &[&str],
+        age: Duration,
+        method: &str,
+        url: &str,
+        headers: &[(&str, &str)],
+    ) -> Option<String> {
+        let mut jar = CookieJar::new();
+        store(&mut jar, url, set_cookies);
+        for cookie in &mut jar.cookies {
+            cookie.creation_time -= age;
+        }
+        let headers: Vec<(String, String)> = headers
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        let method: http::Method = method.parse().unwrap();
+        let context = crate::client::headers::cookie_context(
+            family,
+            &method,
+            &uri(url),
+            &[],
+            &headers,
+            false,
+        );
+        jar.cookie_header_for(&uri(url), &context)
+    }
+
+    const ALL: &[&str] = &[
+        "strict=1; SameSite=Strict",
+        "lax=1; SameSite=Lax",
+        "none=1; SameSite=None; Secure",
+        "unset=1",
+    ];
+    const OLD: Duration = Duration::from_secs(600);
+    const CROSS_SITE: (&str, &str) = ("Referer", "https://other.example/page");
+
+    #[test]
+    fn same_site_requests_carry_every_cookie() {
+        use crate::profile::HeaderFamily::{Chromium, Firefox, Safari};
+        for family in [Chromium, Firefox, Safari] {
+            for headers in [&[][..], &[("Referer", "https://www.example.com/")][..]] {
+                let cookies = sent(family, ALL, OLD, "GET", "https://example.com/", headers);
+                assert_eq!(cookies.as_deref(), Some("strict=1; lax=1; none=1; unset=1"));
+            }
+        }
+    }
+
+    #[test]
+    fn chromium_cross_site_requests_follow_same_site_with_unspecified_as_lax() {
+        use crate::profile::HeaderFamily::Chromium;
+        let url = "https://example.com/";
+        // A link from another site: Lax and unspecified go along, Strict does not.
+        let link = sent(Chromium, ALL, OLD, "GET", url, &[CROSS_SITE]);
+        assert_eq!(link.as_deref(), Some("lax=1; none=1; unset=1"));
+        // fetch() from another site: only None.
+        let fetch = [CROSS_SITE, ("Accept", "*/*")];
+        assert_eq!(
+            sent(Chromium, ALL, OLD, "GET", url, &fetch).as_deref(),
+            Some("none=1")
+        );
+        // A cross-site form POST: None, and an unspecified cookie under 2 minutes old.
+        let form = [
+            CROSS_SITE,
+            ("Content-Type", "application/x-www-form-urlencoded"),
+        ];
+        assert_eq!(
+            sent(Chromium, ALL, OLD, "POST", url, &form).as_deref(),
+            Some("none=1")
+        );
+        let young = Duration::from_secs(30);
+        assert_eq!(
+            sent(Chromium, ALL, young, "POST", url, &form).as_deref(),
+            Some("none=1; unset=1")
+        );
+    }
+
+    #[test]
+    fn firefox_and_safari_treat_unspecified_as_none() {
+        use crate::profile::HeaderFamily::{Firefox, Safari};
+        let fetch = [CROSS_SITE, ("Accept", "*/*")];
+        for family in [Firefox, Safari] {
+            let cookies = sent(family, ALL, OLD, "GET", "https://example.com/", &fetch);
+            assert_eq!(cookies.as_deref(), Some("none=1; unset=1"));
+        }
+    }
+
+    #[test]
+    fn okhttp_ignores_same_site() {
+        let fetch = [CROSS_SITE, ("Accept", "*/*")];
+        let cookies = sent(
+            crate::profile::HeaderFamily::OkHttp,
+            ALL,
+            OLD,
+            "GET",
+            "https://example.com/",
+            &fetch,
+        );
+        assert_eq!(cookies.as_deref(), Some("strict=1; lax=1; none=1; unset=1"));
+    }
+
+    #[test]
+    fn chromium_compares_sites_with_their_scheme() {
+        use crate::profile::HeaderFamily::{Chromium, Firefox};
+        let from_http = [("Referer", "http://example.com/"), ("Accept", "*/*")];
+        let url = "https://example.com/";
+        let chromium = sent(Chromium, ALL, OLD, "GET", url, &from_http);
+        assert_eq!(chromium.as_deref(), Some("none=1"));
+        let firefox = sent(Firefox, ALL, OLD, "GET", url, &from_http);
+        assert_eq!(firefox.as_deref(), Some("strict=1; lax=1; none=1; unset=1"));
+    }
+
+    #[test]
+    fn a_cross_site_redirect_makes_firefox_and_safari_requests_cross_site() {
+        use crate::profile::HeaderFamily::{Chromium, Firefox, Safari};
+        let method = http::Method::GET;
+        let url = uri("https://example.com/");
+        for (family, same_site) in [(Chromium, true), (Firefox, false), (Safari, false)] {
+            let context =
+                crate::client::headers::cookie_context(family, &method, &url, &[], &[], true);
+            assert_eq!(context.same_site, same_site, "{family:?}");
+            assert!(context.top_level_navigation && context.safe_method);
         }
     }
 
@@ -1661,11 +1862,11 @@ mod tests {
             parse("c=3; SameSite=None; Secure").unwrap().same_site,
             SameSite::None
         );
-        // Default and unknown values: Lax.
-        assert_eq!(parse("d=4").unwrap().same_site, SameSite::Lax);
+        // Default and unknown values: unspecified.
+        assert_eq!(parse("d=4").unwrap().same_site, SameSite::Unspecified);
         assert_eq!(
             parse("e=5; SameSite=bogus").unwrap().same_site,
-            SameSite::Lax
+            SameSite::Unspecified
         );
     }
 

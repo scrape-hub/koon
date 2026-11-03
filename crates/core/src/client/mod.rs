@@ -946,10 +946,22 @@ impl Client {
             .as_str()
             .parse()
             .map_err(|_| Error::Url(url::ParseError::InvalidDomainCharacter))?;
-        let cookie = self
-            .cookie_jar
-            .as_ref()
-            .and_then(|jar| crate::util::lock_recover(jar).cookie_header(&http_uri));
+        // A handshake is no navigation: Origin (the socket's own unless set) decides `SameSite`.
+        let cookie = self.cookie_jar.as_ref().and_then(|jar| {
+            let context = headers::cookie_context(
+                headers::Family::of(&self.profile),
+                &http::Method::GET,
+                &http_uri,
+                &self.custom_headers,
+                &extra_headers,
+                false,
+            );
+            let context = crate::cookie::CookieContext {
+                top_level_navigation: false,
+                ..context
+            };
+            crate::util::lock_recover(jar).cookie_header_for(&http_uri, &context)
+        });
 
         let target = ws::WsTarget {
             uri: &uri,

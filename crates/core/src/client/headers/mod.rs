@@ -17,6 +17,7 @@ use http::{Method, Uri};
 use super::client_hints::{self, ClientHintsState};
 use crate::profile::BrowserProfile;
 pub use crate::profile::HeaderFamily as Family;
+pub(crate) use fetch_metadata::cookie_context;
 use fetch_metadata::{apply_insecure_context, apply_mode, detect_mode, serialized_origin};
 pub use fetch_metadata::{builds_navigation, is_navigation, is_potentially_trustworthy};
 pub use order::host_header;

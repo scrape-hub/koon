@@ -9,10 +9,13 @@ test_that("cookies round-trip in the Playwright shape", {
   expect_true(cookies$httpOnly[cookies$name == "session"])
   expect_identical(cookies$expires[cookies$name == "session"], -1)
   expect_gt(cookies$expires[cookies$name == "theme"], as.numeric(Sys.time()))
+  # Set-Cookie without SameSite: NA, which set_cookies() reads back as none.
+  expect_true(all(is.na(cookies$sameSite)))
 
   other <- Koon$new()
   expect_identical(nrow(other$set_cookies(cookies)), 0L)
   expect_setequal(other$cookies()$name, c("session", "theme"))
+  expect_true(all(is.na(other$cookies()$sameSite)))
   expect_match(other$get(paste0(base, "/cookies"))$text, "session=abc123")
 
   # Playwright JSON via jsonlite, and a list of named lists

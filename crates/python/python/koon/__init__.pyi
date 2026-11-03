@@ -61,7 +61,9 @@ LocalAddress = Union[str, IPv4Address, IPv6Address]
 #   expires: float (unix seconds up to 253402300799; -1 or omitted/None
 #       means a session cookie; any other value skips the cookie)
 #   httpOnly, secure: bool
-#   sameSite: "Strict" | "Lax" | "None" (case-insensitive; default "Lax")
+#   sameSite: "Strict" | "Lax" | "None" (case-insensitive). Without it the
+#       cookie has none, which Chromium profiles treat as "Lax" and Firefox
+#       and Safari as "None"; `cookies()` then reports None.
 #   hostOnly: bool (overrides what domain/url imply)
 #   partitionKey: str | dict | None, the CHIPS partition key: Playwright's
 #       top-level site ("https://example.com") or CDP's {"topLevelSite": str,

@@ -58,6 +58,18 @@ def test_set_and_get_cookies_roundtrip():
     client.close()
 
 
+def test_a_cookie_without_same_site_keeps_none():
+    """No sameSite on import means none, not Lax: cookies() reports None, and
+    the export goes back in unchanged."""
+    client = KoonSync("chrome")
+    client.set_cookies([{"name": "unset", "value": "v", "domain": "example.com"}])
+    [cookie] = client.cookies()
+    assert cookie["sameSite"] is None
+    client.set_cookies([cookie])
+    assert client.cookies()[0]["sameSite"] is None
+    client.close()
+
+
 def test_cookie_from_url_is_host_only():
     client = KoonSync("chrome")
     client.set_cookies(

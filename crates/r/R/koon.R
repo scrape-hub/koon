@@ -110,7 +110,8 @@ NULL
 #'   \item{`$cookies()`}{All stored cookies as a data frame with Playwright's
 #'     field names: `name`, `value`, `domain` (with a leading dot for domain
 #'     cookies), `path`, `expires` (Unix seconds, -1 for session cookies),
-#'     `httpOnly`, `secure`, `sameSite`, `hostOnly`.}
+#'     `httpOnly`, `secure`, `sameSite` (`NA` for a cookie without one),
+#'     `hostOnly`.}
 #'   \item{`$set_cookies(cookies)`}{Import cookies, e.g. from a browser via
 #'     Playwright or CDP: a data frame like the one `$cookies()` returns
 #'     (`jsonlite::fromJSON()` of Playwright's `cookies()` gives one) or a list

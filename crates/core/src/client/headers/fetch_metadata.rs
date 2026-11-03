@@ -3,8 +3,9 @@
 use http::{Method, Uri};
 
 use super::order::host_header;
-use super::util::{header_value, is_get_or_head, merge_caller_headers, remove, set};
+use super::util::{header_value, is_get_or_head, merge_caller_headers, page_url, remove, set};
 use super::{Family, Mode};
+use crate::cookie::{CookieContext, SameSiteRules};
 use crate::util::same_site;
 
 /// The kind of request a browser would make with this method and these caller headers.
@@ -62,6 +63,56 @@ pub fn is_navigation(method: &Method, headers: &[(String, String)]) -> bool {
         ),
         Mode::Navigate | Mode::FormNavigate
     )
+}
+
+/// The `SameSite` context of a request with these caller headers. The page it comes from is the one
+/// `sec-fetch-site` derives from (Origin, else Referer); a request from no page is same-site.
+/// Chromium compares sites with their scheme and ignores redirects
+/// (`GetContextForCookieInclusion`, `kCookieSameSiteConsidersRedirectChain` off); Firefox and
+/// Safari compare without the scheme and treat a request that went through a cross-site redirect
+/// as cross-site (`CookieCommons::IsSameSiteForeign`, WebKit's `CachedResourceLoader`).
+pub(crate) fn cookie_context(
+    family: Family,
+    method: &Method,
+    uri: &Uri,
+    client: &[(String, String)],
+    request: &[(String, String)],
+    cross_site_redirect: bool,
+) -> CookieContext {
+    let rules = match family {
+        Family::Chromium => SameSiteRules::Chromium,
+        Family::Firefox | Family::Safari => SameSiteRules::UnspecifiedIsNone,
+        _ => SameSiteRules::Ignored,
+    };
+    let caller = merge_caller_headers(client, request);
+    let top_level_navigation = match header_value(&caller, "sec-fetch-mode") {
+        Some(mode) => mode.eq_ignore_ascii_case("navigate"),
+        None => is_navigation(method, &caller),
+    };
+    let initiator = header_value(&caller, "origin")
+        .map(str::to_string)
+        .or_else(|| {
+            header_value(&caller, "referer")
+                .and_then(page_url)
+                .map(|page| serialized_origin(&page))
+        });
+    let same_site = initiator.is_none_or(|initiator| {
+        if rules == SameSiteRules::Chromium {
+            compute_fetch_site(uri, &initiator) != "cross-site"
+        } else {
+            initiator
+                .parse::<Uri>()
+                .ok()
+                .and_then(|origin| Some(same_site(origin.host()?, uri.host()?)))
+                .unwrap_or(false)
+        }
+    }) && !(cross_site_redirect && rules != SameSiteRules::Chromium);
+    CookieContext {
+        same_site,
+        top_level_navigation,
+        safe_method: matches!(method.as_str(), "GET" | "HEAD" | "OPTIONS" | "TRACE"),
+        rules,
+    }
 }
 
 /// Adapt the navigation template's fetch metadata to the request. `initiator` is the origin of the
