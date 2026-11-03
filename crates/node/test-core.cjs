@@ -34,13 +34,13 @@ async function testEsmNamedImport() {
 async function testLatestProfiles() {
   console.log('latest profile of every browser resolves to the current core version');
   const expected = [
-    ['chrome', 'Chrome/155'],
-    ['firefox', 'Firefox/158'],
-    ['edge', 'Edg/154'],
-    ['opera', 'OPR/136'],
+    ['chrome', 'Chrome/157'],
+    ['firefox', 'Firefox/159'],
+    ['edge', 'Edg/156'],
+    ['opera', 'OPR/139'],
     ['safari', 'Version/27.0'],
-    ['chrome-mobile', 'Chrome/155'],
-    ['firefox-mobile', 'Firefox/158'],
+    ['chrome-mobile', 'Chrome/157'],
+    ['firefox-mobile', 'Firefox/159'],
     ['safari-mobile', 'Version/27.0'],
     ['okhttp', 'okhttp/5'],
   ];
