@@ -36,6 +36,7 @@ pub struct CookieJar {
 /// The `SameSite` cookie attribute (RFC 6265bis).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum SameSite {
     /// Cookie is sent with same-site and top-level navigation requests.
     Lax,

@@ -11,6 +11,7 @@ pub(crate) fn boxed<E: std::error::Error + Send + Sync + 'static>(e: E) -> Optio
 
 /// All errors that can occur when using the koon HTTP client.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum Error {
     /// `BoringSSL` TLS handshake or session error.
     #[error("TLS error: {0}")]

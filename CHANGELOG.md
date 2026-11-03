@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Rust only:
 
-- New variants `SameSite::Unspecified` and `Error::ResponseTooLarge`.
+- `Error` and `SameSite` are `#[non_exhaustive]`, with the new variants
+  `Error::ResponseTooLarge` and `SameSite::Unspecified`.
 - `ServerPaddingTrial` has an `ends_at` field, and `draw` takes the time.
 
 ### Added
