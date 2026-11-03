@@ -245,6 +245,8 @@ jobs:
             3.13
             3.14
             3.15
+            3.14t
+            3.15t
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
@@ -338,6 +340,8 @@ jobs:
             3.13
             3.14
             3.15
+            3.14t
+            3.15t
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
@@ -383,6 +387,8 @@ jobs:
             3.13
             3.14
             3.15
+            3.14t
+            3.15t
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
@@ -558,10 +564,21 @@ jobs:
         with:
           r-version: release
 
+      # The vignettes (rendered by R CMD build) need pandoc, knitr and rmarkdown.
+      - uses: r-lib/actions/setup-pandoc@v2
+
       # bash: PowerShell, the default on Windows, reads R as its Invoke-History alias
+      - name: Install the vignette tools
+        shell: bash
+        run: Rscript -e 'install.packages(c("knitr", "rmarkdown"), repos = "https://cloud.r-project.org")'
+
+      # From the source package R CMD build makes, so the binary package has the vignettes.
       - name: Build the binary package
         shell: bash
-        run: R CMD INSTALL --build crates/r
+        run: |
+          (cd crates/r && Rscript bootstrap.R)
+          R CMD build crates/r
+          R CMD INSTALL --build koon_*.tar.gz
 
       - name: Upload R package
         uses: actions/upload-artifact@v7
@@ -597,8 +614,18 @@ jobs:
         with:
           r-version: release
 
+      # The vignettes (rendered by R CMD build) need pandoc, knitr and rmarkdown.
+      - uses: r-lib/actions/setup-pandoc@v2
+
+      - name: Install the vignette tools
+        run: Rscript -e 'install.packages(c("knitr", "rmarkdown"), repos = "https://cloud.r-project.org")'
+
+      # From the source package R CMD build makes, so the binary package has the vignettes.
       - name: Build the binary package
-        run: R CMD INSTALL --build crates/r
+        run: |
+          (cd crates/r && Rscript bootstrap.R)
+          R CMD build crates/r
+          R CMD INSTALL --build koon_*.tar.gz
 
       - name: Upload R package
         uses: actions/upload-artifact@v7

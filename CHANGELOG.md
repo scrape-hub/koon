@@ -20,6 +20,7 @@ Rust only:
 ### Added
 
 - Linux arm64 packages for Node, Python and the CLI.
+- Python: free-threaded wheels (3.14t, 3.15t) for Windows and macOS.
 
 ### Changed
 
@@ -61,6 +62,7 @@ Rust only:
 - Node and Python: a multipart field with both `value` and `fileData` is an
   error.
 - Python: a hook waiting for the GIL no longer holds up other requests.
+- R: the binary packages include the vignettes.
 - CLI: `--timeout` covers the body.
 - CLI: `koon --help` no longer claims to pass every bot protection.
 
