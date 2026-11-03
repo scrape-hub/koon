@@ -110,7 +110,8 @@ struct Cli {
     #[command(flatten)]
     connection: ConnectionArgs,
 
-    /// Request timeout in seconds, fractions allowed (0: no timeout)
+    /// Timeout for the whole request, body included, in seconds; fractions
+    /// allowed (0: no timeout)
     #[arg(long, default_value = "30", value_parser = parse_timeout)]
     timeout: Duration,
 
@@ -1051,44 +1052,54 @@ async fn run_request(cli: Cli) -> Result<(), CliError> {
         cli.connection.print_settings();
     }
 
-    let mut response = client
-        .send_streaming(method, url, body, options)
-        .await
-        .map_err(failed("Request failed"))?;
-    // Decompressed like a buffered response.
-    response.decode_content();
+    let transfer = async {
+        let mut response = client
+            .send_streaming(method, url, body, options)
+            .await
+            .map_err(failed("Request failed"))?;
+        // Decompressed like a buffered response.
+        response.decode_content();
 
-    if let Some(path) = &cli.save_session {
-        client
-            .save_session_to_file(path)
-            .map_err(|e| CliError::other(format!("Failed to save session: {e}")))?;
+        if let Some(path) = &cli.save_session {
+            client
+                .save_session_to_file(path)
+                .map_err(|e| CliError::other(format!("Failed to save session: {e}")))?;
+            if cli.verbose {
+                eprintln!("* Saved session to {path}");
+            }
+        }
+
+        // Verbose diagnostics go to stderr regardless of --json or -o, like `curl -v`.
         if cli.verbose {
-            eprintln!("* Saved session to {path}");
+            for (k, v) in &response.request_headers {
+                eprintln!("> {k}: {v}");
+            }
+            eprintln!(">");
+            eprintln!("< {} {}", response.version, response.status);
+            for (k, v) in &response.headers {
+                eprintln!("< {k}: {v}");
+            }
+            eprintln!("<");
         }
-    }
 
-    // Verbose diagnostics go to stderr regardless of --json or -o, like `curl -v`.
-    if cli.verbose {
-        for (k, v) in &response.request_headers {
-            eprintln!("> {k}: {v}");
+        if cli.fail && response.status >= 400 {
+            Err(CliError {
+                message: format!("The requested URL returned error: {}", response.status),
+                exit_code: HTTP_ERROR_EXIT,
+            })
+        } else {
+            write_response(&cli, &mut response).await
         }
-        eprintln!(">");
-        eprintln!("< {} {}", response.version, response.status);
-        for (k, v) in &response.headers {
-            eprintln!("< {k}: {v}");
-        }
-        eprintln!("<");
-    }
-
-    let written = if cli.fail && response.status >= 400 {
-        Err(CliError {
-            message: format!("The requested URL returned error: {}", response.status),
-            exit_code: HTTP_ERROR_EXIT,
-        })
-    } else {
-        write_response(&cli, &mut response).await
     };
-    drop(response);
+    // --timeout bounds the body too, as in the bindings (and curl's --max-time); the client's
+    // own timeout covers only the head of a streamed response.
+    let written = if cli.timeout.is_zero() {
+        transfer.await
+    } else {
+        tokio::time::timeout(cli.timeout, transfer)
+            .await
+            .unwrap_or_else(|_| Err(failed("Request failed")(koon_core::Error::Timeout)))
+    };
     // End the connections as the browser does when it exits, before the
     // process ends and takes the unsent closes with it.
     client.shutdown().await;

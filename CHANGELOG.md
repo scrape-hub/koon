@@ -47,6 +47,7 @@ Rust only:
 **Bindings and CLI**
 
 - Node and the CLI on Linux need glibc 2.28 instead of 2.38.
+- CLI: `--timeout` covers the body.
 
 ### Security
 

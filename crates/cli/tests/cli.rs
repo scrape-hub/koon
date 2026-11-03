@@ -308,6 +308,42 @@ fn curl_options_without_effect_are_accepted() {
     assert_eq!(text(&out.stdout), "status body");
 }
 
+/// A server whose response head comes at once and whose 5 body bytes come one a second.
+fn dribbling_server() -> u16 {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    thread::spawn(move || {
+        for mut stream in listener.incoming().flatten() {
+            thread::spawn(move || {
+                let mut request = [0u8; 4096];
+                let _ = stream.read(&mut request);
+                let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\n");
+                for byte in b"slow!" {
+                    thread::sleep(Duration::from_secs(1));
+                    if stream.write_all(&[*byte]).is_err() {
+                        return;
+                    }
+                }
+            });
+        }
+    });
+    port
+}
+
+#[test]
+fn the_timeout_covers_the_body() {
+    let port = dribbling_server();
+    let started = std::time::Instant::now();
+    let out = koon(&["--timeout", "2", &format!("http://127.0.0.1:{port}/")]);
+    assert_eq!(out.status.code(), Some(28), "{}", text(&out.stderr));
+    assert!(
+        started.elapsed() < Duration::from_secs(4),
+        "{:?}",
+        started.elapsed()
+    );
+}
+
 #[test]
 fn fractional_timeouts_apply() {
     let port = server();

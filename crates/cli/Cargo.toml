@@ -14,7 +14,7 @@ workspace = true
 
 [dependencies]
 koon-core = { path = "../core", features = ["doh"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "fs", "io-util"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "fs", "io-util", "time"] }
 clap = { version = "4", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 http = "1"
