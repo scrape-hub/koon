@@ -2,20 +2,22 @@ mod context;
 mod fetch_metadata;
 mod order;
 mod order_tables;
+mod safari_map;
 mod util;
 mod websocket;
 
 use http::{Method, Uri};
 
+use super::cf_header_dict::HeaderDict;
 use super::client_hints::{self, ClientHintsState};
 use crate::profile::BrowserProfile;
 pub use crate::profile::HeaderFamily as Family;
 pub use context::RequestContext;
+pub use fetch_metadata::is_potentially_trustworthy;
 use fetch_metadata::{apply_insecure_context, apply_mode};
-pub(crate) use fetch_metadata::{cookie_context, cookie_rules};
-pub use fetch_metadata::{is_navigation, is_potentially_trustworthy};
+pub(crate) use fetch_metadata::{cookie_context, cookie_rules, redirect_referrer};
 pub use order::host_header;
-use order::{finalize_http1, finalize_multiplexed, order_headers, safari_order, sort_into};
+use order::{finalize_http1, finalize_multiplexed, order_headers, sonoma_order, sort_into};
 pub use util::header_value;
 use util::{content_length, cookie_header, merge_caller_headers, remove};
 pub use websocket::{build_websocket, build_websocket_h2};
@@ -27,7 +29,7 @@ impl Family {
             .unwrap_or_else(|| Self::detect(profile))
     }
 
-    fn is_browser(self) -> bool {
+    pub(crate) fn is_browser(self) -> bool {
         matches!(self, Self::Chromium | Self::Firefox | Self::Safari)
     }
 }
@@ -40,7 +42,7 @@ pub enum Protocol {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Mode {
+pub(crate) enum Mode {
     Navigate,
     FormNavigate,
     Cors,
@@ -61,9 +63,10 @@ pub struct HeaderInput<'a> {
     pub accept_ch_frame: Option<&'a str>,
     pub restarted: bool,
     pub context: Option<&'a RequestContext>,
+    pub safari_dict: Option<&'a HeaderDict>,
 }
 
-pub fn build(input: &HeaderInput) -> Vec<(String, String)> {
+pub(crate) fn build(input: &HeaderInput) -> (Vec<(String, String)>, Option<HeaderDict>) {
     let family = Family::of(input.profile);
     let caller = merge_caller_headers(input.client_headers, input.request_headers);
     let caller_value = |name: &str| header_value(&caller, name);
@@ -112,6 +115,11 @@ pub fn build(input: &HeaderInput) -> Vec<(String, String)> {
             caller_value("sec-fetch-dest"),
         );
     }
+    if safari_layout.is_some_and(|l| l.stack == crate::profile::SafariStack::Tahoe)
+        && context.origin_from_redirect
+    {
+        headers.retain(|(k, _)| !k.starts_with("sec-fetch-"));
+    }
 
     let secure = is_potentially_trustworthy(input.uri);
     if !secure {
@@ -155,6 +163,9 @@ pub fn build(input: &HeaderInput) -> Vec<(String, String)> {
             }
         }
     }
+    if family == Family::Safari && mode == Mode::Cors {
+        safari_map::add_fetch_headers(&mut headers, &caller);
+    }
     if let Some(origin) = &context.own_origin {
         headers.push(("origin".into(), origin.clone()));
     }
@@ -182,24 +193,35 @@ pub fn build(input: &HeaderInput) -> Vec<(String, String)> {
     }
 
     let restarted = input.restarted && hints.any && mode != Mode::Cors;
-    order_headers(
-        &mut headers,
-        family,
-        mode,
-        &caller,
-        &hints,
-        context.element_cors,
-        restarted,
-    );
+    order_headers(&mut headers, family, context, &caller, &hints, restarted);
+    let mut safari_dict = None;
     if let Some(layout) = safari_layout {
-        let order = safari_order(layout, input.protocol, input.method, mode, secure, &headers);
-        sort_into(&mut headers, order);
+        if layout.stack == crate::profile::SafariStack::Sonoma {
+            let order = sonoma_order(layout, input.protocol, input.method, &headers);
+            sort_into(&mut headers, order);
+        } else {
+            let (order, dict) = safari_map::order(&safari_map::SafariRequest {
+                headers: &headers,
+                caller: &caller,
+                method: input.method,
+                uri: input.uri,
+                mode,
+                secure,
+                body: input.body_len.is_some(),
+                ios: layout.ios,
+                version: layout.version,
+                previous: input.safari_dict,
+            });
+            let order: Vec<&str> = order.iter().map(String::as_str).collect();
+            sort_into(&mut headers, &order);
+            safari_dict = Some(dict);
+        }
     }
     match input.protocol {
         Protocol::Http1 => finalize_http1(family, input, &custom_casing, &mut headers),
         Protocol::Http2 | Protocol::Http3 => finalize_multiplexed(&mut headers),
     }
-    headers
+    (headers, safari_dict)
 }
 
 fn apply_okhttp_quirks(

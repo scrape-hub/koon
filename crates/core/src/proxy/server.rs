@@ -74,8 +74,8 @@ pub enum HeaderMode {
     ///
     /// The profile's own headers (identity and connection-level ones; set the language via
     /// [`ClientBuilder::locale`] on [`ProxyServerConfig::client`]) replace the client's. A specific
-    /// `Accept` without `text/html` (not `*/*`, and not a form post) survives instead, marking the
-    /// request as an API call sent as a `fetch()`. Every other header (`Cookie`, `Content-Type`,
+    /// `Accept` without `text/html` (not `*/*`) survives instead, marking the request as an API
+    /// call sent as a `fetch()`. Every other header (`Cookie`, `Content-Type`,
     /// `Authorization`, `Referer`, `Origin`, conditional and custom headers) is forwarded where the
     /// browser puts it. The response body reaches the client decoded.
     #[default]
@@ -530,11 +530,7 @@ async fn forward<S: AsyncRead + AsyncWrite + Unpin>(
         let response = match shared.mode {
             HeaderMode::Impersonate => {
                 let options = RequestOptions {
-                    headers: impersonated_request_headers(
-                        &method,
-                        request.headers,
-                        shared.client.profile(),
-                    ),
+                    headers: impersonated_request_headers(request.headers, shared.client.profile()),
                     ..RequestOptions::default()
                 };
                 shared
@@ -625,7 +621,6 @@ fn client_error(e: &Error) -> Option<(u16, String)> {
 }
 
 fn impersonated_request_headers(
-    method: &Method,
     headers: Vec<(String, String)>,
     profile: &BrowserProfile,
 ) -> Vec<(String, String)> {
@@ -633,9 +628,8 @@ fn impersonated_request_headers(
         let value = value.trim();
         value != "*/*" && !value.to_ascii_lowercase().contains("text/html")
     };
-    let keep_accept = crate::client::headers::header_value(&headers, "accept")
-        .is_some_and(request_accept)
-        && !crate::client::headers::is_navigation(method, &headers);
+    let keep_accept =
+        crate::client::headers::header_value(&headers, "accept").is_some_and(request_accept);
     headers
         .into_iter()
         .filter(|(name, _)| {

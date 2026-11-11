@@ -35,6 +35,9 @@ pub struct HttpResponse {
     /// Headers of the final request as sent, in wire order and casing. HTTP/2 and HTTP/3
     /// pseudo-headers come first.
     pub request_headers: Vec<(String, String)>,
+    /// The redirect this response asks for when the client did not follow it, to follow it with
+    /// [`RequestOptions::redirect`](crate::RequestOptions::redirect).
+    pub redirect: Option<crate::Redirect>,
 }
 
 impl HttpResponse {

@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-11
+
+### Added
+
+- Profiles for Chrome 158, Edge 157 and Brave 1.99 (Chromium 157).
+- Rust: a response to a redirect the client did not follow carries it in
+  `redirect`. Passed back in `RequestOptions::redirect`, the next request goes
+  out as the browser's next hop.
+
+### Changed
+
+- Chrome 156 and 157, Opera 139 and Brave 1.97 and 1.98 report the full
+  versions of their latest releases in client hints.
+
+### Fixed
+
+- Redirects work as in the browser: a fetch() stays a fetch(), a form
+  submission stays one, and Referer, Origin and header order follow the chain.
+  This also covers the redirects the httpx and requests adapters follow.
+- A POST goes out as a form submission only with a form encoding and the
+  browser's navigation Accept, or with your own `Sec-Fetch-Mode: navigate`.
+  Otherwise it is a fetch() call, also in the MITM proxy. The docs of
+  `koonFetch()` and the adapters explain this
+  ([#13](https://github.com/scrape-hub/koon/issues/13)).
+- A fetch() to another origin than the page's sends the page's Origin.
+- Safari profiles from Safari 18 on (macOS 15.1, iOS 18) put the headers you
+  set where Safari does, and add the headers Safari adds itself, for example
+  to conditional and Range requests.
+
 ## [2.0.0] - 2026-11-04
 
 ### Breaking changes

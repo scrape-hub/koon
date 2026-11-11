@@ -68,9 +68,9 @@ pub(super) const FIREFOX_NAV: &[&str] = &[
     "content-type",
     "content-length",
     "origin",
+    "connection",
     "referer",
     CUSTOM,
-    "connection",
     "cookie",
     "upgrade-insecure-requests",
     "sec-fetch-dest",
@@ -97,6 +97,28 @@ pub(super) const FIREFOX_CORS: &[&str] = &[
     "sec-fetch-dest",
     "sec-fetch-mode",
     "sec-fetch-site",
+    "priority",
+    "te",
+];
+
+pub(super) const FIREFOX_REDIRECT: &[&str] = &[
+    "user-agent",
+    "accept",
+    "accept-language",
+    "accept-encoding",
+    "alt-used",
+    "content-type",
+    "content-length",
+    CUSTOM,
+    "referer",
+    "origin",
+    "connection",
+    "cookie",
+    "upgrade-insecure-requests",
+    "sec-fetch-dest",
+    "sec-fetch-mode",
+    "sec-fetch-site",
+    "sec-fetch-user",
     "priority",
     "te",
 ];
@@ -237,148 +259,4 @@ pub(super) const SAFARI_SONOMA_LEGACY_BODY: &[&str] = &[
     "referer",
     "accept-encoding",
     CUSTOM,
-];
-
-pub(super) const SAFARI_GET: &[&str] = &[
-    "sec-fetch-dest",
-    "user-agent",
-    "accept",
-    "referer",
-    "sec-fetch-site",
-    "sec-fetch-mode",
-    CUSTOM,
-    "accept-language",
-    "priority",
-    "accept-encoding",
-    "cookie",
-];
-
-pub(super) const SAFARI_CORS_GET: &[&str] = &[
-    "sec-fetch-site",
-    "accept",
-    "origin",
-    CUSTOM,
-    "sec-fetch-mode",
-    "user-agent",
-    "referer",
-    "sec-fetch-dest",
-    "accept-language",
-    "priority",
-    "accept-encoding",
-    "cookie",
-];
-
-pub(super) const SAFARI_BODY: &[&str] = &[
-    "accept",
-    "content-type",
-    "origin",
-    "sec-fetch-site",
-    CUSTOM,
-    "sec-fetch-mode",
-    "user-agent",
-    "referer",
-    "sec-fetch-dest",
-    "content-length",
-    "accept-language",
-    "priority",
-    "accept-encoding",
-    "cookie",
-];
-
-pub(super) const SAFARI_BODY_SITE_FIRST: &[&str] = &[
-    "accept",
-    "content-type",
-    "sec-fetch-site",
-    "origin",
-    CUSTOM,
-    "sec-fetch-mode",
-    "user-agent",
-    "referer",
-    "sec-fetch-dest",
-    "content-length",
-    "accept-language",
-    "priority",
-    "accept-encoding",
-    "cookie",
-];
-
-pub(super) const SAFARI_PREFLIGHT: &[&str] = &[
-    "origin",
-    "sec-fetch-site",
-    "access-control-request-method",
-    "access-control-request-headers",
-    CUSTOM,
-    "sec-fetch-mode",
-    "user-agent",
-    "referer",
-    "sec-fetch-dest",
-    "content-length",
-    "accept",
-    "accept-language",
-    "priority",
-    "accept-encoding",
-    "cookie",
-];
-
-pub(super) const SAFARI_HTTP_NAVIGATE: &[&str] = &[
-    "user-agent",
-    "upgrade-insecure-requests",
-    "accept",
-    CUSTOM,
-    "accept-language",
-    "priority",
-    "accept-encoding",
-    "cookie",
-];
-
-pub(super) const SAFARI_HTTP_NAVIGATE_REFERER: &[&str] = &[
-    "user-agent",
-    "accept",
-    "upgrade-insecure-requests",
-    "referer",
-    CUSTOM,
-    "accept-language",
-    "priority",
-    "accept-encoding",
-    "cookie",
-];
-
-pub(super) const SAFARI_HTTP_GET: &[&str] = &[
-    "referer",
-    "accept",
-    "user-agent",
-    CUSTOM,
-    "accept-language",
-    "priority",
-    "accept-encoding",
-    "cookie",
-];
-
-pub(super) const SAFARI_HTTP_BODY: &[&str] = &[
-    "user-agent",
-    "accept",
-    "content-type",
-    "referer",
-    "origin",
-    "content-length",
-    CUSTOM,
-    "accept-language",
-    "priority",
-    "accept-encoding",
-    "cookie",
-];
-
-pub(super) const SAFARI_HTTP_FORM: &[&str] = &[
-    "accept",
-    "origin",
-    "content-type",
-    "upgrade-insecure-requests",
-    "user-agent",
-    "referer",
-    "content-length",
-    CUSTOM,
-    "accept-language",
-    "priority",
-    "accept-encoding",
-    "cookie",
 ];

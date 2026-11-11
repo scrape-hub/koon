@@ -12,8 +12,8 @@ On Windows and on macOS with Apple silicon, with R 4.6, install the prebuilt
 package of the release, no Rust needed:
 
 ```r
-install.packages("https://github.com/scrape-hub/koon/releases/download/v2.0.0/koon_2.0.0.zip", repos = NULL)  # Windows
-install.packages("https://github.com/scrape-hub/koon/releases/download/v2.0.0/koon_2.0.0.tgz", repos = NULL)  # macOS
+install.packages("https://github.com/scrape-hub/koon/releases/download/v2.1.0/koon_2.1.0.zip", repos = NULL)  # Windows
+install.packages("https://github.com/scrape-hub/koon/releases/download/v2.1.0/koon_2.1.0.tgz", repos = NULL)  # macOS
 ```
 
 Everywhere else the package builds from source:

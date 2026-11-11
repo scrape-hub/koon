@@ -886,9 +886,13 @@ export interface KoonFetch {
  *   a caller header replaces the browser's header of the same name in place, others go where
  *   the browser puts them. Nothing of Node's own fetch is sent (its `user-agent: node`, its
  *   catch-all `accept`, ...). A plain GET looks like a navigation, as with `client.get()`; an
- *   `Accept` without `text/html`, a `Content-Type` or an `Origin` makes it a fetch() call.
- *   A body gets the Content-Type fetch gives it, unless the caller sets one; a `referrer`
- *   URL is sent as Referer. A name repeated in pairs is joined, as `Headers` joins it.
+ *   `Accept` without `text/html`, a `Content-Type` or an `Origin` makes it a fetch() call. A
+ *   POST with `application/x-www-form-urlencoded` or `multipart/form-data` (a `URLSearchParams`
+ *   or `FormData` body) looks like a form submission, unless its `Accept` lacks `text/html`;
+ *   any other method or Content-Type makes a fetch() call. A `Sec-Fetch-Mode` header of your
+ *   own decides it, and redirects keep it. A body gets the Content-Type fetch gives it, unless
+ *   the caller sets one; a `referrer` URL is sent as Referer. A name repeated in pairs is
+ *   joined, as `Headers` joins it.
  * - Bodies: a string, `URLSearchParams`, `Blob`, `ArrayBuffer`, typed array or `DataView`,
  *   a `FormData` (multipart with the boundary of the profile's browser), a `ReadableStream`
  *   or another async iterable. Bodies are read into memory and sent with their length.

@@ -2,6 +2,7 @@ mod alt_svc;
 mod blink_header_map;
 mod blocked;
 pub(crate) mod body;
+mod cf_header_dict;
 pub(crate) mod client_hints;
 mod connection;
 mod cookies;
@@ -67,6 +68,12 @@ pub struct RequestOptions {
     pub on_response: Option<OnResponseHook>,
     /// [`OnRedirectHook`] for this request, replacing the client's.
     pub on_redirect: Option<OnRedirectHook>,
+    /// The redirect this request follows, for a caller that follows redirects itself: the
+    /// [`Redirect`] of the response it answers. The request goes out as the browser sends that
+    /// redirect's next hop (its kind of request, Referer, Origin, Sec-Fetch-Site and header order
+    /// follow the chain), with the caller's method, body and other headers. A request to another
+    /// URL than the redirect's goes out as a first hop.
+    pub redirect: Option<Redirect>,
 }
 
 use btls::ssl::SslConnector;
@@ -86,6 +93,7 @@ use crate::tls::{SessionCache, TlsConnector};
 use crate::websocket::WebSocket;
 
 pub(crate) use execute::HeaderSource;
+pub use execute::Redirect;
 
 const NO_TIMEOUT: Duration = Duration::from_secs(315_360_000);
 
@@ -959,7 +967,7 @@ impl Client {
                 &self.custom_headers,
                 &extra_headers,
                 &[],
-                Some(false),
+                Some(headers::Mode::Cors),
             );
             headers::cookie_context(
                 headers::cookie_rules(&self.profile),

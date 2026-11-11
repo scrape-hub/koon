@@ -58,6 +58,7 @@ pub(crate) struct SafariLayout {
     pub(crate) ios: bool,
     pub(crate) fetch_metadata: bool,
     pub(crate) chips: bool,
+    pub(crate) version: (u32, u32),
 }
 
 impl SafariLayout {
@@ -93,6 +94,7 @@ impl SafariLayout {
             ios,
             fetch_metadata,
             chips,
+            version: (major.unwrap_or(u32::MAX), minor.unwrap_or(0)),
         }
     }
 }

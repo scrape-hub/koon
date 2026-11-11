@@ -19,7 +19,7 @@ try:
 except ImportError as e:
     raise ImportError("koon.httpx needs httpx: pip install koon[httpx]") from e
 
-from koon import Koon, KoonError, KoonSync
+from koon import Koon, KoonError, KoonSync, _Mode
 from koon._adapter import (
     browser_multipart,
     caller_headers,
@@ -40,6 +40,9 @@ _UNSUPPORTED = {
     "socket_options": "socket options are not supported",
     "trust_env": "pass the proxy with proxy=",
 }
+
+
+_REDIRECT = "koon.redirect"
 
 
 def _default_headers() -> dict[str, str]:
@@ -77,7 +80,8 @@ def _timeout(request: httpx.Request) -> float | None:
 
 
 def _request_args(client, request: httpx.Request, body: bytes) -> tuple:
-    """The body and the options of koon's request for ``request``."""
+    """The arguments of koon's request for ``request`` after its method:
+    URL, body, form, the redirect it follows, and the options."""
     url = str(request.url)
     encoding = request.headers.encoding
     headers = caller_headers(
@@ -86,7 +90,8 @@ def _request_args(client, request: httpx.Request, body: bytes) -> tuple:
         url,
     )
     headers, body = browser_multipart(headers, body or None, client._encode_multipart, unescape_httpx)
-    return body, {"headers": headers, "timeout": _timeout(request)}
+    redirect = request.extensions.pop(_REDIRECT, None)
+    return (url, body, None, redirect), {"headers": headers, "timeout": _timeout(request), "decode": False}
 
 
 def _error(err: KoonError, request: httpx.Request, reading: bool = False):
@@ -116,7 +121,9 @@ def _error(err: KoonError, request: httpx.Request, reading: bool = False):
     return cls(str(err), request=request)
 
 
-def _response(resp, stream) -> httpx.Response:
+def _response(resp, stream, request: httpx.Request) -> httpx.Response:
+    if resp._redirect is not None:
+        request.extensions[_REDIRECT] = resp._redirect
     decoded = resp._decode_content()
     headers = [
         (name.encode(), value.encode()) for name, value in response_headers(resp.headers, decoded)
@@ -185,17 +192,15 @@ class KoonTransport(httpx.BaseTransport):
         return self._client
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
-        body, options = _request_args(self._client, request, request.read())
+        args, options = _request_args(self._client, request, request.read())
         try:
-            resp = self._client.request_streaming(
-                request.method, str(request.url), body, decode=False, **options
-            )
+            resp = self._client._request(_Mode.BlockStream, request.method, *args, **options)
         except KoonError as err:
             mapped = _error(err, request)
             if mapped is None:
                 raise
             raise mapped from err
-        return _response(resp, _SyncStream(resp, request))
+        return _response(resp, _SyncStream(resp, request), request)
 
     def close(self) -> None:
         self._client.shutdown()
@@ -214,17 +219,15 @@ class AsyncKoonTransport(httpx.AsyncBaseTransport):
         return self._client
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        body, options = _request_args(self._client, request, await request.aread())
+        args, options = _request_args(self._client, request, await request.aread())
         try:
-            resp = await self._client.request_streaming(
-                request.method, str(request.url), body, decode=False, **options
-            )
+            resp = await self._client._request(_Mode.Stream, request.method, *args, **options)
         except KoonError as err:
             mapped = _error(err, request)
             if mapped is None:
                 raise
             raise mapped from err
-        return _response(resp, _AsyncStream(resp, request))
+        return _response(resp, _AsyncStream(resp, request), request)
 
     async def aclose(self) -> None:
         await self._client.shutdown()

@@ -626,10 +626,15 @@ impl NativeClient {
     }
 
     /// Send a request; `mode` decides how it returns. `form` (a list of
-    /// field dicts) sends a multipart form. The verbs forward their keyword
-    /// arguments here, so everything that is not a request option is
-    /// positional-only: passing it by keyword is a `TypeError`.
-    #[pyo3(name = "_request", signature = (mode, method, url, body=None, form=None, /, **options))]
+    /// field dicts) sends a multipart form; `redirect`, the `_redirect` of
+    /// a streaming response, makes the request the next hop of that
+    /// redirect (the httpx and requests adapters). The verbs forward their
+    /// keyword arguments here, so everything that is not a request option
+    /// is positional-only: passing it by keyword is a `TypeError`.
+    #[pyo3(
+        name = "_request",
+        signature = (mode, method, url, body=None, form=None, redirect=None, /, **options)
+    )]
     #[allow(clippy::too_many_arguments)]
     fn request<'py>(
         &self,
@@ -639,6 +644,7 @@ impl NativeClient {
         url: String,
         body: Option<Payload>,
         form: Option<Vec<Bound<'py, PyAny>>>,
+        redirect: Option<PyRef<'py, Redirect>>,
         options: Option<&Bound<'py, PyDict>>,
     ) -> PyResult<Py<PyAny>> {
         let method = koon_core::parse_method(method).map_err(to_koon_err)?;
@@ -654,7 +660,8 @@ impl NativeClient {
             options,
         )?;
         let decode = options.decode();
-        let options = options.request_options();
+        let mut options = options.request_options();
+        options.redirect = redirect.map(|r| r.0.clone());
         let client = self.client.clone();
         if streaming {
             return run(py, mode == Mode::BlockStream, async move {
@@ -908,6 +915,8 @@ struct StreamingBase {
     #[pyo3(get)]
     connection_reused: bool,
     request_headers: HeaderList,
+    /// The redirect the response asks for, if the client did not follow it.
+    redirect: Option<koon_core::Redirect>,
     /// Bytes received so far, updated with every chunk.
     received: Arc<AtomicU64>,
     /// `None` once `collect()` consumed the body or `close()` dropped it.
@@ -959,6 +968,7 @@ impl StreamingBase {
             tls_resumed: resp.tls_resumed,
             connection_reused: resp.connection_reused,
             request_headers: HeaderList::new(std::mem::take(&mut resp.request_headers)),
+            redirect: resp.redirect.take(),
             received: Arc::new(AtomicU64::new(resp.bytes_received())),
             stream: Arc::new(tokio::sync::Mutex::new(Some(resp))),
             closed: tokio::sync::watch::Sender::new(false),
@@ -1043,6 +1053,13 @@ impl StreamingBase {
         self.received.load(Ordering::Relaxed)
     }
 
+    /// The redirect this response asks for when the client did not follow
+    /// it, to send its next hop with (`_Client._request`), else `None`.
+    #[getter(_redirect)]
+    fn redirect(&self) -> Option<Redirect> {
+        self.redirect.clone().map(Redirect)
+    }
+
     /// Decode the body's Content-Encoding from now on, before the first
     /// read (the httpx and requests adapters). Returns whether there is
     /// anything to decode; the headers stay as received.
@@ -1075,6 +1092,11 @@ impl StreamingBase {
         ))
     }
 }
+
+/// A redirect a streaming response asks for (`_redirect`), which the
+/// httpx and requests adapters pass back with the request that follows it.
+#[pyclass(frozen, module = "koon", name = "_Redirect")]
+struct Redirect(koon_core::Redirect);
 
 /// A streaming HTTP response whose body is read with coroutines.
 #[pyclass(extends = StreamingBase, frozen, module = "koon")]

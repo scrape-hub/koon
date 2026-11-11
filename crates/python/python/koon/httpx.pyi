@@ -19,11 +19,19 @@ HTTP/2 and header fingerprint:
   another value, e.g. your own User-Agent, is sent. koon sends Host,
   Content-Length and Transfer-Encoding itself; a Host other than the URL's
   raises ValueError. A plain GET looks like a navigation, as with koon's
-  own ``get()``; an ``Accept`` without ``text/html`` or a ``Content-Type``
-  makes it a fetch().
+  own ``get()``; an ``Accept`` without ``text/html``, a ``Content-Type`` or
+  an ``Origin`` makes it a fetch(). A POST with
+  ``application/x-www-form-urlencoded`` or ``multipart/form-data``
+  (``data=``, ``files=``) looks like a form submission, unless its
+  ``Accept`` lacks ``text/html``; any other method or Content-Type makes a
+  fetch(). A ``Sec-Fetch-Mode`` header of your own decides it.
 - Redirects and cookies: httpx follows redirects and keeps cookies (its
   cookie jar); the koon client does neither, so ``client.cookies`` is the
-  only jar and each redirect comes back to httpx.
+  only jar and each redirect comes back to httpx. koon sends the request
+  httpx builds for a redirect as the browser's next hop: a fetch() stays a
+  fetch(), Referer and Origin follow the redirect chain, and a request
+  turned into a GET loses its Content-Type. This holds for
+  ``response.next_request`` sent later too.
 - Bodies: request bodies are read into memory and sent with their length.
   An upload of ``files=`` is encoded again as the profile's browser encodes
   multipart/form-data (its boundary, its escaping of names and filenames;

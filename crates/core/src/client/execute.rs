@@ -13,6 +13,7 @@ use crate::streaming::StreamingResponse;
 use super::RequestOptions;
 use super::alt_svc::{is_redirect, resolve_redirect};
 use super::body::{ExchangeError, MuxFailure, ResponseParts};
+use super::cf_header_dict::HeaderDict;
 use super::connection::{AlpnMode, BoxedIo, is_idle_and_open, strip_brackets};
 use super::h1::SendContext as H1SendContext;
 use super::h3::{NewH3, SendContext};
@@ -65,6 +66,20 @@ fn strip_sensitive_headers(headers: &mut Vec<(String, String)>) {
 
 fn strip_body_headers(headers: &mut Vec<(String, String)>) {
     headers.retain(|(name, _)| !REQUEST_BODY_HEADERS.contains(&name.to_ascii_lowercase().as_str()));
+}
+
+fn replace_header(headers: &mut Vec<(String, String)>, name: &str, value: Option<String>) {
+    let Some(value) = value else {
+        headers.retain(|(n, _)| !n.eq_ignore_ascii_case(name));
+        return;
+    };
+    match headers
+        .iter_mut()
+        .find(|(n, _)| n.eq_ignore_ascii_case(name))
+    {
+        Some((_, v)) => *v = value,
+        None => headers.push((name.to_string(), value)),
+    }
 }
 
 pub(crate) fn parse_url(url: &str) -> Result<Uri, Error> {
@@ -143,6 +158,15 @@ struct Hop {
     source: HeaderSource,
     cross_site_redirect: bool,
     redirected_from: Vec<Uri>,
+    mode: Option<headers::Mode>,
+    safari_dict: Option<HeaderDict>,
+}
+
+#[derive(Clone)]
+struct Sent {
+    mode: headers::Mode,
+    origin: Option<String>,
+    safari_dict: Option<HeaderDict>,
 }
 
 impl Hop {
@@ -160,16 +184,36 @@ impl Hop {
             source: self.source.clone(),
             cross_site_redirect: self.cross_site_redirect,
             redirected_from: self.redirected_from.clone(),
+            mode: self.mode,
+            safari_dict: self.safari_dict.clone(),
         })
     }
 
-    fn redirect(&mut self, status: u16, next: Uri) -> Result<(), Error> {
+    fn redirect(
+        &mut self,
+        status: u16,
+        next: Uri,
+        sent: Sent,
+        family: headers::Family,
+    ) -> Result<(), Error> {
         if status != 303 && self.body.is_stream() {
             return Err(Error::Body(
                 format!("cannot follow a {status} redirect: the request body is a stream"),
                 None,
             ));
         }
+        let to_get = (status == 303 && self.method != Method::HEAD)
+            || (matches!(status, 301 | 302) && self.method == Method::POST);
+        self.follow(next, to_get, sent, family);
+        Ok(())
+    }
+
+    fn follow(&mut self, next: Uri, to_get: bool, sent: Sent, family: headers::Family) {
+        let Sent {
+            mode,
+            origin,
+            safari_dict,
+        } = sent;
         if is_cross_origin(&self.url, &next) {
             strip_sensitive_headers(&mut self.client_headers);
             strip_sensitive_headers(&mut self.request_headers);
@@ -177,8 +221,6 @@ impl Hop {
                 strip_sensitive_headers(raw);
             }
         }
-        let to_get = (status == 303 && self.method != Method::HEAD)
-            || (matches!(status, 301 | 302) && self.method == Method::POST);
         if to_get && self.method != Method::GET {
             self.method = Method::GET;
             self.body = Body::empty();
@@ -187,6 +229,12 @@ impl Hop {
             if let HeaderSource::Raw(raw) = &mut self.source {
                 strip_body_headers(raw);
             }
+            if matches!(self.source, HeaderSource::Profile) {
+                self.redirect_origin(mode, origin, family);
+            }
+        }
+        if matches!(self.source, HeaderSource::Profile) {
+            self.redirect_referrer(&next, family);
         }
         let hosts = (self.url.host(), next.host());
         if let (Some(from), Some(to)) = hosts {
@@ -194,8 +242,109 @@ impl Hop {
         }
         self.redirected_from
             .push(std::mem::replace(&mut self.url, next));
-        Ok(())
+        self.mode = Some(mode);
+        self.safari_dict = safari_dict;
     }
+
+    fn answered(&self, location: Uri, sent: Sent) -> Option<Redirect> {
+        matches!(self.source, HeaderSource::Profile).then(|| {
+            Redirect(std::sync::Arc::new(Answered {
+                method: self.method.clone(),
+                url: self.url.clone(),
+                location,
+                client_headers: self.client_headers.clone(),
+                request_headers: self.request_headers.clone(),
+                cross_site_redirect: self.cross_site_redirect,
+                redirected_from: self.redirected_from.clone(),
+                sent,
+            }))
+        })
+    }
+
+    fn continue_redirect(&mut self, redirect: &Answered, family: headers::Family) {
+        let to_get = self.method == Method::GET && redirect.method != Method::GET;
+        let mut answered = Self {
+            method: redirect.method.clone(),
+            url: redirect.url.clone(),
+            body: Body::empty(),
+            client_headers: redirect.client_headers.clone(),
+            request_headers: redirect.request_headers.clone(),
+            source: HeaderSource::Profile,
+            cross_site_redirect: redirect.cross_site_redirect,
+            redirected_from: redirect.redirected_from.clone(),
+            mode: None,
+            safari_dict: None,
+        };
+        answered.follow(self.url.clone(), to_get, redirect.sent.clone(), family);
+        for &name in ["referer", "origin"].iter().chain(REQUEST_BODY_HEADERS) {
+            let value = header_value(&answered.request_headers, name).map(str::to_string);
+            replace_header(&mut self.request_headers, name, value);
+        }
+        self.client_headers = answered.client_headers;
+        self.cross_site_redirect = answered.cross_site_redirect;
+        self.redirected_from = answered.redirected_from;
+        self.mode = answered.mode;
+        self.safari_dict = answered.safari_dict;
+    }
+
+    fn redirect_origin(
+        &mut self,
+        mode: headers::Mode,
+        origin: Option<String>,
+        family: headers::Family,
+    ) {
+        for list in [&mut self.client_headers, &mut self.request_headers] {
+            list.retain(|(name, _)| !name.eq_ignore_ascii_case("origin"));
+        }
+        if family == headers::Family::Safari && mode == headers::Mode::Cors {
+            if let Some(origin) = origin {
+                self.request_headers.push(("Origin".to_string(), origin));
+            }
+        }
+    }
+
+    fn redirect_referrer(&mut self, next: &Uri, family: headers::Family) {
+        let Some(referrer) = header_value(&self.request_headers, "referer")
+            .or_else(|| header_value(&self.client_headers, "referer"))
+        else {
+            return;
+        };
+        let value = headers::redirect_referrer(family, referrer, next);
+        for list in [&mut self.client_headers, &mut self.request_headers] {
+            match &value {
+                Some(value) => list
+                    .iter_mut()
+                    .filter(|(name, _)| name.eq_ignore_ascii_case("referer"))
+                    .for_each(|(_, v)| v.clone_from(value)),
+                None => list.retain(|(name, _)| !name.eq_ignore_ascii_case("referer")),
+            }
+        }
+    }
+}
+
+/// A redirect response the client did not follow, to follow it with a request of the caller's (see
+/// [`RequestOptions::redirect`]).
+#[derive(Clone)]
+pub struct Redirect(std::sync::Arc<Answered>);
+
+impl std::fmt::Debug for Redirect {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Redirect")
+            .field("from", &self.0.url)
+            .field("to", &self.0.location)
+            .finish_non_exhaustive()
+    }
+}
+
+struct Answered {
+    method: Method,
+    url: Uri,
+    location: Uri,
+    client_headers: Vec<(String, String)>,
+    request_headers: Vec<(String, String)>,
+    cross_site_redirect: bool,
+    redirected_from: Vec<Uri>,
+    sent: Sent,
 }
 
 fn unknown_length(headers: &mut Vec<(String, String)>, protocol: Protocol) {
@@ -225,6 +374,7 @@ struct Outgoing<'a> {
     cookie: Option<&'a str>,
     restarted: bool,
     progress: &'a Progress,
+    safari_dict: &'a std::sync::Mutex<Option<HeaderDict>>,
 }
 
 #[derive(Default)]
@@ -239,9 +389,9 @@ enum Fresh {
 }
 
 enum HopOutcome {
-    Redirect(ResponseParts, Uri),
+    Redirect(ResponseParts, Uri, Sent),
     Restart(ResponseParts, String),
-    Final(ResponseParts, Option<Vec<u8>>),
+    Final(ResponseParts, Option<Vec<u8>>, Option<Redirect>),
 }
 
 impl super::Client {
@@ -280,7 +430,8 @@ impl super::Client {
         options: RequestOptions,
         source: HeaderSource,
     ) -> Result<HttpResponse, Error> {
-        let (parts, final_url, raw) = self.run(method, url, body, &options, source, true).await?;
+        let (parts, final_url, raw, redirect) =
+            self.run(method, url, body, &options, source, true).await?;
         let raw = raw.unwrap_or_default();
         self.track_bytes(0, raw.len() as u64);
         let bytes_received = parts.head_bytes + raw.len() as u64;
@@ -307,6 +458,7 @@ impl super::Client {
             connection_reused: parts.connection_reused,
             remote_address: parts.info.peer_addr,
             request_headers: parts.request_headers,
+            redirect,
         })
     }
 
@@ -333,14 +485,17 @@ impl super::Client {
         options: RequestOptions,
         source: HeaderSource,
     ) -> Result<StreamingResponse, Error> {
-        let (parts, final_url, _) = self.run(method, url, body, &options, source, false).await?;
-        Ok(StreamingResponse::new(
+        let (parts, final_url, _, redirect) =
+            self.run(method, url, body, &options, source, false).await?;
+        let mut response = StreamingResponse::new(
             parts,
             final_url.to_string(),
             self.effective_timeout(&options),
             self.total_bytes_received.clone(),
             self.max_response_body,
-        ))
+        );
+        response.redirect = redirect;
+        Ok(response)
     }
 
     fn pick_proxy<'a>(&'a self, request_proxy: Option<&'a ProxyConfig>) -> Option<&'a ProxyConfig> {
@@ -355,7 +510,7 @@ impl super::Client {
         options: &RequestOptions,
         source: HeaderSource,
         collect: bool,
-    ) -> Result<(ResponseParts, Uri, Option<Vec<u8>>), Error> {
+    ) -> Result<(ResponseParts, Uri, Option<Vec<u8>>, Option<Redirect>), Error> {
         let url = parse_url(url)?;
         validate_headers(&options.headers)?;
         let proxy_override = options
@@ -375,7 +530,16 @@ impl super::Client {
             source,
             cross_site_redirect: false,
             redirected_from: Vec::new(),
+            mode: None,
+            safari_dict: None,
         };
+        if let Some(redirect) = options
+            .redirect
+            .as_ref()
+            .filter(|r| r.0.location == hop.url && matches!(hop.source, HeaderSource::Profile))
+        {
+            hop.continue_redirect(&redirect.0, headers::Family::of(&self.profile));
+        }
         let first = hop.replay();
         let mut proxy = self.pick_proxy(proxy_override.as_ref());
         let mut deadline = Instant::now() + timeout;
@@ -401,7 +565,9 @@ impl super::Client {
             });
 
             match attempt {
-                Ok(HopOutcome::Final(parts, body)) => return Ok((parts, hop.url, body)),
+                Ok(HopOutcome::Final(parts, body, redirect)) => {
+                    return Ok((parts, hop.url, body, redirect));
+                }
                 Ok(HopOutcome::Restart(parts, origin)) => {
                     restarted.insert(origin);
                     let _ = tokio::time::timeout_at(deadline, self.discard_body(parts)).await;
@@ -409,14 +575,14 @@ impl super::Client {
                         hop = first;
                     }
                 }
-                Ok(HopOutcome::Redirect(parts, next)) => {
+                Ok(HopOutcome::Redirect(parts, next, sent)) => {
                     redirects += 1;
                     if redirects > max_redirects {
                         return Err(Error::TooManyRedirects);
                     }
                     let status = parts.status;
                     let _ = tokio::time::timeout_at(deadline, self.discard_body(parts)).await;
-                    hop.redirect(status, next)?;
+                    hop.redirect(status, next, sent, headers::Family::of(&self.profile))?;
                 }
                 Err(e) => {
                     let retry =
@@ -454,7 +620,7 @@ impl super::Client {
             client,
             request,
             &hop.redirected_from,
-            None,
+            hop.mode,
         );
         let cookie_context = self.cookie_jar.is_some().then(|| {
             headers::cookie_context(
@@ -473,6 +639,7 @@ impl super::Client {
                 crate::util::lock_recover(jar).cookie_header_for(&hop.url, context)
             });
 
+        let safari_dict = std::sync::Mutex::new(None);
         let mut parts = self
             .exchange(
                 &Outgoing {
@@ -481,6 +648,7 @@ impl super::Client {
                     cookie: cookie.as_deref(),
                     restarted: !restarted.is_empty(),
                     progress,
+                    safari_dict: &safari_dict,
                 },
                 proxy,
             )
@@ -508,15 +676,30 @@ impl super::Client {
         }
 
         let follow = options.follow_redirects.unwrap_or(self.follow_redirects);
-        if follow && is_redirect(parts.status) {
-            if let Some(location) = header_value(&parts.headers, "location") {
-                let next = resolve_redirect(&hop.url, location).map_err(ExchangeError::Received)?;
-                if self
-                    .fire_on_redirect(options, parts.status, &next, &parts.headers)
-                    .map_err(ExchangeError::Invalid)?
+        let location =
+            header_value(&parts.headers, "location").filter(|_| is_redirect(parts.status));
+        let mut redirect = None;
+        if let Some(location) = location {
+            let next = resolve_redirect(&hop.url, location);
+            let next = if follow {
+                Some(next.map_err(ExchangeError::Received)?)
+            } else {
+                next.ok()
+            };
+            if let Some(next) = next {
+                let sent = Sent {
+                    mode: context.mode(),
+                    origin: context.origin(client, request),
+                    safari_dict: crate::util::lock_recover(&safari_dict).take(),
+                };
+                if follow
+                    && self
+                        .fire_on_redirect(options, parts.status, &next, &parts.headers)
+                        .map_err(ExchangeError::Invalid)?
                 {
-                    return Ok(HopOutcome::Redirect(parts, next));
+                    return Ok(HopOutcome::Redirect(parts, next, sent));
                 }
+                redirect = hop.answered(next, sent);
             }
         }
         let body = if collect {
@@ -531,7 +714,7 @@ impl super::Client {
         } else {
             None
         };
-        Ok(HopOutcome::Final(parts, body))
+        Ok(HopOutcome::Final(parts, body, redirect))
     }
 
     async fn discard_body(&self, mut parts: ResponseParts) {
@@ -922,7 +1105,7 @@ impl super::Client {
         let length = hop.body.length();
         match &hop.source {
             HeaderSource::Profile => {
-                let mut headers = headers::build(&HeaderInput {
+                let (mut headers, safari_dict) = headers::build(&HeaderInput {
                     profile: &self.profile,
                     protocol,
                     method: &hop.method,
@@ -941,7 +1124,9 @@ impl super::Client {
                     accept_ch_frame: info.accept_ch_for(&super::client_hints::origin_of(&hop.url)),
                     restarted: out.restarted,
                     context: Some(out.context),
+                    safari_dict: hop.safari_dict.as_ref(),
                 });
+                *crate::util::lock_recover(out.safari_dict) = safari_dict;
                 if length == Length::Unknown {
                     unknown_length(&mut headers, protocol);
                 }

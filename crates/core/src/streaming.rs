@@ -30,6 +30,9 @@ pub struct StreamingResponse {
     pub connection_reused: bool,
     /// Headers of the final request as sent, in wire order and casing.
     pub request_headers: Vec<(String, String)>,
+    /// The redirect this response asks for when the client did not follow it, to follow it with
+    /// [`RequestOptions::redirect`](crate::RequestOptions::redirect).
+    pub redirect: Option<crate::Redirect>,
     body: BodyStream,
     idle_timeout: Duration,
     bytes_sent: u64,
@@ -56,6 +59,7 @@ impl StreamingResponse {
             tls_resumed: parts.info.tls_resumed,
             connection_reused: parts.connection_reused,
             request_headers: parts.request_headers,
+            redirect: None,
             body: parts.body,
             idle_timeout,
             bytes_sent: parts.bytes_sent,

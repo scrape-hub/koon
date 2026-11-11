@@ -1,16 +1,14 @@
 use http::{Method, Uri};
 
 use super::order_tables::{
-    CHROMIUM_NAV, CHROMIUM_NETWORK_TAIL, CUSTOM, FIREFOX_CORS, FIREFOX_NAV, OKHTTP,
-    OKHTTP_IF_ABSENT, SAFARI_BODY, SAFARI_BODY_SITE_FIRST, SAFARI_CORS_GET, SAFARI_GET,
-    SAFARI_HTTP_BODY, SAFARI_HTTP_FORM, SAFARI_HTTP_GET, SAFARI_HTTP_NAVIGATE,
-    SAFARI_HTTP_NAVIGATE_REFERER, SAFARI_PREFLIGHT, SAFARI_SONOMA_BODY, SAFARI_SONOMA_GET,
-    SAFARI_SONOMA_GET_REFERER, SAFARI_SONOMA_H3_BODY, SAFARI_SONOMA_H3_GET,
-    SAFARI_SONOMA_H3_GET_REFERER, SAFARI_SONOMA_LEGACY_BODY, SAFARI_SONOMA_LEGACY_FIRST,
-    SAFARI_SONOMA_LEGACY_GET, SAFARI_SONOMA_LEGACY_GET_REFERER,
+    CHROMIUM_NAV, CHROMIUM_NETWORK_TAIL, CUSTOM, FIREFOX_CORS, FIREFOX_NAV, FIREFOX_REDIRECT,
+    OKHTTP, OKHTTP_IF_ABSENT, SAFARI_SONOMA_BODY, SAFARI_SONOMA_GET, SAFARI_SONOMA_GET_REFERER,
+    SAFARI_SONOMA_H3_BODY, SAFARI_SONOMA_H3_GET, SAFARI_SONOMA_H3_GET_REFERER,
+    SAFARI_SONOMA_LEGACY_BODY, SAFARI_SONOMA_LEGACY_FIRST, SAFARI_SONOMA_LEGACY_GET,
+    SAFARI_SONOMA_LEGACY_GET_REFERER,
 };
 use super::util::{header_value, is_get_or_head};
-use super::{AddedHints, Family, HeaderInput, Mode, Protocol};
+use super::{AddedHints, Family, HeaderInput, Mode, Protocol, RequestContext};
 use crate::client::client_hints;
 
 const CONNECTION_SPECIFIC: &[&str] = &[
@@ -22,56 +20,30 @@ const CONNECTION_SPECIFIC: &[&str] = &[
     "host",
 ];
 
-pub(super) fn safari_order(
+pub(super) fn sonoma_order(
     layout: crate::profile::SafariLayout,
     protocol: Protocol,
     method: &Method,
-    mode: Mode,
-    secure: bool,
     headers: &[(String, String)],
 ) -> &'static [&'static str] {
-    use crate::profile::SafariStack;
     let get = is_get_or_head(method);
     let has = |name: &str| header_value(headers, name).is_some();
-    if layout.stack == SafariStack::Sonoma {
-        if !layout.fetch_metadata {
-            return match (get, has("referer"), has("cookie")) {
-                (false, ..) => SAFARI_SONOMA_LEGACY_BODY,
-                (true, true, _) => SAFARI_SONOMA_LEGACY_GET_REFERER,
-                (true, false, true) => SAFARI_SONOMA_LEGACY_GET,
-                (true, false, false) => SAFARI_SONOMA_LEGACY_FIRST,
-            };
-        }
-        let h3 = protocol == Protocol::Http3;
-        return match (get, has("referer"), h3) {
-            (false, _, false) => SAFARI_SONOMA_BODY,
-            (true, true, false) => SAFARI_SONOMA_GET_REFERER,
-            (true, false, false) => SAFARI_SONOMA_GET,
-            (false, _, true) => SAFARI_SONOMA_H3_BODY,
-            (true, true, true) => SAFARI_SONOMA_H3_GET_REFERER,
-            (true, false, true) => SAFARI_SONOMA_H3_GET,
+    if !layout.fetch_metadata {
+        return match (get, has("referer"), has("cookie")) {
+            (false, ..) => SAFARI_SONOMA_LEGACY_BODY,
+            (true, true, _) => SAFARI_SONOMA_LEGACY_GET_REFERER,
+            (true, false, true) => SAFARI_SONOMA_LEGACY_GET,
+            (true, false, false) => SAFARI_SONOMA_LEGACY_FIRST,
         };
     }
-    if !secure {
-        return match mode {
-            Mode::Navigate if has("referer") => SAFARI_HTTP_NAVIGATE_REFERER,
-            Mode::Navigate => SAFARI_HTTP_NAVIGATE,
-            Mode::FormNavigate => SAFARI_HTTP_FORM,
-            Mode::Cors if get => SAFARI_HTTP_GET,
-            Mode::Cors => SAFARI_HTTP_BODY,
-        };
-    }
-    let own_origin = header_value(headers, "sec-fetch-site").is_none_or(|s| s == "same-origin");
-    if *method == Method::OPTIONS {
-        SAFARI_PREFLIGHT
-    } else if get && has("origin") {
-        SAFARI_CORS_GET
-    } else if get {
-        SAFARI_GET
-    } else if layout.ios || !own_origin {
-        SAFARI_BODY_SITE_FIRST
-    } else {
-        SAFARI_BODY
+    let h3 = protocol == Protocol::Http3;
+    match (get, has("referer"), h3) {
+        (false, _, false) => SAFARI_SONOMA_BODY,
+        (true, true, false) => SAFARI_SONOMA_GET_REFERER,
+        (true, false, false) => SAFARI_SONOMA_GET,
+        (false, _, true) => SAFARI_SONOMA_H3_BODY,
+        (true, true, true) => SAFARI_SONOMA_H3_GET_REFERER,
+        (true, false, true) => SAFARI_SONOMA_H3_GET,
     }
 }
 
@@ -88,9 +60,14 @@ pub(super) fn sort_into(headers: &mut [(String, String)], order: &[&str]) {
     });
 }
 
-fn canonical_order(family: Family, mode: Mode) -> Option<&'static [&'static str]> {
+fn canonical_order(
+    family: Family,
+    mode: Mode,
+    redirected: bool,
+) -> Option<&'static [&'static str]> {
     match (family, mode) {
         (Family::Chromium, Mode::Navigate | Mode::FormNavigate) => Some(CHROMIUM_NAV),
+        (Family::Firefox, _) if redirected => Some(FIREFOX_REDIRECT),
         (Family::Firefox, Mode::Navigate | Mode::FormNavigate) => Some(FIREFOX_NAV),
         (Family::Firefox, Mode::Cors) => Some(FIREFOX_CORS),
         (Family::OkHttp, _) => Some(OKHTTP),
@@ -101,19 +78,31 @@ fn canonical_order(family: Family, mode: Mode) -> Option<&'static [&'static str]
 pub(super) fn order_headers(
     headers: &mut [(String, String)],
     family: Family,
-    mode: Mode,
+    context: &RequestContext,
     caller: &[(String, String)],
     hints: &AddedHints,
-    element_cors: bool,
     restarted: bool,
 ) {
+    let (mode, redirected) = (context.mode, context.redirected);
     if family == Family::Chromium && mode == Mode::Cors {
-        let order = chromium_blink_order(headers, caller, element_cors);
+        let order = chromium_blink_order(
+            headers,
+            caller,
+            context.element_cors,
+            context.origin_from_redirect,
+        );
         let order: Vec<&str> = order.iter().map(String::as_str).collect();
         sort_into(headers, &order);
         return;
     }
-    let order = canonical_order(family, mode);
+    let order = canonical_order(family, mode, redirected);
+    let readded_hints_after = if restarted {
+        Some("accept")
+    } else if redirected && family == Family::Chromium {
+        Some("sec-fetch-dest")
+    } else {
+        None
+    };
     let custom = order.map(|order| {
         order
             .iter()
@@ -134,17 +123,24 @@ pub(super) fn order_headers(
             && header_value(caller, lower).is_some();
         if caller_owned {
             2 * custom
-        } else if restarted && client_hints::Hint::from_header(lower).is_some() {
-            position("accept").map_or(2 * custom, |p| 2 * p + 1)
+        } else if let Some(after) =
+            readded_hints_after.filter(|_| client_hints::Hint::from_header(lower).is_some())
+        {
+            position(after).map_or(2 * custom, |p| 2 * p + 1)
         } else if hints.appended.contains(&lower) {
             position("accept").map_or(2 * custom, |p| 2 * p + 1)
+        } else if lower == "origin" && family == Family::Firefox && context.origin_from_redirect {
+            position("referer").map_or(2 * custom, |p| 2 * p - 1)
         } else {
             2 * position(lower).unwrap_or(custom)
         }
     };
     let hint_order = |lower: &str| -> usize {
         match order {
-            Some(order) if restarted && client_hints::Hint::from_header(lower).is_some() => {
+            Some(order)
+                if readded_hints_after.is_some()
+                    && client_hints::Hint::from_header(lower).is_some() =>
+            {
                 order.iter().position(|k| *k == lower).unwrap_or(0)
             }
             _ => 0,
@@ -157,6 +153,7 @@ fn chromium_blink_order(
     headers: &[(String, String)],
     caller: &[(String, String)],
     element_cors: bool,
+    origin_from_redirect: bool,
 ) -> Vec<String> {
     let names: Vec<&str> = headers.iter().map(|(k, _)| k.as_str()).collect();
     let fetch =
@@ -210,6 +207,16 @@ fn chromium_blink_order(
             .map(|n| n.to_string())
             .collect::<Vec<_>>(),
     );
+    if origin_from_redirect {
+        if let Some(origin) = order.iter().position(|n| n == "origin") {
+            let origin = order.remove(origin);
+            let dest = order
+                .iter()
+                .position(|n| n == "sec-fetch-dest")
+                .map_or(order.len(), |p| p + 1);
+            order.insert(dest, origin);
+        }
+    }
     order
 }
 

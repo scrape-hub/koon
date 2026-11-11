@@ -37,7 +37,7 @@ from requests.utils import (
     select_proxy,
 )
 
-from koon import KoonError, KoonSync
+from koon import KoonError, KoonSync, _Mode
 from koon._adapter import browser_multipart, caller_headers, response_headers, unescape_urllib3
 from koon._adapter import client_options as _client_options
 
@@ -211,6 +211,7 @@ class KoonAdapter(BaseAdapter):
         self._insecure: KoonSync | None = None
         self._lock = threading.Lock()
         self._defaults = {name.lower(): value for name, value in default_headers().items()}
+        self._redirects = threading.local()
 
     @property
     def client(self) -> KoonSync:
@@ -256,17 +257,26 @@ class KoonAdapter(BaseAdapter):
         headers, body = browser_multipart(
             headers, _body(request.body), client._encode_multipart, unescape_urllib3
         )
-        options = {"headers": headers, "timeout": _timeout(timeout)}
+        options = {"headers": headers, "timeout": _timeout(timeout), "decode": False}
         proxy = select_proxy(url, proxies or {})
         if proxy:
             options["proxy"] = prepend_scheme_if_needed(proxy, "http")
+        pending = getattr(self._redirects, "pending", None)
+        redirect = None
+        if pending is not None and pending[0] is request.hooks:
+            redirect = pending[1]
+            self._redirects.pending = None
         try:
-            resp = client.request_streaming(request.method, url, body, decode=False, **options)
+            resp = client._request(
+                _Mode.BlockStream, request.method, url, body, None, redirect, **options
+            )
         except KoonError as err:
             mapped = _error(err, request)
             if mapped is None:
                 raise
             raise mapped from err
+        if resp._redirect is not None:
+            self._redirects.pending = (request.hooks, resp._redirect)
         return self._build_response(request, url, resp)
 
     def _build_response(self, request, url: str, resp) -> requests.Response:

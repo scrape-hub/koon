@@ -84,7 +84,7 @@ pub(super) fn content_length(
         Family::OkHttp => {
             *method == Method::POST || *method == Method::PUT || *method == Method::PATCH
         }
-        Family::Safari => *method == Method::OPTIONS,
+        Family::Safari => *method == Method::OPTIONS || *method == Method::DELETE,
         _ => false,
     };
     empty_body.then(|| "0".to_string())

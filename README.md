@@ -3,7 +3,6 @@
 [![npm](https://img.shields.io/npm/v/koonjs)](https://www.npmjs.com/package/koonjs)
 [![PyPI](https://img.shields.io/pypi/v/koon)](https://pypi.org/project/koon/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/scrape-hub/koon/blob/master/LICENSE)
-[![CI](https://img.shields.io/github/actions/workflow/status/scrape-hub/koon/ci.yml?label=CI)](https://github.com/scrape-hub/koon/actions)
 
 An HTTP client that impersonates real browsers at the TLS, HTTP/2, and HTTP/3 fingerprint level.
 
@@ -28,8 +27,8 @@ pip install "koon[requests]"   # with the requests adapter's dependency
 **R**
 ```r
 # Windows, or macOS on Apple silicon, with R 4.6: the prebuilt package of the release
-install.packages("https://github.com/scrape-hub/koon/releases/download/v2.0.0/koon_2.0.0.zip", repos = NULL)  # Windows
-install.packages("https://github.com/scrape-hub/koon/releases/download/v2.0.0/koon_2.0.0.tgz", repos = NULL)  # macOS
+install.packages("https://github.com/scrape-hub/koon/releases/download/v2.1.0/koon_2.1.0.zip", repos = NULL)  # Windows
+install.packages("https://github.com/scrape-hub/koon/releases/download/v2.1.0/koon_2.1.0.tgz", repos = NULL)  # macOS
 
 # Other platforms and R versions build from source: Rust 1.85+ and CMake, on Windows
 # also Rtools and `rustup target add x86_64-pc-windows-gnu`
@@ -129,28 +128,28 @@ Match the language to the IP as well. koon asks for English pages unless you set
 
 | Browser | Versions | Platforms | Profiles |
 |---------|----------|-----------|----------|
-| Chrome | 131-157 | Windows, macOS, Linux, Android | 108 |
+| Chrome | 131-158 | Windows, macOS, Linux, Android | 112 |
 | Firefox | 135-159 | Windows, macOS, Linux, Android | 100 |
 | Safari | 15.6-27.0 | macOS, iOS | 41 |
-| Edge | 131-156 | Windows, macOS, Android | 78 |
+| Edge | 131-157 | Windows, macOS, Android | 81 |
 | Opera | 124-139 | Windows, macOS, Linux | 48 |
 | Opera Mobile | 102 | Android | 1 |
-| Brave | 153-156 (1.95 to 1.98) | Windows, macOS, Linux, Android | 16 |
+| Brave | 153-157 (1.95 to 1.99) | Windows, macOS, Linux, Android | 20 |
 | Samsung Internet | 29-30 | Android | 2 |
 | OkHttp | 4, 5 | Android | 2 |
 
-**396 profiles** total. `koon --list-browsers`, `Koon.browsers()` (Node), `koon.browsers()` (Python) and `koon_browsers()` (R) list them all.
+**407 profiles** total. `koon --list-browsers`, `Koon.browsers()` (Node), `koon.browsers()` (Python) and `koon_browsers()` (R) list them all.
 
 ### Profile naming
 
-Format: `{browser}{version}{-os}`. All parts but the browser name are optional, dash included (`chrome154-macos` or `chrome154macos`). Omit the version for the latest of any browser. Without an OS, desktop browsers default to Windows except Safari (macOS); Brave is named by the Chromium version it reports (`brave156` = Brave 1.98).
+Format: `{browser}{version}{-os}`. All parts but the browser name are optional, dash included (`chrome154-macos` or `chrome154macos`). Omit the version for the latest of any browser. Without an OS, desktop browsers default to Windows except Safari (macOS); Brave is named by the Chromium version it reports (`brave157` = Brave 1.99).
 
 | Browser | Example profiles |
 |---------|-------------------|
-| Chrome, Firefox, Opera | `chrome157`, `-windows`, `-macos`, `-linux` |
-| Edge, Brave | `edge156`, `-windows`, `-macos` (Brave also `-linux`) |
+| Chrome, Firefox, Opera | `chrome158`, `-windows`, `-macos`, `-linux` |
+| Edge, Brave | `edge157`, `-windows`, `-macos` (Brave also `-linux`) |
 | Safari | `safari270-macos` |
-| Chrome/Firefox/Edge/Brave Mobile (Android) | `chrome-mobile157`, `firefox-mobile159`, `edge-mobile156`, `brave-mobile156` |
+| Chrome/Firefox/Edge/Brave Mobile (Android) | `chrome-mobile158`, `firefox-mobile159`, `edge-mobile157`, `brave-mobile157` |
 | Safari Mobile (iOS) | `safari-mobile270` |
 | Samsung Internet, Opera Mobile (Android) | `samsung30`, `opera-mobile102` |
 | OkHttp | `okhttp4`, `okhttp5` (`-android` suffix optional) |
@@ -332,10 +331,12 @@ console.log(blockedBy(page, await page.text()));  // null, or e.g. 'cloudflare'
 
 Only the headers you set are added to the browser's, where the browser puts
 them; Node's own fetch headers (`user-agent: node`, ...) are never sent.
-Redirects (`follow`, `manual`, `error`) and cookies are handled by the koon
-client, `signal` cancels the request or its body, and failures reject with
-`TypeError('fetch failed')` whose `cause` carries the koon error `code`. The
-details are in `index.d.ts`.
+A plain GET goes out as a navigation and a POST of a `URLSearchParams` or
+`FormData` body as a form submission, unless you set an `Accept` without
+`text/html`; anything else is a fetch() call. Redirects (`follow`, `manual`,
+`error`) and cookies are handled by the koon client, `signal` cancels the
+request or its body, and failures reject with `TypeError('fetch failed')`
+whose `cause` carries the koon error `code`. The details are in `index.d.ts`.
 
 ### Python
 
@@ -475,7 +476,8 @@ session.mount("https://", KoonAdapter("chrome"))
 
 The library keeps its part: redirects, cookies (its jar; koon's is off),
 auth, hooks, timeouts, and with requests the proxies from `proxies=` and the
-environment. Its own default headers, such as `User-Agent: python-httpx/x.y`,
+environment. The redirects it follows still go out as the browser's: a
+fetch() stays a fetch(), and Referer and Origin follow the redirect chain. Its own default headers, such as `User-Agent: python-httpx/x.y`,
 `python-requests/x.y` and `Accept: */*`, are dropped, so the browser's go out
 in the browser's order; every header you set is sent where the browser puts
 it. `files=` uploads go out as the browser encodes multipart forms (its
@@ -745,7 +747,7 @@ async fn main() -> Result<(), koon_core::Error> {
 fingerprints of the real browsers. Each profile connects to
 [tls.browserleaks.com](https://tls.browserleaks.com/json) (tls.peet.ws if that
 fails), which reports the JA4, JA3N, JA3 and Akamai HTTP/2 fingerprint it sees.
-Where a QUIC reference exists (Chrome 134-157, Edge 153-156, Opera 136-139, Brave, Opera Mobile,
+Where a QUIC reference exists (Chrome 134-158, Edge 153-157, Opera 136-139, Brave, Opera Mobile,
 Firefox 155-159 on the desktop and 146-159 on Android, and the Safari releases whose transport
 parameters were captured;
 Samsung Internet uses no HTTP/3), the

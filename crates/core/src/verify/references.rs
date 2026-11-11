@@ -26,7 +26,7 @@ pub(crate) const CHROMIUM_NEW_ALPS: Reference = Reference {
 
 pub(crate) const CHROMIUM_MLDSA_TRUST_ANCHORS: Reference = Reference {
     id: "chromium-mldsa-trust-anchors",
-    source: "Chromium 152+ with trust_anchors (ML-DSA signature algorithms): real Chrome 153 and Opera 136 captures, Chrome 152 and 154 on Android; Chrome 155 from tls.browserleaks.com and a ClientHello capture; Chrome 156.0.8078.80 on Windows and 156.0.8078.79 on Android, Opera 137-139 (Chromium 153-155) and Chrome for Testing 157.0.8103.15 without the field trial testing config (tls.browserleaks.com)",
+    source: "Chromium 152+ with trust_anchors (ML-DSA signature algorithms): real Chrome 153 and Opera 136 captures, Chrome 152 and 154 on Android; Chrome 155 from tls.browserleaks.com and a ClientHello capture; Chrome 156.0.8078.80 on Windows and 156.0.8078.79 on Android, Opera 137-139 (Chromium 153-155), Chrome for Testing 157.0.8103.15 without the field trial testing config, Chrome 157.0.8103.38 and 158.0.8127.18 on Windows (tls.browserleaks.com)",
     ja4: Some("t13d1517h2_8daaf6152771_cb7bf5808d99"),
     ja3n_hash: Some("bd4930bd9b000ee684830e44bab76fdf"),
     ja3_hash: None,
@@ -37,7 +37,7 @@ pub(crate) const CHROMIUM_MLDSA_TRUST_ANCHORS: Reference = Reference {
 
 pub(crate) const CHROMIUM_MLDSA: Reference = Reference {
     id: "chromium-mldsa",
-    source: "Chromium 150+ without trust_anchors (ML-DSA signature algorithms): real Opera 134-135 (JA4), Edge 152-154, Edge 153 and Chrome 150-151 on Android (JA4, JA3N, Akamai) captures; desktop Chrome 151 and Edge 151 stable (koon 0.8.1); Brave 1.95.104 and 1.96.59 on Windows, 1.96.59 on Android; Edge 156.0.4314.58, Brave 1.97.59 and 1.98.63 on Windows, 1.97.56 on Android (tls.browserleaks.com)",
+    source: "Chromium 150+ without trust_anchors (ML-DSA signature algorithms): real Opera 134-135 (JA4), Edge 152-154, Edge 153 and Chrome 150-151 on Android (JA4, JA3N, Akamai) captures; desktop Chrome 151 and Edge 151 stable (koon 0.8.1); Brave 1.95.104 and 1.96.59 on Windows, 1.96.59 on Android; Edge 156.0.4314.58 and 157.0.4341.42, Brave 1.97.59, 1.98.63 and 1.99.55 on Windows, 1.97.56 on Android (tls.browserleaks.com)",
     ja4: Some("t13d1516h2_8daaf6152771_806a8c22fdea"),
     ja3n_hash: Some("8e19337e7524d2573be54efb2b0784c9"),
     ja3_hash: None,
@@ -48,7 +48,7 @@ pub(crate) const CHROMIUM_MLDSA: Reference = Reference {
 
 pub(crate) const CHROME_QUIC: Reference = Reference {
     id: "chrome-quic",
-    source: "QUIC JA4 computed from the QUIC ClientHello of a real Chrome 153 (tests/quic_initial.rs); Chrome 154 only sorts its trust anchor IDs; Chrome 155 from quic.browserleaks.com and a QUIC capture; Chrome 154/155 and Opera 136.0.6008.52 on Linux and macOS from quic.browserleaks.com; Chrome 156 on Windows and Android, Opera 137-139 and Chrome for Testing 157.0.8103.15 from quic.browserleaks.com",
+    source: "QUIC JA4 computed from the QUIC ClientHello of a real Chrome 153 (tests/quic_initial.rs); Chrome 154 only sorts its trust anchor IDs; Chrome 155 from quic.browserleaks.com and a QUIC capture; Chrome 154/155 and Opera 136.0.6008.52 on Linux and macOS from quic.browserleaks.com; Chrome 156 on Windows and Android, Opera 137-139, Chrome for Testing 157.0.8103.15, Chrome 157.0.8103.38 and 158.0.8127.18 on Windows from quic.browserleaks.com",
     ja4: None,
     ja3n_hash: None,
     ja3_hash: None,
@@ -103,7 +103,7 @@ pub(crate) const OPERA_MOBILE: Reference = Reference {
 
 pub(crate) const CHROMIUM_QUIC_NO_TRUST_ANCHORS: Reference = Reference {
     id: "chromium-quic-no-trust-anchors",
-    source: "QUIC JA4 of the real Chrome 135, 140, 141, 149, 150 and 151 betas on Android 17, Edge 153 and 154 on Windows and macOS (154 also from quic.browserleaks.com), Edge 153 on Android and Brave 1.95.104 and 1.96.59 on Windows and 1.96.59 on Android; Opera for Android 102 sent it with pre_shared_key and early_data in its resumed hello (q13d0313h3_55b375c5d22e_226f3f127bbe), its full one was not captured; Edge 156.0.4314.58, Brave 1.97.59 and 1.98.63 on Windows, 1.97.56 on Android (quic.browserleaks.com)",
+    source: "QUIC JA4 of the real Chrome 135, 140, 141, 149, 150 and 151 betas on Android 17, Edge 153 and 154 on Windows and macOS (154 also from quic.browserleaks.com), Edge 153 on Android and Brave 1.95.104 and 1.96.59 on Windows and 1.96.59 on Android; Opera for Android 102 sent it with pre_shared_key and early_data in its resumed hello (q13d0313h3_55b375c5d22e_226f3f127bbe), its full one was not captured; Edge 156.0.4314.58 and 157.0.4341.42, Brave 1.97.59, 1.98.63 and 1.99.55 on Windows, 1.97.56 on Android (quic.browserleaks.com)",
     ja4: None,
     ja3n_hash: None,
     ja3_hash: None,
@@ -377,12 +377,12 @@ pub(super) const COVERAGE: &[Coverage] = &[
     Coverage { browser: Browser::Edge, from: (135, 0), to: (149, 0), os: &[Os::Windows, Os::MacOS, Os::Android], reference: &CHROMIUM_NEW_ALPS },
     Coverage { browser: Browser::Opera, from: (124, 0), to: (133, 0), os: &[Os::Windows, Os::MacOS, Os::Linux], reference: &CHROMIUM_NEW_ALPS },
     Coverage { browser: Browser::Samsung, from: (29, 0), to: (30, 0), os: &[Os::Android], reference: &CHROMIUM_NEW_ALPS },
-    Coverage { browser: Browser::Chrome, from: (152, 0), to: (157, 0), os: &[Os::Windows, Os::MacOS, Os::Linux, Os::Android], reference: &CHROMIUM_MLDSA_TRUST_ANCHORS },
+    Coverage { browser: Browser::Chrome, from: (152, 0), to: (158, 0), os: &[Os::Windows, Os::MacOS, Os::Linux, Os::Android], reference: &CHROMIUM_MLDSA_TRUST_ANCHORS },
     Coverage { browser: Browser::Opera, from: (136, 0), to: (139, 0), os: &[Os::Windows, Os::MacOS, Os::Linux], reference: &CHROMIUM_MLDSA_TRUST_ANCHORS },
     Coverage { browser: Browser::Chrome, from: (150, 0), to: (151, 0), os: &[Os::Windows, Os::MacOS, Os::Linux, Os::Android], reference: &CHROMIUM_MLDSA },
-    Coverage { browser: Browser::Edge, from: (150, 0), to: (156, 0), os: &[Os::Windows, Os::MacOS, Os::Android], reference: &CHROMIUM_MLDSA },
+    Coverage { browser: Browser::Edge, from: (150, 0), to: (157, 0), os: &[Os::Windows, Os::MacOS, Os::Android], reference: &CHROMIUM_MLDSA },
     Coverage { browser: Browser::Opera, from: (134, 0), to: (135, 0), os: &[Os::Windows, Os::MacOS, Os::Linux], reference: &CHROMIUM_MLDSA },
-    Coverage { browser: Browser::Brave, from: (153, 0), to: (156, 0), os: &[Os::Windows, Os::MacOS, Os::Linux, Os::Android], reference: &CHROMIUM_MLDSA },
+    Coverage { browser: Browser::Brave, from: (153, 0), to: (157, 0), os: &[Os::Windows, Os::MacOS, Os::Linux, Os::Android], reference: &CHROMIUM_MLDSA },
     Coverage { browser: Browser::OperaMobile, from: (102, 0), to: (102, 0), os: &[Os::Android], reference: &OPERA_MOBILE },
     Coverage { browser: Browser::Firefox, from: (135, 0), to: (150, 0), os: &[Os::Windows, Os::MacOS, Os::Linux], reference: &FIREFOX_135 },
     Coverage { browser: Browser::Firefox, from: (151, 0), to: (153, 0), os: &[Os::Windows, Os::MacOS, Os::Linux], reference: &FIREFOX_151 },
@@ -395,12 +395,12 @@ pub(super) const COVERAGE: &[Coverage] = &[
     Coverage { browser: Browser::Firefox, from: (156, 0), to: (159, 0), os: &[Os::Android], reference: &FIREFOX_ANDROID_156 },
     Coverage { browser: Browser::OkHttp, from: (4, 0), to: (4, 0), os: &[Os::Android], reference: &OKHTTP4 },
     Coverage { browser: Browser::OkHttp, from: (5, 0), to: (5, 0), os: &[Os::Android], reference: &OKHTTP5 },
-    Coverage { browser: Browser::Chrome, from: (152, 0), to: (157, 0), os: &[Os::Windows, Os::MacOS, Os::Linux, Os::Android], reference: &CHROME_QUIC },
+    Coverage { browser: Browser::Chrome, from: (152, 0), to: (158, 0), os: &[Os::Windows, Os::MacOS, Os::Linux, Os::Android], reference: &CHROME_QUIC },
     Coverage { browser: Browser::Opera, from: (136, 0), to: (139, 0), os: &[Os::Windows, Os::MacOS, Os::Linux], reference: &CHROME_QUIC },
     Coverage { browser: Browser::Chrome, from: (134, 0), to: (134, 0), os: &[Os::Windows, Os::MacOS, Os::Linux, Os::Android], reference: &CHROME_QUIC_OLD_ALPS },
     Coverage { browser: Browser::Chrome, from: (135, 0), to: (151, 0), os: &[Os::Windows, Os::MacOS, Os::Linux, Os::Android], reference: &CHROMIUM_QUIC_NO_TRUST_ANCHORS },
-    Coverage { browser: Browser::Edge, from: (153, 0), to: (156, 0), os: &[Os::Windows, Os::MacOS, Os::Android], reference: &CHROMIUM_QUIC_NO_TRUST_ANCHORS },
-    Coverage { browser: Browser::Brave, from: (153, 0), to: (156, 0), os: &[Os::Windows, Os::MacOS, Os::Linux, Os::Android], reference: &CHROMIUM_QUIC_NO_TRUST_ANCHORS },
+    Coverage { browser: Browser::Edge, from: (153, 0), to: (157, 0), os: &[Os::Windows, Os::MacOS, Os::Android], reference: &CHROMIUM_QUIC_NO_TRUST_ANCHORS },
+    Coverage { browser: Browser::Brave, from: (153, 0), to: (157, 0), os: &[Os::Windows, Os::MacOS, Os::Linux, Os::Android], reference: &CHROMIUM_QUIC_NO_TRUST_ANCHORS },
     Coverage { browser: Browser::OperaMobile, from: (102, 0), to: (102, 0), os: &[Os::Android], reference: &CHROMIUM_QUIC_NO_TRUST_ANCHORS },
     Coverage { browser: Browser::Firefox, from: (155, 0), to: (155, 0), os: &[Os::Windows, Os::MacOS, Os::Linux], reference: &FIREFOX_QUIC },
     Coverage { browser: Browser::Firefox, from: (157, 0), to: (159, 0), os: &[Os::Windows, Os::MacOS, Os::Linux], reference: &FIREFOX_QUIC },

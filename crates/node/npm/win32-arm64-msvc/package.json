@@ -1,6 +1,6 @@
 {
   "name": "@koonjs/win32-arm64-msvc",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "os": ["win32"],
   "cpu": ["arm64"],
   "main": "koon.win32-arm64-msvc.node",

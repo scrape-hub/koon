@@ -1,7 +1,7 @@
 use http::{Method, Uri};
 
 use super::order::host_header;
-use super::util::{header_value, is_get_or_head, remove, set};
+use super::util::{is_get_or_head, page_url, remove, set};
 use super::{Family, Mode, RequestContext};
 use crate::cookie::{CookieContext, CookieRules, SameSiteRules, ThirdPartyCookies, top_level_site};
 use crate::profile::{BrowserProfile, SafariLayout, SafariStack};
@@ -13,34 +13,51 @@ pub(super) fn detect_mode(
     content_type: Option<&str>,
     accept: Option<&str>,
 ) -> Mode {
-    let ct = content_type.unwrap_or("").trim().to_ascii_lowercase();
+    let navigation_accept = accept.is_none_or(|a| a.to_ascii_lowercase().contains("text/html"));
     if !is_get_or_head(method) {
-        let form = ct.starts_with("application/x-www-form-urlencoded")
-            || ct.starts_with("multipart/form-data");
-        return if form && *method == Method::POST {
+        return if navigation_accept && is_form_submission(method, content_type) {
             Mode::FormNavigate
         } else {
             Mode::Cors
         };
     }
-    let navigation_accept = accept.is_none_or(|a| a.to_ascii_lowercase().contains("text/html"));
-    if !ct.is_empty() || origin.is_some() || !navigation_accept {
+    if content_type.is_some_and(|ct| !ct.trim().is_empty())
+        || origin.is_some()
+        || !navigation_accept
+    {
         Mode::Cors
     } else {
         Mode::Navigate
     }
 }
 
-pub fn is_navigation(method: &Method, headers: &[(String, String)]) -> bool {
-    matches!(
-        detect_mode(
-            method,
-            header_value(headers, "origin"),
-            header_value(headers, "content-type"),
-            header_value(headers, "accept"),
-        ),
-        Mode::Navigate | Mode::FormNavigate
-    )
+fn is_form_submission(method: &Method, content_type: Option<&str>) -> bool {
+    let ct = content_type.unwrap_or("").trim().to_ascii_lowercase();
+    *method == Method::POST
+        && (ct.starts_with("application/x-www-form-urlencoded")
+            || ct.starts_with("multipart/form-data"))
+}
+
+pub(super) fn navigate_mode(method: &Method, content_type: Option<&str>) -> Mode {
+    if is_form_submission(method, content_type) {
+        Mode::FormNavigate
+    } else {
+        Mode::Navigate
+    }
+}
+
+pub(crate) fn redirect_referrer(family: Family, referrer: &str, target: &Uri) -> Option<String> {
+    let page = page_url(referrer).filter(|_| family.is_browser());
+    let Some(page) = page else {
+        return Some(referrer.to_string());
+    };
+    if compute_fetch_site(target, referrer) == "same-origin" {
+        Some(referrer.to_string())
+    } else if is_potentially_trustworthy(&page) && !is_potentially_trustworthy(target) {
+        None
+    } else {
+        Some(format!("{}/", serialized_origin(&page)))
+    }
 }
 
 pub(crate) fn cookie_context(

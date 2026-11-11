@@ -519,6 +519,7 @@ impl Options {
             on_request: self.on_request,
             on_response: self.on_response,
             on_redirect: self.on_redirect,
+            redirect: None,
         }
     }
 
