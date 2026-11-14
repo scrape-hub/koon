@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `saveSession()`/`save_session()` (CLI: `--save-session`) no longer return
   them, and loading a saved session drops them
   ([#15](https://github.com/scrape-hub/koon/issues/15)).
+- R: installing from source on Windows works with Rust 1.100 and later.
 
 ## [2.1.0] - 2026-11-11
 

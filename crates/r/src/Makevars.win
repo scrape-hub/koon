@@ -6,7 +6,7 @@ TARGET_DIR = $(shell cygpath -ms "$(LOCALAPPDATA)")/koon-r
 endif
 LIBDIR = $(TARGET_DIR)/$(TARGET)/release
 STATLIB = $(LIBDIR)/libkoon_r.a
-PKG_LIBS = -L$(LIBDIR) -lkoon_r -lstdc++ -lws2_32 -lbcrypt -luserenv -lntdll -lcrypt32 -lsecur32 -liphlpapi
+PKG_LIBS = -L$(LIBDIR) -lkoon_r -lstdc++ -lws2_32 -lbcrypt -luserenv -lntdll -lcrypt32 -lsecur32 -liphlpapi -lsynchronization
 
 CARGO_BIN = $(subst \,/,$(USERPROFILE))/.cargo/bin
 
