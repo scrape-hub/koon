@@ -222,6 +222,12 @@ pub struct Cookie {
     pub partition_key: Option<String>,
 }
 
+impl Cookie {
+    pub(crate) fn is_expired(&self, now: SystemTime) -> bool {
+        self.expires.is_some_and(|exp| exp <= now)
+    }
+}
+
 fn serialize_expires<S: serde::Serializer>(
     time: &Option<SystemTime>,
     serializer: S,
@@ -353,9 +359,7 @@ impl CookieJar {
     }
 
     pub(crate) fn prune(&mut self) {
-        let now = SystemTime::now();
-        self.cookies
-            .retain(|cookie| cookie.expires.is_none_or(|exp| exp > now));
+        self.remove_expired();
 
         let mut excess: HashMap<&str, usize> = HashMap::new();
         for cookie in &self.cookies {
@@ -459,13 +463,29 @@ impl CookieJar {
         &self.cookies
     }
 
-    /// Serialize all cookies to a JSON string.
+    pub(crate) fn remove_expired(&mut self) {
+        let now = SystemTime::now();
+        self.cookies.retain(|cookie| !cookie.is_expired(now));
+    }
+
+    pub(crate) fn live_cookies(&mut self) -> &[Cookie] {
+        self.remove_expired();
+        &self.cookies
+    }
+
+    /// Serialize the cookies that have not expired to a JSON string.
     ///
     /// # Errors
     /// Returns an error if a cookie fails to serialize (never expected, since every field is a
     /// plain value serde already supports).
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string(&self.cookies)
+        let now = SystemTime::now();
+        let live: Vec<&Cookie> = self
+            .cookies
+            .iter()
+            .filter(|cookie| !cookie.is_expired(now))
+            .collect();
+        serde_json::to_string(&live)
     }
 
     /// Deserialize cookies from a JSON string, creating a new `CookieJar`. Domains are normalized
@@ -477,12 +497,14 @@ impl CookieJar {
         Ok(Self::from_cookies(serde_json::from_str(json)?))
     }
 
-    /// Create a `CookieJar` holding `cookies` that pass the checks every other way into the jar
-    /// applies (name and value, host name, path, no public suffix as a domain, the `__Host-` and
-    /// `__Secure-` prefixes), with their domains normalized; the others are left out.
+    /// Create a `CookieJar` holding `cookies` that have not expired and pass the checks every
+    /// other way into the jar applies (name and value, host name, path, no public suffix as a
+    /// domain, the `__Host-` and `__Secure-` prefixes), with their domains normalized; the others
+    /// are left out.
     #[must_use]
     pub fn from_cookies(mut cookies: Vec<Cookie>) -> Self {
-        cookies.retain_mut(|cookie| validate_imported(cookie).is_ok());
+        let now = SystemTime::now();
+        cookies.retain_mut(|cookie| !cookie.is_expired(now) && validate_imported(cookie).is_ok());
         Self { cookies }
     }
 }

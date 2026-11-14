@@ -852,13 +852,13 @@ impl Client {
         self.send(Method::POST, url, body, options).await
     }
 
-    /// Serializes the session, cookies and TLS sessions, to JSON. [`Error::Json`] if serialization
-    /// fails.
+    /// Serializes the session, cookies (expired ones dropped) and TLS sessions, to JSON.
+    /// [`Error::Json`] if serialization fails.
     pub fn save_session(&self) -> Result<String, Error> {
         let cookies = self
             .cookie_jar
             .as_ref()
-            .map(|jar| crate::util::lock_recover(jar).cookies().to_vec());
+            .map(|jar| crate::util::lock_recover(jar).live_cookies().to_vec());
 
         let tls_sessions = self
             .session_cache
@@ -875,7 +875,8 @@ impl Client {
 
     /// Loads a session saved with [`save_session`](Self::save_session): its cookies replace the
     /// jar's, its TLS sessions are added. Parts the client has disabled are skipped, and so are
-    /// cookies [`CookieJar::from_cookies`] leaves out (such as one for a public suffix).
+    /// cookies [`CookieJar::from_cookies`] leaves out (such as an expired one or one for a public
+    /// suffix).
     /// [`Error::Json`] if `json` is not a saved session.
     pub fn load_session(&self, json: &str) -> Result<(), Error> {
         let export: SessionExport = serde_json::from_str(json).map_err(Error::Json)?;

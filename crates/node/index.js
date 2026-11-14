@@ -194,6 +194,88 @@ for (const nativeClass of [
   }
 }
 
+function takeSignal(options) {
+  if (options === null || typeof options !== 'object' || !('signal' in options)) {
+    return { signal: null, rest: options };
+  }
+  const { signal } = options;
+  if (
+    signal !== undefined &&
+    signal !== null &&
+    (typeof signal.aborted !== 'boolean' || typeof signal.addEventListener !== 'function')
+  ) {
+    throw attachErrorCode(new Error('[INVALID_ARGUMENT] signal must be an AbortSignal'));
+  }
+  const rest = {};
+  for (const key in options) {
+    if (key !== 'signal') rest[key] = options[key];
+  }
+  return { signal: signal === undefined ? null : signal, rest };
+}
+
+const pendingResponse = native.KoonPendingResponse.prototype.response;
+native.KoonPendingResponse.prototype.response = function response(signal) {
+  if (!signal) return pendingResponse.call(this);
+  if (signal.aborted) {
+    this.abort();
+    return Promise.reject(signal.reason);
+  }
+  let onAbort;
+  const aborted = new Promise((_, reject) => {
+    onAbort = () => {
+      this.abort();
+      reject(signal.reason);
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+  return Promise.race([pendingResponse.call(this), aborted]).finally(() => {
+    signal.removeEventListener('abort', onAbort);
+  });
+};
+
+function abortBodyOnSignal(response, signal) {
+  if (signal.aborted) {
+    response.cancel();
+    throw signal.reason;
+  }
+  const proto = native.KoonStreamingResponse.prototype;
+  let aborted = false;
+  const onAbort = () => {
+    aborted = true;
+    response.cancel();
+  };
+  const release = () => signal.removeEventListener('abort', onAbort);
+  const read = (method, isLast) =>
+    async function readBody() {
+      try {
+        const result = await method.call(this);
+        if (isLast(result)) release();
+        return result;
+      } catch (err) {
+        release();
+        throw aborted ? signal.reason : err;
+      }
+    };
+  const own = (value) => ({ value, writable: true, configurable: true });
+  Object.defineProperties(response, {
+    nextChunk: own(read(proto.nextChunk, (chunk) => chunk === null)),
+    collect: own(read(proto.collect, () => true)),
+    cancel: own(function cancel() {
+      release();
+      proto.cancel.call(this);
+    }),
+  });
+  signal.addEventListener('abort', onAbort, { once: true });
+}
+
+async function sendRequest(options, start, streaming) {
+  const { signal, rest } = takeSignal(options);
+  if (signal && signal.aborted) throw signal.reason;
+  const response = await start(rest).response(signal);
+  if (streaming && signal) abortBodyOnSignal(response, signal);
+  return response;
+}
+
 native.KoonStreamingResponse.prototype[Symbol.asyncIterator] = async function* chunks() {
   let finished = false;
   try {
@@ -217,6 +299,18 @@ class Koon extends native.Koon {
 
   websocket(url, headers) {
     return super.websocket(url, headerInit(headers));
+  }
+
+  request(method, url, body, options) {
+    return sendRequest(options, (rest) => this._start(method, url, body, rest), false);
+  }
+
+  postMultipart(url, fields, options) {
+    return sendRequest(options, (rest) => this._startMultipart(url, fields, rest), false);
+  }
+
+  requestStreaming(method, url, body, options) {
+    return sendRequest(options, (rest) => this._startStreaming(method, url, body, rest), true);
   }
 
   get(url, options) {

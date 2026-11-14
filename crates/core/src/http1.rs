@@ -11,6 +11,7 @@ use crate::error::Error;
 const READ_BUF_SIZE: usize = 32 * 1024;
 const MIN_READ_SPACE: usize = 4 * 1024;
 const MAX_MERGED_HEAD_AND_BODY: usize = 1400;
+const MAX_BODY_WRITE: usize = 16 * 1024;
 pub const MAX_HEADER_SIZE: usize = 256 * 1024;
 const MAX_CHUNK_LINE: usize = 4096;
 
@@ -161,11 +162,18 @@ pub async fn write_request<S: AsyncWrite + Unpin>(
         stream.write_all(&head).await?;
     } else {
         stream.write_all(&head).await?;
-        stream.write_all(body).await?;
+        write_body(stream, body).await?;
     }
     stream.flush().await?;
 
     Ok(total as u64)
+}
+
+async fn write_body<S: AsyncWrite + Unpin>(stream: &mut S, body: &[u8]) -> std::io::Result<()> {
+    for piece in body.chunks(MAX_BODY_WRITE) {
+        stream.write_all(piece).await?;
+    }
+    Ok(())
 }
 
 pub async fn write_streaming_request<S: AsyncWrite + Unpin>(
@@ -193,10 +201,10 @@ pub async fn write_streaming_request<S: AsyncWrite + Unpin>(
             let _ = std::io::Write::write_fmt(&mut encoded, format_args!("{:x}\r\n", chunk.len()));
             encoded.extend_from_slice(&chunk);
             encoded.extend_from_slice(b"\r\n");
-            stream.write_all(&encoded).await?;
+            write_body(stream, &encoded).await?;
             written += encoded.len() as u64;
         } else {
-            stream.write_all(&chunk).await?;
+            write_body(stream, &chunk).await?;
             written += chunk.len() as u64;
         }
     }

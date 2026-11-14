@@ -154,28 +154,16 @@ async function sendAndRaceAbort(client, method, url, data, headers, redirect, si
   let pending;
   try {
     const followRedirects = redirect === undefined ? undefined : redirect === 'follow';
-    pending = client._fetch(method, url.href, data, { headers, followRedirects });
+    pending = client._startStreaming(method, url.href, data, { headers, followRedirects, decode: false });
   } catch (err) {
     throw new TypeError(err.message, { cause: err });
   }
-  let onAbort;
-  const aborted =
-    signal &&
-    new Promise((_, reject) => {
-      onAbort = () => {
-        pending.abort();
-        reject(signal.reason);
-      };
-      signal.addEventListener('abort', onAbort, { once: true });
-    });
   let head;
   try {
-    head = await (aborted ? Promise.race([pending.response(), aborted]) : pending.response());
+    head = await pending.response(signal);
   } catch (err) {
     if (signal && signal.aborted) throw signal.reason;
     throw fetchFailed(err);
-  } finally {
-    if (signal) signal.removeEventListener('abort', onAbort);
   }
   if (signal && signal.aborted) {
     head.cancel();

@@ -235,6 +235,13 @@ export interface KoonRequestOptions {
    * stop.
    */
   onRedirect?: OnRedirectHook;
+  /**
+   * Cancels the request when it aborts. Before the response (of `requestStreaming()`: before its
+   * head) the request stops, an upload included, and the call rejects with the signal's reason;
+   * during a streaming body the rest of it is dropped, and reads reject with the reason. With an
+   * already aborted signal nothing is sent.
+   */
+  signal?: AbortSignal;
 }
 
 export interface KoonStreamingOptions extends KoonRequestOptions {

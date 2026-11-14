@@ -67,13 +67,13 @@ impl Client {
     }
 
     /// Return a snapshot of every cookie currently stored in the jar (e.g. to export back into a
-    /// browser via Playwright/CDP `addCookies()`).
+    /// browser via Playwright/CDP `addCookies()`), after dropping the expired ones.
     ///
     /// Returns an empty `Vec` if the cookie jar is disabled, same as an empty jar: there's nothing
     /// to export either way.
     pub fn cookies(&self) -> Vec<Cookie> {
         match &self.cookie_jar {
-            Some(jar) => crate::util::lock_recover(jar).cookies().to_vec(),
+            Some(jar) => crate::util::lock_recover(jar).live_cookies().to_vec(),
             None => Vec::new(),
         }
     }
@@ -83,7 +83,7 @@ impl Client {
     pub fn cookie_params(&self) -> Vec<CookieParams> {
         match &self.cookie_jar {
             Some(jar) => crate::util::lock_recover(jar)
-                .cookies()
+                .live_cookies()
                 .iter()
                 .map(CookieParams::from)
                 .collect(),

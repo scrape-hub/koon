@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-11-14
+
+### Added
+
+- Node.js: the request methods (`get()`, `post()` and the other verbs,
+  `postMultipart()`, `requestStreaming()`) take a `signal`. An abort stops the
+  request, an upload included, and rejects with the signal's reason; during a
+  streamed body it drops the rest
+  ([#14](https://github.com/scrape-hub/koon/issues/14)).
+
+### Changed
+
+- Node.js: invalid request options reject the returned Promise instead of
+  throwing when the method is called.
+
+### Fixed
+
+- An upload over plain `http://` stops as soon as its request is cancelled or
+  times out, on Windows too.
+- Expired cookies leave the jar when it is read or saved: `cookies()` and
+  `saveSession()`/`save_session()` (CLI: `--save-session`) no longer return
+  them, and loading a saved session drops them
+  ([#15](https://github.com/scrape-hub/koon/issues/15)).
+
 ## [2.1.0] - 2026-11-11
 
 ### Added

@@ -804,7 +804,7 @@ impl KoonResponse {
 /// The HTTP client with browser fingerprint impersonation.
 #[napi]
 pub struct Koon {
-    /// Shared with the requests `_fetch` starts as tasks of their own.
+    /// Shared with the requests the `_start*` methods run as tasks of their own.
     client: Arc<Client>,
 }
 
@@ -835,70 +835,10 @@ impl Koon {
             .map_err(|e| koon_napi_error(KoonError::Json(e)))
     }
 
-    /// The verbs (get, post, ...) are defined on top of this in index.js.
-    #[napi]
-    pub async fn request(
-        &self,
-        method: String,
-        url: String,
-        body: Option<Either<String, Buffer>>,
-        options: Opts<RequestScope>,
-    ) -> Result<KoonResponse> {
-        let (method, body) = method_and_body(&method, body)?;
-        let response = self
-            .client
-            .send(method, &url, body, options.into_inner().request_options())
-            .await
-            .map_err(koon_napi_error)?;
-        Ok(response.into())
-    }
-
-    #[napi]
-    pub async fn post_multipart(
-        &self,
-        url: String,
-        fields: Vec<KoonMultipartField>,
-        options: Opts<RequestScope>,
-    ) -> Result<KoonResponse> {
-        let response = self
-            .client
-            .post_multipart(
-                &url,
-                build_multipart(fields)?,
-                options.into_inner().request_options(),
-            )
-            .await
-            .map_err(koon_napi_error)?;
-        Ok(response.into())
-    }
-
-    #[napi]
-    pub async fn request_streaming(
-        &self,
-        method: String,
-        url: String,
-        body: Option<Either<String, Buffer>>,
-        options: Opts<StreamScope>,
-    ) -> Result<KoonStreamingResponse> {
-        let (method, body) = method_and_body(&method, body)?;
-        let options = options.into_inner();
-        let decode = options.decode();
-        let mut response = self
-            .client
-            .send_streaming(method, &url, body, options.request_options())
-            .await
-            .map_err(koon_napi_error)?;
-        if decode {
-            response.decode_content();
-        }
-        Ok(response.into())
-    }
-
-    /// Start a streaming request for `koonFetch` (fetch.js) as a task of its
-    /// own: `response()` of the result waits for the response head, and
-    /// `abort()` cancels the request before it arrives.
-    #[napi(js_name = "_fetch")]
-    pub fn fetch(
+    /// Start a request; index.js defines `request()` and the verbs (get,
+    /// post, ...) on top of this.
+    #[napi(js_name = "_start")]
+    pub fn start(
         &self,
         method: String,
         url: String,
@@ -908,14 +848,50 @@ impl Koon {
         let (method, body) = method_and_body(&method, body)?;
         let options = options.into_inner().request_options();
         let client = self.client.clone();
-        let (sender, receiver) = tokio::sync::oneshot::channel();
-        let task = spawn(async move {
-            let _ = sender.send(client.send_streaming(method, &url, body, options).await);
-        });
-        Ok(KoonPendingResponse {
-            receiver: std::sync::Mutex::new(Some(receiver)),
-            task: task.abort_handle(),
-        })
+        Ok(KoonPendingResponse::spawn(async move {
+            let response = client.send(method, &url, body, options).await?;
+            Ok(Started::Buffered(response))
+        }))
+    }
+
+    /// Start a multipart request (`postMultipart()` in index.js).
+    #[napi(js_name = "_startMultipart")]
+    pub fn start_multipart(
+        &self,
+        url: String,
+        fields: Vec<KoonMultipartField>,
+        options: Opts<RequestScope>,
+    ) -> Result<KoonPendingResponse> {
+        let multipart = build_multipart(fields)?;
+        let options = options.into_inner().request_options();
+        let client = self.client.clone();
+        Ok(KoonPendingResponse::spawn(async move {
+            let response = client.post_multipart(&url, multipart, options).await?;
+            Ok(Started::Buffered(response))
+        }))
+    }
+
+    /// Start a streaming request (`requestStreaming()` in index.js, koonFetch).
+    #[napi(js_name = "_startStreaming")]
+    pub fn start_streaming(
+        &self,
+        method: String,
+        url: String,
+        body: Option<Either<String, Buffer>>,
+        options: Opts<StreamScope>,
+    ) -> Result<KoonPendingResponse> {
+        let (method, body) = method_and_body(&method, body)?;
+        let options = options.into_inner();
+        let decode = options.decode();
+        let options = options.request_options();
+        let client = self.client.clone();
+        Ok(KoonPendingResponse::spawn(async move {
+            let mut response = client.send_streaming(method, &url, body, options).await?;
+            if decode {
+                response.decode_content();
+            }
+            Ok(Started::Streaming(response))
+        }))
     }
 
     /// A multipart/form-data body with the boundary of the profile's
@@ -1036,21 +1012,42 @@ fn stream_consumed() -> napi::Error {
     ))
 }
 
-type StreamingResult = std::result::Result<koon_core::StreamingResponse, KoonError>;
+/// What a started request settles with.
+enum Started {
+    Buffered(koon_core::HttpResponse),
+    Streaming(koon_core::StreamingResponse),
+}
 
-/// A request `Koon._fetch` started: its response head, or an abort.
+type StartedResult = std::result::Result<Started, KoonError>;
+
+/// A request a `Koon._start*` method started as a task of its own, so that
+/// index.js can cancel it when the caller's `AbortSignal` fires.
 #[napi]
 pub struct KoonPendingResponse {
-    receiver: std::sync::Mutex<Option<tokio::sync::oneshot::Receiver<StreamingResult>>>,
+    receiver: std::sync::Mutex<Option<tokio::sync::oneshot::Receiver<StartedResult>>>,
     task: tokio::task::AbortHandle,
+}
+
+impl KoonPendingResponse {
+    fn spawn(request: impl Future<Output = StartedResult> + Send + 'static) -> Self {
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        let task = spawn(async move {
+            let _ = sender.send(request.await);
+        });
+        Self {
+            receiver: std::sync::Mutex::new(Some(receiver)),
+            task: task.abort_handle(),
+        }
+    }
 }
 
 #[napi]
 impl KoonPendingResponse {
-    /// The response once its head has arrived. Rejects with `BODY_ERROR` when
-    /// the request was aborted or this was called before.
+    /// The response once it is complete, or for a streaming request once its
+    /// head has arrived. Rejects with `BODY_ERROR` when the request was
+    /// aborted or this was called before.
     #[napi]
-    pub async fn response(&self) -> Result<KoonStreamingResponse> {
+    pub async fn response(&self) -> Result<Either<KoonResponse, KoonStreamingResponse>> {
         let receiver = self
             .receiver
             .lock()
@@ -1060,7 +1057,9 @@ impl KoonPendingResponse {
                 koon_napi_error(KoonError::Body("response() was called before".into(), None))
             })?;
         match receiver.await {
-            Ok(response) => response.map(Into::into).map_err(koon_napi_error),
+            Ok(Ok(Started::Buffered(response))) => Ok(Either::A(response.into())),
+            Ok(Ok(Started::Streaming(response))) => Ok(Either::B(response.into())),
+            Ok(Err(error)) => Err(koon_napi_error(error)),
             Err(_) => Err(koon_napi_error(KoonError::Body(
                 "the request was aborted".into(),
                 None,
@@ -1068,7 +1067,7 @@ impl KoonPendingResponse {
         }
     }
 
-    /// Cancel the request; nothing happens once its head has arrived.
+    /// Cancel the request; nothing happens once `response()` has its value.
     #[napi]
     pub fn abort(&self) {
         self.task.abort();

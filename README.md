@@ -27,8 +27,8 @@ pip install "koon[requests]"   # with the requests adapter's dependency
 **R**
 ```r
 # Windows, or macOS on Apple silicon, with R 4.6: the prebuilt package of the release
-install.packages("https://github.com/scrape-hub/koon/releases/download/v2.1.0/koon_2.1.0.zip", repos = NULL)  # Windows
-install.packages("https://github.com/scrape-hub/koon/releases/download/v2.1.0/koon_2.1.0.tgz", repos = NULL)  # macOS
+install.packages("https://github.com/scrape-hub/koon/releases/download/v2.2.0/koon_2.2.0.zip", repos = NULL)  # Windows
+install.packages("https://github.com/scrape-hub/koon/releases/download/v2.2.0/koon_2.2.0.tgz", repos = NULL)  # macOS
 
 # Other platforms and R versions build from source: Rust 1.85+ and CMake, on Windows
 # also Rtools and `rustup target add x86_64-pc-windows-gnu`
@@ -236,11 +236,13 @@ console.log(r1.remoteAddress);                  // peer IP (the proxy when one i
 console.log(r1.blockedBy);                      // null, or e.g. 'cloudflare' when bot protection answered
 console.log(r1.bytesSent, r1.bytesReceived);    // bandwidth per request
 
-// Per-request headers, timeout, proxy and hooks
+// Per-request headers, timeout, proxy, hooks and cancellation
+const controller = new AbortController();
 const r7 = await client.get('https://httpbin.org/get', {
   headers: [['Authorization', 'Bearer token']], // pairs or an object
   timeout: 2.5,                               // 2.5 s for this request only
   proxy: 'http://user:pass@other-proxy:8080', // override proxy for this request
+  signal: controller.signal,                  // controller.abort() cancels it, uploads too
   onResponse: (status, url) => console.log(status, url),
 });
 
@@ -280,8 +282,9 @@ console.log(stream.status);
 for await (const chunk of stream) process.stdout.write(chunk);  // or nextChunk() / collect()
 // The body arrives decoded (gzip, br, ...); { decode: false } in the options
 // gives the bytes as sent. cancel() drops the rest of the body; leaving for
-// await early does too. blockedBy(stream, body) names a bot protection page
-// from the body read (its first 400 KB suffice).
+// await early and an abort of the request's signal do too. blockedBy(stream,
+// body) names a bot protection page from the body read (its first 400 KB
+// suffice).
 
 // Multipart upload
 await client.postMultipart('https://httpbin.org/post', [
