@@ -728,6 +728,14 @@ impl super::Client {
         }
     }
 
+    fn h3_eligible(key: &PoolKey, proxy: Option<&ProxyConfig>) -> bool {
+        #[cfg(feature = "socks")]
+        let proxy_ok = proxy.is_none_or(|p| matches!(p.kind, ProxyKind::Socks5));
+        #[cfg(not(feature = "socks"))]
+        let proxy_ok = proxy.is_none();
+        key.secure && proxy_ok
+    }
+
     async fn exchange(
         &self,
         out: &Outgoing<'_>,
@@ -736,8 +744,15 @@ impl super::Client {
         let url = &out.hop.url;
         let key = pool_key(url, proxy)?;
         let parts = self.exchange_on(out, proxy, &key).await?;
-        if key.secure && proxy.is_none() && self.follows_alt_svc() {
-            self.record_alt_svc(&key.host, key.port, &parts.headers);
+        if Self::h3_eligible(&key, proxy) && self.follows_alt_svc() {
+            let h3_port = self
+                .record_alt_svc(&key.host, key.port, &parts.headers)
+                .or_else(|| self.alt_svc_h3_port(&key.host, key.port, key.proxy.as_deref()));
+            if parts.version != "h3" {
+                if let Some(h3_port) = h3_port {
+                    self.maybe_upgrade_h3(&key, h3_port, proxy);
+                }
+            }
         }
         Ok(parts)
     }
@@ -915,17 +930,17 @@ impl super::Client {
         gate: Option<OwnedMutexGuard<()>>,
     ) -> Result<ResponseParts, ExchangeError> {
         let hop = out.hop;
-        let direct_secure = key.secure && proxy.is_none();
-        let mut h3_port = if direct_secure && self.follows_alt_svc() {
-            self.alt_svc_h3_port(&key.host, key.port)
+        let h3_eligible = Self::h3_eligible(key, proxy);
+        let mut h3_port = if h3_eligible && self.follows_alt_svc() {
+            self.alt_svc_h3_port(&key.host, key.port, key.proxy.as_deref())
         } else {
             None
         };
         let mut h3_via_https_rr = false;
         if h3_port.is_none()
-            && direct_secure
+            && h3_eligible
             && self.follows_https_rr()
-            && !self.h3_broken(&key.host, key.port)
+            && !self.h3_broken(&key.host, key.port, key.proxy.as_deref())
         {
             let (port, ()) = tokio::join!(
                 self.https_rr_h3_port(&key.host, key.port),
@@ -946,8 +961,8 @@ impl super::Client {
                 self.h1_slot(key).await
             };
             let fresh = match h3_port {
-                Some(h3_port) if direct_quic => self.connect_direct_quic(key, h3_port).await,
-                Some(h3_port) => Box::pin(self.connect_racing_quic(key, h3_port)).await,
+                Some(h3_port) if direct_quic => self.connect_direct_quic(key, h3_port, proxy).await,
+                Some(h3_port) => Box::pin(self.connect_racing_quic(key, h3_port, proxy)).await,
                 None => self.connect_tcp(key, proxy).await,
             }
             .map_err(ExchangeError::NotSent)?;
@@ -967,7 +982,11 @@ impl super::Client {
                             }
                             if is_h3 {
                                 if failure.connection_failed {
-                                    self.mark_alt_svc_broken(&key.host, key.port);
+                                    self.mark_alt_svc_broken(
+                                        &key.host,
+                                        key.port,
+                                        key.proxy.as_deref(),
+                                    );
                                 } else {
                                     quic_failed = true;
                                 }
@@ -1018,7 +1037,7 @@ impl super::Client {
         };
 
         if quic_failed {
-            self.mark_alt_svc_broken(&key.host, key.port);
+            self.mark_alt_svc_broken(&key.host, key.port, key.proxy.as_deref());
         }
         Ok(parts)
     }
@@ -1061,15 +1080,20 @@ impl super::Client {
         ))
     }
 
-    async fn connect_racing_quic(&self, key: &PoolKey, h3_port: u16) -> Result<Fresh, Error> {
+    async fn connect_racing_quic(
+        &self,
+        key: &PoolKey,
+        h3_port: u16,
+        proxy: Option<&ProxyConfig>,
+    ) -> Result<Fresh, Error> {
         let h3 = |new: NewH3| Fresh::Mux(Mux::H3(new.conn), new.info, new.id);
-        let mut quic = self.start_h3(key, h3_port).await;
+        let mut quic = self.start_h3(key, h3_port, proxy).await;
         match tokio::time::timeout(QUIC_HEAD_START, &mut quic).await {
             Ok(Ok(Ok(new))) => return Ok(h3(new)),
-            Ok(_) => return self.connect_tcp(key, None).await,
+            Ok(_) => return self.connect_tcp(key, proxy).await,
             Err(_) => {}
         }
-        let tcp = self.connect_tcp(key, None);
+        let tcp = self.connect_tcp(key, proxy);
         tokio::pin!(tcp);
         tokio::select! {
             result = &mut quic => match result {
@@ -1086,10 +1110,15 @@ impl super::Client {
         }
     }
 
-    async fn connect_direct_quic(&self, key: &PoolKey, h3_port: u16) -> Result<Fresh, Error> {
-        match self.start_h3(key, h3_port).await.await {
+    async fn connect_direct_quic(
+        &self,
+        key: &PoolKey,
+        h3_port: u16,
+        proxy: Option<&ProxyConfig>,
+    ) -> Result<Fresh, Error> {
+        match self.start_h3(key, h3_port, proxy).await.await {
             Ok(Ok(new)) => Ok(Fresh::Mux(Mux::H3(new.conn), new.info, new.id)),
-            _ => self.connect_tcp(key, None).await,
+            _ => self.connect_tcp(key, proxy).await,
         }
     }
 

@@ -24,7 +24,7 @@ pub use options::ConnectionOptions;
 pub use request_body::Body;
 pub use response::{ContentDecoder, HttpResponse, SessionExport, decode_body_text};
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -107,6 +107,7 @@ pub struct ClientBuilder {
     follow_redirects: bool,
     max_redirects: u32,
     cookie_jar: bool,
+    connection_pool: bool,
     session_resumption: bool,
     local_address: Option<IpAddr>,
     on_request: Option<OnRequestHook>,
@@ -119,6 +120,7 @@ pub struct ClientBuilder {
     danger_accept_invalid_proxy_certs: bool,
     ip_version: Option<IpVersion>,
     resolve_overrides: ResolveOverrides,
+    alt_svc_seeds: Vec<(String, u16, u16)>,
     #[cfg(feature = "doh")]
     doh_resolver: Option<DohResolver>,
     #[cfg(feature = "doh")]
@@ -231,6 +233,7 @@ impl ClientBuilder {
             follow_redirects: true,
             max_redirects: 10,
             cookie_jar: true,
+            connection_pool: true,
             session_resumption: true,
             local_address: None,
             on_request: None,
@@ -243,6 +246,7 @@ impl ClientBuilder {
             danger_accept_invalid_proxy_certs: false,
             ip_version: None,
             resolve_overrides: HashMap::new(),
+            alt_svc_seeds: Vec::new(),
             #[cfg(feature = "doh")]
             doh_resolver: None,
             #[cfg(feature = "doh")]
@@ -323,6 +327,14 @@ impl ClientBuilder {
     #[must_use]
     pub fn cookie_jar(mut self, enabled: bool) -> Self {
         self.cookie_jar = enabled;
+        self
+    }
+
+    /// Sets whether connections are kept in the pool for reuse. Disabling it opens a fresh
+    /// connection per request (useful for rotating proxies). Default: `true`.
+    #[must_use]
+    pub fn connection_pool(mut self, enabled: bool) -> Self {
+        self.connection_pool = enabled;
         self
     }
 
@@ -468,6 +480,20 @@ impl ClientBuilder {
         Ok(self)
     }
 
+    /// Pre-seeds an HTTP/3 `Alt-Svc` entry (`host:port` -> QUIC on `h3_port`), as a returning
+    /// browser carries from previous visits so the first connection can race QUIC immediately
+    /// instead of waiting for an HTTP/2 `Alt-Svc` header. Works for both direct connections and
+    /// SOCKS5 proxies (`UDP ASSOCIATE`).
+    #[must_use]
+    pub fn alt_svc_h3(mut self, host: &str, port: u16, h3_port: u16) -> Self {
+        self.alt_svc_seeds.push((
+            connection::strip_brackets(host).to_ascii_lowercase(),
+            port,
+            h3_port,
+        ));
+        self
+    }
+
     /// Resolves origins through DNS-over-HTTPS, whose HTTPS records also supply ECH configurations.
     /// Proxies, and origins reached through one, are not resolved with it.
     #[must_use]
@@ -545,7 +571,21 @@ impl ClientBuilder {
             None
         };
 
-        let pool = Arc::new(browser_pool(headers::Family::of(&self.profile)));
+        let pool = Arc::new(if self.connection_pool {
+            browser_pool(headers::Family::of(&self.profile))
+        } else {
+            ConnectionPool::new(
+                0,
+                IdleTimeouts {
+                    h1: Duration::ZERO,
+                    mux: Some(Duration::ZERO),
+                },
+            )
+        });
+        let mut alt_svc = alt_svc::AltSvcCache::default();
+        for (host, port, h3_port) in self.alt_svc_seeds {
+            alt_svc.seed(&host, port, h3_port, Duration::from_secs(86_400));
+        }
         Ok(Client {
             profile: self.profile,
             tls_connector,
@@ -568,7 +608,7 @@ impl ClientBuilder {
             danger_accept_invalid_proxy_certs: self.danger_accept_invalid_proxy_certs,
             proxy_tls: OnceLock::new(),
             ip_version: self.ip_version,
-            resolve_overrides: self.resolve_overrides,
+            resolve_overrides: Arc::new(self.resolve_overrides),
             #[cfg(feature = "doh")]
             doh_resolver: self.doh_resolver.map(Arc::new),
             #[cfg(feature = "doh")]
@@ -577,10 +617,11 @@ impl ClientBuilder {
                 .map_or_else(crate::dns::NativeHttpsResolver::shared, Arc::new),
             h2_builder,
             pool,
-            alt_svc: Arc::default(),
-            host_cache: Mutex::default(),
+            alt_svc: Arc::new(Mutex::new(alt_svc)),
+            host_cache: Arc::new(Mutex::default()),
             quic_setup: OnceLock::new(),
             h3_connections: Arc::default(),
+            h3_upgrading: Arc::default(),
             total_bytes_sent: AtomicU64::new(0),
             total_bytes_received: Arc::new(AtomicU64::new(0)),
             client_hints: client_hints::ClientHintsState::default(),
@@ -615,7 +656,7 @@ pub struct Client {
     danger_accept_invalid_proxy_certs: bool,
     proxy_tls: OnceLock<connection::ProxyTls>,
     pub(super) ip_version: Option<IpVersion>,
-    resolve_overrides: ResolveOverrides,
+    resolve_overrides: Arc<ResolveOverrides>,
     #[cfg(feature = "doh")]
     doh_resolver: Option<Arc<DohResolver>>,
     #[cfg(feature = "doh")]
@@ -623,9 +664,10 @@ pub struct Client {
     h2_builder: http2::client::Builder,
     pool: Arc<ConnectionPool>,
     alt_svc: Arc<Mutex<alt_svc::AltSvcCache>>,
-    host_cache: Mutex<connection::HostCache>,
+    host_cache: Arc<Mutex<connection::HostCache>>,
     quic_setup: OnceLock<Arc<QuicSetup>>,
     h3_connections: Arc<h3::H3Connections>,
+    h3_upgrading: Arc<Mutex<HashSet<crate::pool::PoolKey>>>,
     total_bytes_sent: AtomicU64,
     total_bytes_received: Arc<AtomicU64>,
     client_hints: client_hints::ClientHintsState,
@@ -663,6 +705,16 @@ impl Client {
     /// Returns the profile's User-Agent, if it has one.
     pub fn user_agent(&self) -> Option<&str> {
         self.profile.user_agent()
+    }
+
+    /// Pre-seeds an HTTP/3 `Alt-Svc` entry (`host:port` -> QUIC on `h3_port`).
+    pub fn seed_alt_svc_h3(&self, host: &str, port: u16, h3_port: u16) {
+        crate::util::lock_recover(&self.alt_svc).seed(
+            connection::strip_brackets(host),
+            port,
+            h3_port,
+            Duration::from_secs(86_400),
+        );
     }
 
     /// Closes all pooled connections. The client stays usable and opens new ones as needed;

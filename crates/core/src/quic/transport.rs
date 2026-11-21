@@ -241,6 +241,24 @@ impl QuicSetup {
         })
     }
 
+    #[cfg(feature = "socks")]
+    pub(crate) fn endpoint_with_socket(
+        &self,
+        socket: Arc<dyn quinn::AsyncUdpSocket>,
+    ) -> Result<Endpoint, Error> {
+        Endpoint::new_with_abstract_socket(
+            self.endpoint.clone(),
+            None,
+            socket,
+            quinn::default_runtime()
+                .ok_or_else(|| Error::Quic("No async runtime available".into(), None))?,
+        )
+        .map_err(|e| {
+            let message = format!("Failed to create QUIC endpoint: {e}");
+            Error::Quic(message, crate::error::boxed(e))
+        })
+    }
+
     pub(crate) fn peer_settings(&self, host: &str) -> Option<h3fp::PeerSettings> {
         crate::util::lock_recover(&self.peer_settings)
             .get(host)

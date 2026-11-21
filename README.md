@@ -167,7 +167,7 @@ Chrome Mobile and Firefox Mobile send their desktop counterpart's fingerprint wi
 - **Fingerprint self-test**: `koon verify` checks your installed koon against the real browsers' fingerprints (see [below](#fingerprint-self-test))
 - **TLS sessions and certificates**: session tickets per origin, used once, over TCP and QUIC; certificates verified against Mozilla's roots plus every trust anchor of the Chrome Root Store
 - **Cookies and sessions**: a jar with domain, path, expiry, Secure, HttpOnly, SameSite, `__Host-`/`__Secure-` prefixes and public-suffix protection; import and export as Playwright/CDP cookie objects; save and load cookies and TLS tickets as JSON
-- **Proxies**: HTTP, HTTPS and SOCKS5 (`socks5://` or `socks5h://`, both resolved by the proxy), round-robin rotation, custom CONNECT headers; retries switch the proxy and never send a POST twice; through a proxy, koon does not use HTTP/3
+- **Proxies**: HTTP, HTTPS and SOCKS5 (`socks5://` or `socks5h://`, both resolved by the proxy), round-robin rotation, custom CONNECT headers; retries switch the proxy and never send a POST twice; SOCKS5 proxies support HTTP/3 via RFC 1928 `UDP ASSOCIATE` (HTTP/HTTPS proxies use TCP)
 - **MITM proxy server**: re-sends any program's traffic through koon; loopback only unless allowed, optional authentication, capped connections
 - **WebSocket**: `wss://` and `ws://` with the browser's handshake, over HTTP/2 where the browser uses it; send and receive concurrently
 - **Streaming**: response bodies read on demand with backpressure, uploads from a stream (Rust, and the CLI for files over 16 MiB), multipart forms with the browser's boundary format
@@ -780,7 +780,7 @@ firefox -> firefox159-windows: match
 - A field is `match`, `MISMATCH` (with the expected value), or `not checked`
   with the reason: no reference value (JA3 of browsers that shuffle their
   extensions), not reported by the service (tls.peet.ws has no JA3N), or
-  HTTP/3 not used (UDP blocked, or a proxy).
+  HTTP/3 not used (UDP blocked, or an HTTP/HTTPS proxy).
 - Browser versions without a capture are reported as `no reference`: Safari
   releases without a capture of their own (e.g. Safari 16.6 on iOS and 26.6
   on iOS) and Firefox on Android before 146. Safari on iOS 18.0 to 18.2 has
@@ -788,7 +788,8 @@ firefox -> firefox159-windows: match
   exists. macOS 15.1 and 15.2 get their QUIC check through the HTTPS record
   (they ignore Alt-Svc).
 - `--json` prints the reports as JSON. `--proxy` and the other connection
-  options apply; HTTP/3 does not go through a proxy. `--service URL` asks
+  options apply; SOCKS5 proxies run the HTTP/3 check via `UDP ASSOCIATE`, while
+  HTTP/HTTPS proxies skip HTTP/3. `--service URL` asks
   another service that answers in the format of browserleaks or tls.peet.ws
   (e.g. a self-hosted [TrackMe](https://github.com/pagpeter/TrackMe)),
   `--skip-http3` leaves out the QUIC check.
