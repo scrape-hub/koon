@@ -23,7 +23,7 @@ struct Broken {
 #[derive(Default)]
 pub(super) struct AltSvcCache {
     entries: HashMap<(String, u16), AltSvcEntry>,
-    broken: HashMap<(String, u16), Broken>,
+    broken: HashMap<(String, u16, Option<String>), Broken>,
 }
 
 pub(super) fn make_room<K: Eq + std::hash::Hash + Clone, V>(
@@ -48,8 +48,8 @@ pub(super) fn make_room<K: Eq + std::hash::Hash + Clone, V>(
 }
 
 impl AltSvcCache {
-    pub(super) fn mark_broken(&mut self, host: &str, port: u16) {
-        let key = (host.to_string(), port);
+    pub(super) fn mark_broken(&mut self, host: &str, port: u16, proxy: Option<&str>) {
+        let key = (host.to_ascii_lowercase(), port, proxy.map(str::to_string));
         if !self.broken.contains_key(&key) {
             make_room(&mut self.broken, MAX_ENTRIES, |b| b.until);
         }
@@ -65,8 +65,19 @@ impl AltSvcCache {
         broken.until = Instant::now() + delay;
     }
 
-    pub(super) fn confirm(&mut self, host: &str, port: u16) {
-        self.broken.remove(&(host.to_string(), port));
+    pub(super) fn confirm(&mut self, host: &str, port: u16, proxy: Option<&str>) {
+        self.broken
+            .remove(&(host.to_ascii_lowercase(), port, proxy.map(str::to_string)));
+    }
+
+    pub(super) fn seed(&mut self, host: &str, port: u16, h3_port: u16, max_age: Duration) {
+        let expires = Instant::now()
+            .checked_add(max_age)
+            .unwrap_or_else(|| Instant::now() + Duration::from_secs(86400));
+        self.insert(
+            (host.to_ascii_lowercase(), port),
+            AltSvcEntry { h3_port, expires },
+        );
     }
 
     fn insert(&mut self, key: (String, u16), entry: AltSvcEntry) {
@@ -130,41 +141,51 @@ impl super::Client {
         )
     }
 
-    pub(super) fn alt_svc_h3_port(&self, host: &str, port: u16) -> Option<u16> {
-        if self.h3_broken(host, port) {
+    pub(super) fn alt_svc_h3_port(
+        &self,
+        host: &str,
+        port: u16,
+        proxy: Option<&str>,
+    ) -> Option<u16> {
+        if self.h3_broken(host, port, proxy) {
             return None;
         }
         let cache = crate::util::lock_recover(&self.alt_svc);
         cache
             .entries
-            .get(&(host.to_string(), port))
+            .get(&(host.to_ascii_lowercase(), port))
             .filter(|e| e.expires > Instant::now())
             .map(|e| e.h3_port)
     }
 
-    pub(super) fn h3_broken(&self, host: &str, port: u16) -> bool {
+    pub(super) fn h3_broken(&self, host: &str, port: u16, proxy: Option<&str>) -> bool {
         let cache = crate::util::lock_recover(&self.alt_svc);
         cache
             .broken
-            .get(&(host.to_string(), port))
+            .get(&(host.to_ascii_lowercase(), port, proxy.map(str::to_string)))
             .is_some_and(|b| b.until > Instant::now())
     }
 
-    pub(super) fn mark_alt_svc_broken(&self, host: &str, port: u16) {
-        crate::util::lock_recover(&self.alt_svc).mark_broken(host, port);
+    pub(super) fn mark_alt_svc_broken(&self, host: &str, port: u16, proxy: Option<&str>) {
+        crate::util::lock_recover(&self.alt_svc).mark_broken(host, port, proxy);
     }
 
-    pub(super) fn record_alt_svc(&self, host: &str, port: u16, headers: &[(String, String)]) {
+    pub(super) fn record_alt_svc(
+        &self,
+        host: &str,
+        port: u16,
+        headers: &[(String, String)],
+    ) -> Option<u16> {
         for (name, value) in headers {
             if !name.eq_ignore_ascii_case("alt-svc") {
                 continue;
             }
             #[allow(clippy::significant_drop_tightening)]
             let mut cache = crate::util::lock_recover(&self.alt_svc);
-            let key = (host.to_string(), port);
+            let key = (host.to_ascii_lowercase(), port);
             if value.trim().eq_ignore_ascii_case("clear") {
                 cache.entries.remove(&key);
-                return;
+                return None;
             }
             for part in value.split(',') {
                 let part = part.trim();
@@ -182,8 +203,9 @@ impl super::Client {
                     .checked_add(Duration::from_secs(max_age))
                     .unwrap_or_else(|| Instant::now() + Duration::from_secs(86400));
                 cache.insert(key, AltSvcEntry { h3_port, expires });
-                return;
+                return Some(h3_port);
             }
         }
+        None
     }
 }

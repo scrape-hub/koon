@@ -176,6 +176,9 @@ impl ConnectionPool {
     }
 
     pub fn put_h1(&self, key: PoolKey, conn: BoxedIo, info: ConnInfo) {
+        if self.max_size == 0 {
+            return;
+        }
         #[allow(clippy::significant_drop_tightening)]
         let mut map = self.lock();
         self.prune(&mut map);
@@ -211,7 +214,24 @@ impl ConnectionPool {
         })
     }
 
+    pub fn is_enabled(&self) -> bool {
+        self.max_size > 0
+    }
+
+    pub fn has_h3(&self, key: &PoolKey) -> bool {
+        let map = self.lock();
+        map.get(key).is_some_and(|slot| {
+            slot.mux.as_ref().is_some_and(|entry| {
+                matches!(entry.conn.0, Mux::H3(_))
+                    && self.timeouts.mux_fresh(entry.last_used, Instant::now())
+            })
+        })
+    }
+
     pub fn put_mux(&self, key: PoolKey, mux: Mux, info: ConnInfo) -> Option<u64> {
+        if self.max_size == 0 {
+            return None;
+        }
         self.set_multiplexed(&key, true);
         #[allow(clippy::significant_drop_tightening)]
         let mut map = self.lock();

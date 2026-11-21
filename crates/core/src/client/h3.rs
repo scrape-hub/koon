@@ -1,4 +1,5 @@
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::collections::HashSet;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::task::Poll;
@@ -11,11 +12,12 @@ use h3::fingerprint::ConnectionClose;
 use h3_quinn::quinn;
 use http::{Method, Request, Uri, Version};
 use tokio::sync::watch;
-use tokio::task::JoinHandle;
+use tokio::task::{AbortHandle, JoinHandle};
 
 use crate::error::Error;
 use crate::http2::config::PseudoHeader;
-use crate::pool::{ConnInfo, H3Sender, Mux, PoolKey};
+use crate::pool::{ConnInfo, ConnectionPool, H3Sender, Mux, PoolKey};
+use crate::proxy::ProxyConfig;
 use crate::quic::transport::QuicSetup;
 
 use super::body::{
@@ -89,10 +91,14 @@ struct H3Shared {
     port: u16,
     settings_remembered: AtomicBool,
     open_requests: AtomicUsize,
+    evictor: Mutex<Option<AbortHandle>>,
 }
 
 impl Drop for H3Shared {
     fn drop(&mut self) {
+        if let Some(evictor) = crate::util::lock_recover(&self.evictor).take() {
+            evictor.abort();
+        }
         let confirmed = matches!(*self.early.borrow(), Early::Done { .. });
         self.setup.remember_rtt(
             &self.host,
@@ -124,7 +130,21 @@ impl H3Conn {
             port: target.port,
             settings_remembered: AtomicBool::new(false),
             open_requests: AtomicUsize::new(0),
+            evictor: Mutex::new(None),
         }))
+    }
+
+    fn evict_when_closed(&self, pool: Arc<ConnectionPool>, key: PoolKey, id: u64) {
+        let connection = self.0.connection.clone();
+        let handle = tokio::spawn(async move {
+            let _ = connection.closed().await;
+            pool.remove_mux(&key, id);
+        });
+        if let Some(prev) =
+            crate::util::lock_recover(&self.0.evictor).replace(handle.abort_handle())
+        {
+            prev.abort();
+        }
     }
 
     fn current(&self) -> H3Sender {
@@ -364,58 +384,70 @@ impl super::Client {
         &self,
         key: &PoolKey,
         h3_port: u16,
+        proxy: Option<&ProxyConfig>,
     ) -> JoinHandle<Result<NewH3, Error>> {
-        let setup = async {
-            let setup = self.quic_setup()?;
-            let (addrs, ech_config_list) = tokio::join!(self.resolve(&key.host, h3_port), async {
-                if self.skips_ech() {
-                    None
-                } else {
-                    self.get_ech_config(&key.host, key.port).await
-                }
-            });
-            let addr = *addrs
-                .map_err(|e| {
-                    let message = format!("resolving {}: {e}", key.host);
-                    Error::Quic(message, crate::error::boxed(e))
-                })?
-                .first()
-                .ok_or_else(|| Error::Quic(format!("no address for {}", key.host), None))?;
-            let bind = match self.local_address {
-                Some(local) => SocketAddr::new(local, 0),
-                None if addr.is_ipv6() => SocketAddr::from((Ipv6Addr::UNSPECIFIED, 0)),
-                None => SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)),
-            };
-            let endpoint = setup.endpoint(bind)?;
-            Ok::<_, Error>((setup, endpoint, addr, ech_config_list))
-        }
-        .await;
+        let setup_res = self.quic_setup();
+        let ech_fut = async {
+            if self.skips_ech() {
+                None
+            } else {
+                self.get_ech_config(&key.host, key.port).await
+            }
+        };
+        let (addrs, ech_config_list, proxy_addrs) = match proxy {
+            Some(proxy) => {
+                let (addrs, ech, proxy_addrs) = tokio::join!(
+                    self.resolve(&key.host, h3_port),
+                    ech_fut,
+                    self.resolve_proxy_addrs(proxy),
+                );
+                (addrs, ech, Some(proxy_addrs))
+            }
+            None => {
+                let (addrs, ech) = tokio::join!(self.resolve(&key.host, h3_port), ech_fut);
+                (addrs, ech, None)
+            }
+        };
 
+        let local_address = self.local_address;
+        let proxy = proxy.cloned();
         let (pool, alt_svc, key) = (self.pool.clone(), self.alt_svc.clone(), key.clone());
         let connections = self.h3_connections.clone();
         tokio::spawn(async move {
             let broken = {
                 let (alt_svc, key) = (alt_svc.clone(), key.clone());
-                move || crate::util::lock_recover(&alt_svc).mark_broken(&key.host, key.port)
-            };
-            let connected = match setup {
-                Ok((setup, endpoint, addr, ech_config_list)) => {
-                    let target = Target {
-                        addr,
-                        host: &key.host,
-                        port: key.port,
-                        alt_used: alt_used(&key.host, h3_port),
-                        ech_config_list,
-                    };
-                    connect_h3(setup, endpoint, target, broken.clone()).await
+                move || {
+                    crate::util::lock_recover(&alt_svc).mark_broken(
+                        &key.host,
+                        key.port,
+                        key.proxy.as_deref(),
+                    );
                 }
-                Err(e) => Err(e),
             };
+            let connected = dial_h3(
+                setup_res,
+                addrs,
+                ech_config_list,
+                proxy,
+                proxy_addrs,
+                local_address,
+                &key,
+                h3_port,
+                broken.clone(),
+            )
+            .await;
             match connected {
                 Ok((conn, info)) => {
-                    crate::util::lock_recover(&alt_svc).confirm(&key.host, key.port);
+                    crate::util::lock_recover(&alt_svc).confirm(
+                        &key.host,
+                        key.port,
+                        key.proxy.as_deref(),
+                    );
                     connections.add(&conn);
-                    let id = pool.put_mux(key, Mux::H3(conn.clone()), info.clone());
+                    let id = pool.put_mux(key.clone(), Mux::H3(conn.clone()), info.clone());
+                    if let Some(id) = id {
+                        conn.evict_when_closed(pool, key, id);
+                    }
                     Ok(NewH3 { conn, info, id })
                 }
                 Err(e) => {
@@ -424,6 +456,97 @@ impl super::Client {
                 }
             }
         })
+    }
+
+    /// Opportunistically upgrade a pooled H2/H1 origin to HTTP/3 in the background once
+    /// `Alt-Svc` advertises `h3`, deduplicated per [`PoolKey`]. Adds zero latency to the
+    /// triggering request.
+    pub(super) fn maybe_upgrade_h3(
+        &self,
+        key: &PoolKey,
+        h3_port: u16,
+        proxy: Option<&ProxyConfig>,
+    ) {
+        if !self.pool.is_enabled()
+            || self.h3_broken(&key.host, key.port, key.proxy.as_deref())
+            || self.pool.has_h3(key)
+        {
+            return;
+        }
+        let Ok(setup) = self.quic_setup() else {
+            return;
+        };
+        {
+            let mut upgrading = crate::util::lock_recover(&self.h3_upgrading);
+            if !upgrading.insert(key.clone()) {
+                return;
+            }
+        }
+        let resolver = self.resolver_context();
+        let local_address = self.local_address;
+        let proxy = proxy.cloned();
+        let pool = self.pool.clone();
+        let alt_svc = self.alt_svc.clone();
+        let connections = self.h3_connections.clone();
+        let upgrading = self.h3_upgrading.clone();
+        let key = key.clone();
+        tokio::spawn(async move {
+            let _guard = UpgradeGuard {
+                upgrading,
+                key: key.clone(),
+            };
+            if pool.has_h3(&key) {
+                return;
+            }
+            let (addrs, proxy_addrs) = match &proxy {
+                Some(p) => {
+                    let (addrs, proxy_addrs) = tokio::join!(
+                        resolver.resolve_origin(&key.host, h3_port),
+                        resolver.resolve_proxy(p),
+                    );
+                    (addrs, Some(proxy_addrs))
+                }
+                None => (resolver.resolve_origin(&key.host, h3_port).await, None),
+            };
+            let broken = {
+                let (alt_svc, key) = (alt_svc.clone(), key.clone());
+                move || {
+                    crate::util::lock_recover(&alt_svc).mark_broken(
+                        &key.host,
+                        key.port,
+                        key.proxy.as_deref(),
+                    );
+                }
+            };
+            match dial_h3(
+                Ok(setup),
+                addrs,
+                None,
+                proxy,
+                proxy_addrs,
+                local_address,
+                &key,
+                h3_port,
+                broken.clone(),
+            )
+            .await
+            {
+                Ok((conn, info)) => {
+                    crate::util::lock_recover(&alt_svc).confirm(
+                        &key.host,
+                        key.port,
+                        key.proxy.as_deref(),
+                    );
+                    connections.add(&conn);
+                    if let Some(id) = pool.put_mux(key.clone(), Mux::H3(conn.clone()), info) {
+                        conn.evict_when_closed(pool, key, id);
+                    }
+                }
+                Err(_) => {
+                    broken();
+                }
+            }
+        });
     }
 
     pub(super) async fn send_h3(
@@ -456,9 +579,17 @@ impl super::Client {
             body,
         };
         let mut result = request.run(sender).await;
-        if early && result.is_err() {
-            if let Some(sender) = conn.resend_after_rejection().await {
-                result = request.run(sender).await;
+        if early {
+            let early_rejected = result.is_err();
+            let too_early = matches!(&result, Ok(parts) if parts.status == 425);
+            if early_rejected {
+                if let Some(sender) = conn.resend_after_rejection().await {
+                    result = request.run(sender).await;
+                }
+            } else if too_early {
+                if let Ok((sender, _)) = conn.sender(false).await {
+                    result = request.run(sender).await;
+                }
             }
         }
         let mut parts = result?;
@@ -692,12 +823,113 @@ async fn pipe_h3(mut send: H3Send, mut body: ByteStream, length: Option<u64>) ->
     })
 }
 
+struct UpgradeGuard {
+    upgrading: Arc<Mutex<HashSet<PoolKey>>>,
+    key: PoolKey,
+}
+
+impl Drop for UpgradeGuard {
+    fn drop(&mut self) {
+        crate::util::lock_recover(&self.upgrading).remove(&self.key);
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn dial_h3(
+    setup_res: Result<Arc<QuicSetup>, Error>,
+    addrs: Result<Vec<SocketAddr>, Error>,
+    ech_config_list: Option<Vec<u8>>,
+    proxy: Option<ProxyConfig>,
+    proxy_addrs: Option<Result<Vec<SocketAddr>, Error>>,
+    local_address: Option<IpAddr>,
+    key: &PoolKey,
+    h3_port: u16,
+    broken: impl FnOnce() + Send + 'static,
+) -> Result<(H3Conn, ConnInfo), Error> {
+    let setup = setup_res?;
+    let addrs = addrs.map_err(|e| {
+        let message = format!("resolving {}: {e}", key.host);
+        Error::Quic(message, crate::error::boxed(e))
+    })?;
+
+    let (endpoint, addr, peer_addr_override) = match proxy {
+        Some(proxy_cfg) => {
+            #[cfg(feature = "socks")]
+            {
+                let proxy_addrs = proxy_addrs
+                    .unwrap_or_else(|| Err(Error::Proxy("missing proxy addresses".into(), None)))?;
+                let tcp = super::connection::connect_any_tcp(&proxy_addrs, local_address)
+                    .await
+                    .map_err(|e| {
+                        Error::Proxy(
+                            format!("cannot connect to proxy: {e}"),
+                            crate::error::boxed(e),
+                        )
+                    })?;
+                let proxy_peer = tcp.peer_addr().ok().map(|a| a.ip().to_string());
+                let socks_udp = crate::quic::socks5_udp::Socks5UdpSocket::associate(
+                    tcp,
+                    &proxy_cfg,
+                    local_address,
+                )
+                .await?;
+                let addr = if socks_udp.local_socket_addr().is_ipv4() {
+                    addrs
+                        .iter()
+                        .copied()
+                        .find(SocketAddr::is_ipv4)
+                        .ok_or_else(|| {
+                            Error::Quic(
+                                format!("no IPv4 address for {} over IPv4 SOCKS5 relay", key.host),
+                                None,
+                            )
+                        })?
+                } else {
+                    *addrs
+                        .first()
+                        .ok_or_else(|| Error::Quic(format!("no address for {}", key.host), None))?
+                };
+                let endpoint = setup.endpoint_with_socket(Arc::new(socks_udp))?;
+                (endpoint, addr, proxy_peer)
+            }
+            #[cfg(not(feature = "socks"))]
+            {
+                let _ = (proxy_cfg, proxy_addrs, local_address);
+                return Err(Error::Proxy("SOCKS5 support not compiled in".into(), None));
+            }
+        }
+        None => {
+            let addr = *addrs
+                .first()
+                .ok_or_else(|| Error::Quic(format!("no address for {}", key.host), None))?;
+            let bind = match local_address {
+                Some(local) => SocketAddr::new(local, 0),
+                None if addr.is_ipv6() => SocketAddr::from((Ipv6Addr::UNSPECIFIED, 0)),
+                None => SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)),
+            };
+            let endpoint = setup.endpoint(bind)?;
+            (endpoint, addr, None)
+        }
+    };
+
+    let target = Target {
+        addr,
+        host: &key.host,
+        port: key.port,
+        alt_used: alt_used(&key.host, h3_port),
+        ech_config_list,
+        peer_addr_override,
+    };
+    connect_h3(setup, endpoint, target, broken).await
+}
+
 struct Target<'a> {
     addr: SocketAddr,
     host: &'a str,
     port: u16,
     alt_used: String,
     ech_config_list: Option<Vec<u8>>,
+    peer_addr_override: Option<String>,
 }
 
 type H3Driver = h3::client::Connection<h3_quinn::Connection, Bytes>;
@@ -741,7 +973,10 @@ async fn connect_h3(
             Error::Quic(message, crate::error::boxed(e))
         })?;
     let info = ConnInfo {
-        peer_addr: Some(target.addr.ip().to_string()),
+        peer_addr: target
+            .peer_addr_override
+            .clone()
+            .or_else(|| Some(target.addr.ip().to_string())),
         alt_used: Some(target.alt_used.clone()),
         ..ConnInfo::default()
     };

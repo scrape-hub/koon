@@ -149,6 +149,17 @@ impl super::Client {
         Ok(addrs)
     }
 
+    pub(super) fn resolver_context(&self) -> ResolverContext {
+        ResolverContext {
+            host_cache: self.host_cache.clone(),
+            resolve_overrides: self.resolve_overrides.clone(),
+            ip_version: self.ip_version,
+            local_address: self.local_address,
+            #[cfg(feature = "doh")]
+            doh_resolver: self.doh_resolver.clone(),
+        }
+    }
+
     pub(super) async fn prefetch_addresses(&self, host: &str, port: u16) {
         if self.resolve_override(host, port).is_none()
             && strip_brackets(host).parse::<IpAddr>().is_err()
@@ -201,74 +212,14 @@ impl super::Client {
         Ok(interleave_families(candidates))
     }
 
-    async fn connect_addr(&self, addr: SocketAddr) -> io::Result<TcpStream> {
-        let socket = if addr.is_ipv4() {
-            TcpSocket::new_v4()?
-        } else {
-            TcpSocket::new_v6()?
-        };
-        if let Some(local) = self.local_address {
-            socket.bind(SocketAddr::new(local, 0))?;
-        }
-        let stream = socket.connect(addr).await?;
-        stream.set_nodelay(true)?;
-        Ok(stream)
-    }
-
     async fn connect_any(&self, addrs: &[SocketAddr]) -> Result<TcpStream, Error> {
-        use futures_util::stream::{FuturesUnordered, StreamExt};
-
-        let mut pending = FuturesUnordered::new();
-        let mut next = addrs.iter();
-        let mut last_error: Option<io::Error> = None;
-
-        if let Some(&addr) = next.next() {
-            pending.push(Box::pin(self.connect_addr(addr)));
-        }
-        loop {
-            if pending.is_empty() {
-                let Some(&addr) = next.next() else { break };
-                pending.push(Box::pin(self.connect_addr(addr)));
-            }
-            let delay = tokio::time::sleep(CONNECTION_ATTEMPT_DELAY);
-            tokio::select! {
-                Some(result) = pending.next() => match result {
-                    Ok(stream) => return Ok(stream),
-                    Err(e) => last_error = Some(e),
-                },
-                _ = delay, if next.len() > 0 => {
-                    if let Some(&addr) = next.next() {
-                        pending.push(Box::pin(self.connect_addr(addr)));
-                    }
-                }
-            }
-        }
-        Err(match last_error {
-            Some(e) => {
-                let message = format!("connect failed: {e}");
-                Error::ConnectionFailed(message, crate::error::boxed(e))
-            }
-            None => Error::ConnectionFailed("no address to connect to".into(), None),
-        })
+        connect_any_tcp(addrs, self.local_address).await
     }
 
-    pub(super) async fn open_stream(
+    pub(super) async fn resolve_proxy_addrs(
         &self,
-        host: &str,
-        port: u16,
-        proxy: Option<&ProxyConfig>,
-        tunnel: bool,
-    ) -> Result<OpenedStream, Error> {
-        let Some(proxy) = proxy else {
-            let addrs = self.resolve(host, port).await?;
-            let tcp = self.connect_any(&addrs).await?;
-            let peer_addr = tcp.peer_addr().ok().map(|a| a.ip().to_string());
-            return Ok(OpenedStream {
-                io: Box::new(tcp),
-                peer_addr,
-            });
-        };
-
+        proxy: &ProxyConfig,
+    ) -> Result<Vec<SocketAddr>, Error> {
         let bare_proxy_host = strip_brackets(proxy.host());
         let proxy_ips = match (
             self.resolve_override(proxy.host(), proxy.port()),
@@ -294,15 +245,33 @@ impl super::Client {
             })
             .map(|ip| SocketAddr::new(ip, proxy.port()))
             .collect();
-        let tcp = self
-            .connect_any(&interleave_families(proxy_addrs))
-            .await
-            .map_err(|e| {
-                Error::Proxy(
-                    format!("cannot connect to proxy: {e}"),
-                    crate::error::boxed(e),
-                )
-            })?;
+        Ok(interleave_families(proxy_addrs))
+    }
+
+    pub(super) async fn open_stream(
+        &self,
+        host: &str,
+        port: u16,
+        proxy: Option<&ProxyConfig>,
+        tunnel: bool,
+    ) -> Result<OpenedStream, Error> {
+        let Some(proxy) = proxy else {
+            let addrs = self.resolve(host, port).await?;
+            let tcp = self.connect_any(&addrs).await?;
+            let peer_addr = tcp.peer_addr().ok().map(|a| a.ip().to_string());
+            return Ok(OpenedStream {
+                io: Box::new(tcp),
+                peer_addr,
+            });
+        };
+
+        let proxy_addrs = self.resolve_proxy_addrs(proxy).await?;
+        let tcp = self.connect_any(&proxy_addrs).await.map_err(|e| {
+            Error::Proxy(
+                format!("cannot connect to proxy: {e}"),
+                crate::error::boxed(e),
+            )
+        })?;
         let peer_addr = tcp.peer_addr().ok().map(|a| a.ip().to_string());
 
         let io: BoxedIo = match proxy.kind {
@@ -805,4 +774,174 @@ fn interleave_families(addrs: Vec<SocketAddr>) -> Vec<SocketAddr> {
         }
     }
     out
+}
+
+pub(super) struct ResolverContext {
+    host_cache: Arc<Mutex<HostCache>>,
+    resolve_overrides: Arc<super::ResolveOverrides>,
+    ip_version: Option<IpVersion>,
+    local_address: Option<IpAddr>,
+    #[cfg(feature = "doh")]
+    doh_resolver: Option<Arc<crate::dns::DohResolver>>,
+}
+
+impl ResolverContext {
+    async fn lookup(&self, host: &str, use_doh: bool) -> Result<Vec<IpAddr>, Error> {
+        #[cfg(feature = "doh")]
+        let doh = self.doh_resolver.as_ref().filter(|_| use_doh);
+        #[cfg(not(feature = "doh"))]
+        let doh: Option<&()> = {
+            let _ = use_doh;
+            None
+        };
+
+        if let Some(addrs) = crate::util::lock_recover(&self.host_cache).get(host, doh.is_some()) {
+            return Ok(addrs);
+        }
+        let addrs: Vec<IpAddr> = match doh {
+            #[cfg(feature = "doh")]
+            Some(resolver) => resolver.resolve(host).await?,
+            _ => tokio::net::lookup_host((host, 0))
+                .await
+                .map_err(|e| Error::Dns(format!("resolving {host}: {e}"), crate::error::boxed(e)))?
+                .map(|addr| addr.ip())
+                .collect(),
+        };
+        if !addrs.is_empty() {
+            crate::util::lock_recover(&self.host_cache).insert(host, doh.is_some(), addrs.clone());
+        }
+        Ok(addrs)
+    }
+
+    fn resolve_override(&self, host: &str, port: u16) -> Option<Vec<IpAddr>> {
+        let bare = strip_brackets(host);
+        self.resolve_overrides
+            .get(&(bare.to_ascii_lowercase(), port))
+            .cloned()
+    }
+
+    pub(super) async fn resolve_origin(
+        &self,
+        host: &str,
+        port: u16,
+    ) -> Result<Vec<SocketAddr>, Error> {
+        let bare = strip_brackets(host);
+        let ips = match (self.resolve_override(host, port), bare.parse::<IpAddr>()) {
+            (Some(ips), _) => ips,
+            (None, Ok(ip)) => vec![ip],
+            (None, Err(_)) => self.lookup(host, true).await?,
+        };
+        let candidates: Vec<SocketAddr> = ips
+            .into_iter()
+            .filter(|ip| {
+                let family_ok = match self.ip_version {
+                    Some(IpVersion::V4) => ip.is_ipv4(),
+                    Some(IpVersion::V6) => ip.is_ipv6(),
+                    None => true,
+                };
+                let local_ok = match self.local_address {
+                    Some(local) => local.is_ipv4() == ip.is_ipv4(),
+                    None => true,
+                };
+                family_ok && local_ok
+            })
+            .map(|ip| SocketAddr::new(ip, port))
+            .collect();
+        if candidates.is_empty() {
+            return Err(Error::ConnectionFailed(
+                format!("no usable address for {host} (IP version / local address constraints)"),
+                None,
+            ));
+        }
+        Ok(interleave_families(candidates))
+    }
+
+    pub(super) async fn resolve_proxy(
+        &self,
+        proxy: &ProxyConfig,
+    ) -> Result<Vec<SocketAddr>, Error> {
+        let bare = strip_brackets(proxy.host());
+        let proxy_ips = match (
+            self.resolve_override(proxy.host(), proxy.port()),
+            bare.parse::<IpAddr>(),
+        ) {
+            (Some(ips), _) => ips,
+            (None, Ok(ip)) => vec![ip],
+            (None, Err(_)) => self
+                .lookup(proxy.host(), false)
+                .await
+                .map_err(|e| match e {
+                    Error::Dns(msg, source) => {
+                        Error::Proxy(format!("cannot resolve proxy: {msg}"), source)
+                    }
+                    e => e,
+                })?,
+        };
+        let proxy_addrs: Vec<SocketAddr> = proxy_ips
+            .into_iter()
+            .filter(|ip| {
+                self.local_address
+                    .is_none_or(|local| local.is_ipv4() == ip.is_ipv4())
+            })
+            .map(|ip| SocketAddr::new(ip, proxy.port()))
+            .collect();
+        Ok(interleave_families(proxy_addrs))
+    }
+}
+
+async fn connect_addr_tcp(
+    addr: SocketAddr,
+    local_address: Option<IpAddr>,
+) -> io::Result<TcpStream> {
+    let socket = if addr.is_ipv4() {
+        TcpSocket::new_v4()?
+    } else {
+        TcpSocket::new_v6()?
+    };
+    if let Some(local) = local_address {
+        socket.bind(SocketAddr::new(local, 0))?;
+    }
+    let stream = socket.connect(addr).await?;
+    stream.set_nodelay(true)?;
+    Ok(stream)
+}
+
+pub(super) async fn connect_any_tcp(
+    addrs: &[SocketAddr],
+    local_address: Option<IpAddr>,
+) -> Result<TcpStream, Error> {
+    use futures_util::stream::{FuturesUnordered, StreamExt};
+
+    let mut pending = FuturesUnordered::new();
+    let mut next = addrs.iter();
+    let mut last_error: Option<io::Error> = None;
+
+    if let Some(&addr) = next.next() {
+        pending.push(Box::pin(connect_addr_tcp(addr, local_address)));
+    }
+    loop {
+        if pending.is_empty() {
+            let Some(&addr) = next.next() else { break };
+            pending.push(Box::pin(connect_addr_tcp(addr, local_address)));
+        }
+        let delay = tokio::time::sleep(CONNECTION_ATTEMPT_DELAY);
+        tokio::select! {
+            Some(result) = pending.next() => match result {
+                Ok(stream) => return Ok(stream),
+                Err(e) => last_error = Some(e),
+            },
+            _ = delay, if next.len() > 0 => {
+                if let Some(&addr) = next.next() {
+                    pending.push(Box::pin(connect_addr_tcp(addr, local_address)));
+                }
+            }
+        }
+    }
+    Err(match last_error {
+        Some(e) => {
+            let message = format!("connect failed: {e}");
+            Error::ConnectionFailed(message, crate::error::boxed(e))
+        }
+        None => Error::ConnectionFailed("no address to connect to".into(), None),
+    })
 }
